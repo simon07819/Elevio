@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import jsQR from "jsqr";
 import { Camera, KeyRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -32,6 +33,20 @@ function normalizeAccessCode(value: string) {
   return value.replace(/[^a-z0-9]/gi, "").toUpperCase();
 }
 
+async function getCameraStream(): Promise<MediaStream> {
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" },
+      audio: false,
+    });
+  } catch {
+    return await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: false,
+    });
+  }
+}
+
 export function ScanHome() {
   const { t } = useLanguage();
   const router = useRouter();
@@ -47,54 +62,114 @@ export function ScanHome() {
     }
 
     let cancelled = false;
-    let detector: BarcodeDetectorShape | null = null;
+    let rafId = 0;
+    let timeoutId = 0;
 
     async function start() {
       try {
+        const stream = await getCameraStream();
+        streamRef.current = stream;
+
+        const video = videoRef.current;
+        if (!video) {
+          stream.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
+          setScanning(false);
+          return;
+        }
+
+        video.srcObject = stream;
+        await video.play();
+
         const BarcodeDetectorCtor = (
           window as unknown as {
             BarcodeDetector?: new (options: { formats: string[] }) => BarcodeDetectorShape;
           }
         ).BarcodeDetector;
 
-        if (!BarcodeDetectorCtor) {
+        if (BarcodeDetectorCtor) {
+          const detector = new BarcodeDetectorCtor({ formats: ["qr_code"] });
+
+          async function tickBarcode() {
+            if (cancelled || !videoRef.current) {
+              return;
+            }
+
+            try {
+              const results = await detector.detect(videoRef.current);
+              const nextPath = results[0]?.rawValue ? requestPathFromValue(results[0].rawValue) : null;
+
+              if (nextPath) {
+                router.push(nextPath);
+                return;
+              }
+            } catch {
+              /* ignore single-frame detection errors */
+            }
+
+            timeoutId = window.setTimeout(tickBarcode, 250);
+          }
+
+          tickBarcode();
+          return;
+        }
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          stream.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
           setMessage(t("scan.unsupported"));
           setScanning(false);
           return;
         }
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-          audio: false,
-        });
-        streamRef.current = stream;
+        const canvasCtx = ctx;
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-
-        detector = new BarcodeDetectorCtor({ formats: ["qr_code"] });
-
-        async function tick() {
-          if (cancelled || !videoRef.current || !detector) {
+        function tickJsQR() {
+          if (cancelled || !videoRef.current) {
             return;
           }
 
-          const results = await detector.detect(videoRef.current);
-          const nextPath = results[0]?.rawValue ? requestPathFromValue(results[0].rawValue) : null;
-
-          if (nextPath) {
-            router.push(nextPath);
+          const el = videoRef.current;
+          if (el.readyState < 2) {
+            rafId = requestAnimationFrame(tickJsQR);
             return;
           }
 
-          window.setTimeout(tick, 500);
+          const w = el.videoWidth;
+          const h = el.videoHeight;
+          if (w === 0 || h === 0) {
+            rafId = requestAnimationFrame(tickJsQR);
+            return;
+          }
+
+          canvas.width = w;
+          canvas.height = h;
+          canvasCtx.drawImage(el, 0, 0, w, h);
+
+          const imageData = canvasCtx.getImageData(0, 0, w, h);
+          const decoded = jsQR(imageData.data, imageData.width, imageData.height);
+
+          if (decoded?.data) {
+            const nextPath = requestPathFromValue(decoded.data);
+            if (nextPath) {
+              router.push(nextPath);
+              return;
+            }
+          }
+
+          rafId = requestAnimationFrame(tickJsQR);
         }
 
-        tick();
-      } catch {
-        setMessage(t("scan.unsupported"));
+        rafId = requestAnimationFrame(tickJsQR);
+      } catch (error) {
+        const err = error as DOMException;
+        if (err?.name === "NotAllowedError" || err?.name === "NotReadableError") {
+          setMessage(t("scan.cameraDenied"));
+        } else {
+          setMessage(t("scan.unsupported"));
+        }
         setScanning(false);
       }
     }
@@ -103,6 +178,12 @@ export function ScanHome() {
 
     return () => {
       cancelled = true;
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     };
@@ -112,7 +193,7 @@ export function ScanHome() {
     const code = normalizeAccessCode(accessCode);
 
     if (!code) {
-      setMessage(t("scan.unsupported"));
+      setMessage(t("scan.enterCode"));
       return;
     }
 
@@ -136,10 +217,7 @@ export function ScanHome() {
 
       <section className="mx-auto mt-6 grid min-h-[calc(100dvh-7rem)] max-w-md content-center gap-4">
         <div className="rounded-[2rem] border border-white/10 bg-white/10 p-5 shadow-2xl backdrop-blur">
-          <div className="inline-flex rounded-[1.4rem] border border-white/10 bg-slate-950/85 px-4 py-3 shadow-lg">
-            <BrandLogo size="md" />
-          </div>
-          <h1 className="mt-5 text-4xl font-black leading-tight">{t("scan.title")}</h1>
+          <h1 className="text-4xl font-black leading-tight">{t("scan.title")}</h1>
           <p className="mt-3 text-base font-bold leading-7 text-slate-300">{t("scan.subtitle")}</p>
 
           {scanning && (
