@@ -1,0 +1,22 @@
+---
+description: Commit et push Git automatiques après modifications (sans demander à l’utilisateur de lancer le terminal).
+alwaysApply: true
+---
+
+# Git — commit et push sans passer par l’utilisateur
+
+Pour ce dépôt **HOISTAPP / Elevio** :
+
+1. **Après avoir terminé une tâche qui modifie le code** (ou la config versionnée), ne pas dire à l’utilisateur d’exécuter `git` lui-même : exécuter les commandes avec les outils shell (permissions `git_write` pour commit, `network` pour push).
+
+2. **Workflow par défaut** :
+   - `git status` pour voir les fichiers touchés ;
+   - `git add` sur les chemins pertinents (ou `-A` si toute la série de changements doit partir ensemble) ;
+   - `git commit -m "..."` avec un message en phrases complètes, en français ou anglais cohérent avec le dépôt ;
+   - `git push` vers la branche de suivi (`origin` + branche courante, en général `main`).
+
+3. **Ne pas committer** si l’utilisateur demande explicitement de ne pas pousser, s’il y a uniquement des fichiers sensibles non prévus (.env, secrets), ou en cas de conflit / état git inhabituel — dans ce cas, expliquer brièvement et proposer la suite.
+
+4. **Pas de commits vides** : s’il n’y a aucun changement par rapport à `HEAD`, ne pas inventer de commit.
+
+Objectif : la prod (ex. Vercel) reçoive les changements sans que l’utilisateur ouvre le terminal.
