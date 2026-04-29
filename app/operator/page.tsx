@@ -3,6 +3,7 @@ import { AppNavigation } from "@/components/AppNavigation";
 import { T } from "@/components/i18n/LanguageProvider";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { OperatorKeepAwake } from "@/components/operator/OperatorKeepAwake";
+import { OperatorTabletSessionsPanel } from "@/components/operator/OperatorTabletSessionsPanel";
 import { OperatorWorkspace } from "@/components/operator/OperatorWorkspace";
 import { requireUser } from "@/lib/auth";
 import { getAdminProjectData } from "@/lib/adminProject";
@@ -46,13 +47,16 @@ export default async function OperatorPage() {
         </div>
       </header>
       {data && project && data.elevators.length > 0 ? (
-        <OperatorWorkspace
-          project={project}
-          floors={data.floors}
-          elevators={data.elevators}
-          requests={data.requests}
-          activePassengers={activePassengers}
-        />
+        <>
+          <OperatorTabletSessionsPanel projectId={project.id} elevators={data.elevators} />
+          <OperatorWorkspace
+            project={project}
+            floors={data.floors}
+            elevators={data.elevators}
+            requests={data.requests}
+            activePassengers={activePassengers}
+          />
+        </>
       ) : (
         <div className="mx-auto max-w-7xl rounded-3xl border border-white/10 bg-white/8 p-5 text-white">
           <T k="operator.noElevator" />

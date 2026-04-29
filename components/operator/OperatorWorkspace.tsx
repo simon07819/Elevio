@@ -45,6 +45,12 @@ function makeSessionId(projectId: string) {
   return next;
 }
 
+function normalizeTabletLabelInput(raw: string): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  return t.length > 120 ? t.slice(0, 120) : t;
+}
+
 function storedElevatorId(projectId: string) {
   if (typeof window === "undefined") {
     return null;
@@ -123,9 +129,10 @@ export function OperatorWorkspace({
 
   function activate(elevator: Elevator, formData: FormData) {
     const currentFloorId = String(formData.get("currentFloorId") ?? "");
+    const tabletLabel = normalizeTabletLabelInput(String(formData.get("tabletLabel") ?? ""));
 
     startTransition(async () => {
-      const result = await activateOperatorElevator(project.id, elevator.id, sessionId, currentFloorId);
+      const result = await activateOperatorElevator(project.id, elevator.id, sessionId, currentFloorId, tabletLabel);
       setMessage(result.message);
 
       if (result.ok) {
@@ -139,6 +146,7 @@ export function OperatorWorkspace({
                   operator_session_id: sessionId,
                   operator_session_started_at: new Date().toISOString(),
                   operator_session_heartbeat_at: new Date().toISOString(),
+                  operator_tablet_label: tabletLabel,
                   current_floor_id: currentFloorId || item.current_floor_id,
                   direction: "idle",
                   current_load: 0,
@@ -171,6 +179,7 @@ export function OperatorWorkspace({
                   operator_session_started_at: null,
                   operator_session_heartbeat_at: null,
                   operator_user_id: null,
+                  operator_tablet_label: null,
                 }
               : item,
           ),
@@ -261,6 +270,19 @@ export function OperatorWorkspace({
                     </option>
                   ))}
                 </select>
+              </label>
+
+              <label className="mt-3 grid gap-2 text-sm font-black text-slate-200">
+                {t("operator.tabletDeviceNameLabel")}
+                <input
+                  type="text"
+                  name="tabletLabel"
+                  autoComplete="off"
+                  maxLength={120}
+                  placeholder={t("operator.tabletDeviceNamePlaceholder")}
+                  disabled={locked || isPending}
+                  className="rounded-2xl bg-white px-4 py-3 font-bold text-slate-950 outline-none placeholder:font-bold placeholder:text-slate-400 disabled:opacity-60"
+                />
               </label>
 
               <button

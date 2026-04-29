@@ -59,6 +59,8 @@ export type Elevator = {
   operator_session_started_at: string | null;
   operator_session_heartbeat_at: string | null;
   operator_user_id: string | null;
+  /** Nom affiche pour distinguer la tablette ; saisi a l'activation, efface a la liberation. */
+  operator_tablet_label?: string | null;
   /** Local wall-clock service window (project.service_timezone). Postgres `time`. */
   service_start_time?: string | null;
   service_end_time?: string | null;

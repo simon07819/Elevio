@@ -2,10 +2,9 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Gauge, Plus, Save, TabletSmartphone, Trash2 } from "lucide-react";
-import { adminDeactivateOperatorTablet, createElevator, deleteElevator, updateElevatorSettings } from "@/lib/actions";
+import { Gauge, Plus, Save, Trash2 } from "lucide-react";
+import { createElevator, deleteElevator, updateElevatorSettings } from "@/lib/actions";
 import { elevatorDuplicateMessage } from "@/lib/elevatorMessages";
-import { elevatorHasOperatorTabletBinding, elevatorOperatorSessionAppearsLive } from "@/lib/operatorTablet";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import type { Elevator } from "@/types/hoist";
 
@@ -70,39 +69,6 @@ export function ProjectElevatorSettings({
                 {t("elevator.summary", { capacity: elevator.capacity, load: elevator.current_load })}
               </p>
             </div>
-            <p
-              className={
-                elevatorOperatorSessionAppearsLive(elevator)
-                  ? "mb-3 rounded-2xl bg-emerald-400/15 px-3 py-2 text-xs font-black text-emerald-100"
-                  : elevatorHasOperatorTabletBinding(elevator)
-                    ? "mb-3 rounded-2xl bg-amber-500/15 px-3 py-2 text-xs font-black text-amber-100"
-                    : "mb-3 rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-slate-300"
-              }
-            >
-              {elevatorOperatorSessionAppearsLive(elevator)
-                ? t("elevator.tabletActive")
-                : elevatorHasOperatorTabletBinding(elevator)
-                  ? t("elevator.tabletStaleBinding")
-                  : t("elevator.tabletInactive")}
-            </p>
-            {elevatorHasOperatorTabletBinding(elevator) ? (
-              <div className="mb-3">
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => {
-                    if (!window.confirm(t("elevator.deactivateTabletConfirm"))) return;
-                    runAction(() => adminDeactivateOperatorTablet(projectId, elevator.id));
-                  }}
-                  className="touch-target inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/40 bg-amber-500/15 px-4 py-3 text-sm font-black text-amber-100 sm:w-auto"
-                >
-                  <TabletSmartphone size={18} />
-                  {elevatorOperatorSessionAppearsLive(elevator)
-                    ? t("elevator.deactivateTablet")
-                    : t("elevator.clearTabletSession")}
-                </button>
-              </div>
-            ) : null}
             <div className="flex flex-col gap-4 border-t border-white/10 pt-4">
               <ElevatorFields elevator={elevator} />
               <div className="flex flex-wrap items-center gap-2">

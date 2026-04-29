@@ -78,7 +78,7 @@ export async function getAdminProjectData(projectId: string): Promise<AdminProje
       .order("sort_order", { ascending: true }),
     supabase
       .from("elevators")
-      .select("id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,service_start_time,service_end_time")
+      .select("id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,operator_tablet_label,service_start_time,service_end_time")
       .eq("project_id", projectId)
       .order("name", { ascending: true }),
     supabase

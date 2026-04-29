@@ -108,6 +108,7 @@ export const demoElevator: Elevator = {
   operator_session_started_at: null,
   operator_session_heartbeat_at: null,
   operator_user_id: null,
+  operator_tablet_label: null,
   service_start_time: "07:00:00",
   service_end_time: "15:00:00",
 };

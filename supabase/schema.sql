@@ -118,6 +118,7 @@ create table if not exists elevators (
   operator_session_started_at timestamptz,
   operator_session_heartbeat_at timestamptz,
   operator_user_id uuid references auth.users(id) on delete set null,
+  operator_tablet_label text,
   service_start_time time not null default time '07:00',
   service_end_time time not null default time '15:00'
 );
@@ -126,6 +127,7 @@ alter table elevators add column if not exists operator_session_id text;
 alter table elevators add column if not exists operator_session_started_at timestamptz;
 alter table elevators add column if not exists operator_session_heartbeat_at timestamptz;
 alter table elevators add column if not exists operator_user_id uuid references auth.users(id) on delete set null;
+alter table elevators add column if not exists operator_tablet_label text;
 alter table elevators add column if not exists service_start_time time not null default time '07:00';
 alter table elevators add column if not exists service_end_time time not null default time '15:00';
 

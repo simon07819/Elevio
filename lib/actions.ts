@@ -433,7 +433,7 @@ export async function deleteFloor(floorId: string, projectId: string) {
 }
 
 const elevatorSelectColumns =
-  "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,service_start_time,service_end_time";
+  "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,operator_tablet_label,service_start_time,service_end_time";
 
 function normalizeElevatorName(name: string) {
   return name.trim().toLowerCase();
@@ -490,6 +490,7 @@ export async function createElevator(
       operator_user_id: null,
       service_start_time: serviceTimes.start,
       service_end_time: serviceTimes.end,
+      operator_tablet_label: null,
     };
     return { ok: true, message: "Mode demo: elevateur ajoute localement.", elevator };
   }
@@ -603,6 +604,7 @@ export async function activateOperatorElevator(
   elevatorId: string,
   sessionId: string,
   currentFloorId: string,
+  tabletLabel?: string | null,
 ) {
   const supabase = await createClient();
 
@@ -613,6 +615,12 @@ export async function activateOperatorElevator(
   if (!supabase) {
     return { ok: true, message: "Mode demo: tablette activee.", elevatorId };
   }
+
+  const normalizedTabletLabel = (() => {
+    const t = (tabletLabel ?? "").trim();
+    if (!t) return null;
+    return t.length > 120 ? t.slice(0, 120) : t;
+  })();
 
   if (!isUuid(projectId) || !isUuid(elevatorId)) {
     return staleIdsAction();
@@ -632,7 +640,7 @@ export async function activateOperatorElevator(
 
   const { data: elevator, error: elevatorError } = await supabase
     .from("elevators")
-    .select("id,project_id,operator_session_id,operator_session_heartbeat_at")
+    .select("id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,operator_tablet_label,service_start_time,service_end_time")
     .eq("id", elevatorId)
     .eq("project_id", projectId)
     .single();
@@ -654,6 +662,7 @@ export async function activateOperatorElevator(
     operator_session_started_at: null,
     operator_session_heartbeat_at: null,
     operator_user_id: null,
+    operator_tablet_label: null,
   };
 
   /* Index unique sur operator_session_id: une session ne peut être que sur un ascenseur.
@@ -677,6 +686,7 @@ export async function activateOperatorElevator(
       operator_session_started_at: now,
       operator_session_heartbeat_at: now,
       operator_user_id: user.id,
+      operator_tablet_label: normalizedTabletLabel,
       current_floor_id: currentFloorId || null,
       direction: "idle",
       current_load: 0,
@@ -735,6 +745,7 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
       operator_session_started_at: null,
       operator_session_heartbeat_at: null,
       operator_user_id: null,
+      operator_tablet_label: null,
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId)
@@ -781,6 +792,7 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
       operator_session_started_at: null,
       operator_session_heartbeat_at: null,
       operator_user_id: null,
+      operator_tablet_label: null,
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId);
