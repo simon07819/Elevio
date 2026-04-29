@@ -8,6 +8,8 @@ import {
 } from "@/lib/demoData";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { isUuid } from "@/lib/utils";
+import { notFound } from "next/navigation";
 import type { Elevator, Floor, HoistRequest, HoistUser, Project } from "@/types/hoist";
 
 export type AdminProjectBranding = {
@@ -44,10 +46,14 @@ export async function getAdminProjectData(projectId: string): Promise<AdminProje
     return demoProjectData(projectId);
   }
 
+  if (!isUuid(projectId)) {
+    notFound();
+  }
+
   const user = await getCurrentUser();
 
   if (!user) {
-    return demoProjectData(projectId);
+    notFound();
   }
 
   const [
@@ -92,7 +98,7 @@ export async function getAdminProjectData(projectId: string): Promise<AdminProje
   ]);
 
   if (projectError || !project) {
-    return demoProjectData(projectId);
+    notFound();
   }
 
   const branding: AdminProjectBranding = {

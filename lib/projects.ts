@@ -24,7 +24,7 @@ export async function getProjects(): Promise<Project[]> {
     .order("created_at", { ascending: false });
 
   if (error || !data) {
-    return demoProjects;
+    return [];
   }
 
   return data as Project[];

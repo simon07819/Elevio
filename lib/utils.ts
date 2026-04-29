@@ -5,6 +5,12 @@ export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: string): boolean {
+  return UUID_REGEX.test(value.trim());
+}
+
 export function getDirection(fromSortOrder: number, toSortOrder: number): Exclude<Direction, "idle"> {
   return toSortOrder > fromSortOrder ? "up" : "down";
 }

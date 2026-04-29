@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { demoFloors } from "@/lib/demoData";
-import { floorLabelForSortOrder, getDirection } from "@/lib/utils";
+import { floorLabelForSortOrder, getDirection, isUuid } from "@/lib/utils";
 import { assignRequestToBestElevator } from "@/services/multiElevatorDispatch";
 import { elevatorDuplicateMessage } from "@/lib/elevatorMessages";
 import type { Elevator, Floor, HoistRequest, Project, RequestEventType, RequestStatus } from "@/types/hoist";
@@ -60,6 +60,10 @@ function passengerDispatchBlockedMessage(reason: DispatchBlockReason | null): st
     default:
       return "Service temporairement indisponible.";
   }
+}
+
+function staleIdsAction(): { ok: false; message: string } {
+  return { ok: false, message: "Donnees expirees. Rechargez la page." };
 }
 
 function projectPayload(formData: FormData) {
@@ -146,6 +150,10 @@ export async function updateProject(projectId: string, formData: FormData) {
     return { ok: true, message: "Mode demo: projet modifie localement." };
   }
 
+  if (!isUuid(projectId)) {
+    return staleIdsAction();
+  }
+
   const { error } = await supabase.from("projects").update(payload).eq("id", projectId);
 
   if (error) {
@@ -162,6 +170,10 @@ export async function activateProject(projectId: string) {
 
   if (!supabase) {
     return { ok: true, message: "Mode demo: projet active localement." };
+  }
+
+  if (!isUuid(projectId)) {
+    return staleIdsAction();
   }
 
   const {
@@ -204,6 +216,10 @@ export async function archiveProject(projectId: string) {
     return { ok: true, message: "Mode demo: projet desactive localement." };
   }
 
+  if (!isUuid(projectId)) {
+    return staleIdsAction();
+  }
+
   const { error } = await supabase
     .from("projects")
     .update({ active: false, archived_at: new Date().toISOString() })
@@ -223,6 +239,10 @@ export async function deleteProject(projectId: string) {
 
   if (!supabase) {
     return { ok: true, message: "Mode demo: projet supprime localement." };
+  }
+
+  if (!isUuid(projectId)) {
+    return staleIdsAction();
   }
 
   const { error } = await supabase.from("projects").delete().eq("id", projectId);
@@ -262,6 +282,10 @@ export async function createFloor(projectId: string, formData: FormData) {
 
   if (!supabase) {
     return { ok: true, message: "Mode demo: etage ajoute localement." };
+  }
+
+  if (!isUuid(projectId)) {
+    return staleIdsAction();
   }
 
   const { error } = await supabase.from("floors").insert({
@@ -311,6 +335,10 @@ export async function generateProjectFloors(projectId: string, formData: FormDat
     return { ok: true, message: "Mode demo: etages generes localement.", floors: demoFloors };
   }
 
+  if (!isUuid(projectId)) {
+    return staleIdsAction();
+  }
+
   const { data, error } = await supabase
     .from("floors")
     .upsert(floors, { onConflict: "project_id,sort_order" })
@@ -344,6 +372,10 @@ export async function updateFloor(floorId: string, projectId: string, formData: 
     return { ok: true, message: "Mode demo: etage modifie localement." };
   }
 
+  if (!isUuid(projectId) || !isUuid(floorId)) {
+    return staleIdsAction();
+  }
+
   const { error } = await supabase
     .from("floors")
     .update({ label, sort_order: sortOrder, active })
@@ -365,6 +397,10 @@ export async function toggleFloorActive(floorId: string, projectId: string, acti
     return { ok: true, message: "Mode demo: etage mis a jour localement." };
   }
 
+  if (!isUuid(projectId) || !isUuid(floorId)) {
+    return staleIdsAction();
+  }
+
   const { error } = await supabase.from("floors").update({ active }).eq("id", floorId).eq("project_id", projectId);
 
   if (error) {
@@ -380,6 +416,10 @@ export async function deleteFloor(floorId: string, projectId: string) {
 
   if (!supabase) {
     return { ok: true, message: "Mode demo: etage supprime localement." };
+  }
+
+  if (!isUuid(projectId) || !isUuid(floorId)) {
+    return staleIdsAction();
   }
 
   const { error } = await supabase.from("floors").delete().eq("id", floorId).eq("project_id", projectId);
@@ -454,6 +494,10 @@ export async function createElevator(
     return { ok: true, message: "Mode demo: elevateur ajoute localement.", elevator };
   }
 
+  if (!isUuid(projectId)) {
+    return staleIdsAction();
+  }
+
   if (await elevatorNameConflict(supabase, projectId, name)) {
     return { ok: false, message: elevatorDuplicateMessage };
   }
@@ -492,6 +536,10 @@ export async function deleteElevator(elevatorId: string, projectId: string) {
     return { ok: true, message: "Mode demo: elevateur supprime localement." };
   }
 
+  if (!isUuid(projectId) || !isUuid(elevatorId)) {
+    return staleIdsAction();
+  }
+
   const { error } = await supabase.from("elevators").delete().eq("id", elevatorId).eq("project_id", projectId);
 
   if (error) {
@@ -518,6 +566,10 @@ export async function updateElevatorSettings(elevatorId: string, projectId: stri
 
   if (!supabase) {
     return { ok: true, message: "Mode demo: capacite modifiee localement." };
+  }
+
+  if (!isUuid(projectId) || !isUuid(elevatorId)) {
+    return staleIdsAction();
   }
 
   if (await elevatorNameConflict(supabase, projectId, name, elevatorId)) {
@@ -560,6 +612,14 @@ export async function activateOperatorElevator(
 
   if (!supabase) {
     return { ok: true, message: "Mode demo: tablette activee.", elevatorId };
+  }
+
+  if (!isUuid(projectId) || !isUuid(elevatorId)) {
+    return staleIdsAction();
+  }
+
+  if (currentFloorId && !isUuid(currentFloorId)) {
+    return staleIdsAction();
   }
 
   const {
@@ -639,6 +699,10 @@ export async function heartbeatOperatorElevator(projectId: string, elevatorId: s
     return { ok: true, message: "Heartbeat ignore." };
   }
 
+  if (!isUuid(projectId) || !isUuid(elevatorId)) {
+    return staleIdsAction();
+  }
+
   const { error } = await supabase
     .from("elevators")
     .update({ operator_session_heartbeat_at: new Date().toISOString() })
@@ -658,6 +722,10 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
 
   if (!supabase || !sessionId) {
     return { ok: true, message: "Mode demo: tablette liberee." };
+  }
+
+  if (!isUuid(projectId) || !isUuid(elevatorId)) {
+    return staleIdsAction();
   }
 
   const { error } = await supabase
@@ -685,6 +753,10 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
 
   if (!supabase) {
     return { ok: true, message: "Mode demo: tablette desactivee." };
+  }
+
+  if (!isUuid(projectId) || !isUuid(elevatorId)) {
+    return staleIdsAction();
   }
 
   const { data: elevator, error: fetchError } = await supabase
@@ -744,6 +816,10 @@ export async function createPassengerRequest(formData: FormData) {
   let serviceTz = DEFAULT_PROJECT_TIMEZONE;
 
   if (supabase) {
+    if (!isUuid(projectId) || !isUuid(fromFloorId) || !isUuid(toFloorId)) {
+      return { ok: false, message: "Lien ou chantier invalide. Utilisez le QR du chantier." };
+    }
+
     const [{ data: dbFloors }, { data: projectRow }, { data: dbElevators }, { data: dbRequests }] = await Promise.all([
       supabase
         .from("floors")
@@ -908,6 +984,10 @@ export async function updateRequestStatus(requestId: string, status: RequestStat
     return { ok: true, message: "Mode demo: action simulee." };
   }
 
+  if (!isUuid(requestId)) {
+    return staleIdsAction();
+  }
+
   const updates: Record<string, unknown> = {
     status,
     updated_at: new Date().toISOString(),
@@ -941,6 +1021,10 @@ export async function assignRequestElevator(requestId: string, elevatorId: strin
 
   if (!supabase) {
     return { ok: true, message: "Mode demo: elevateur assigne localement." };
+  }
+
+  if (!isUuid(requestId) || (elevatorId != null && elevatorId !== "" && !isUuid(elevatorId))) {
+    return staleIdsAction();
   }
 
   const { error } = await supabase
@@ -986,6 +1070,10 @@ export async function createRequestEvent(requestId: string, eventType: RequestEv
     return { ok: true, message: "Mode demo: evenement simule." };
   }
 
+  if (!isUuid(requestId)) {
+    return staleIdsAction();
+  }
+
   const { error } = await supabase.from("request_events").insert({
     request_id: requestId,
     event_type: eventType,
@@ -1007,6 +1095,10 @@ export async function adjustElevatorLoad(elevatorId: string, currentLoad: number
     return { ok: true, message: "Mode demo: charge ajustee." };
   }
 
+  if (!isUuid(elevatorId)) {
+    return staleIdsAction();
+  }
+
   const { error } = await supabase.from("elevators").update({ current_load: currentLoad }).eq("id", elevatorId);
   return { ok: !error, message: error?.message ?? "Charge ajustee." };
 }
@@ -1016,6 +1108,10 @@ export async function sendOperatorMessage(projectId: string, elevatorId: string 
 
   if (!supabase) {
     return { ok: true, message: "Mode demo: message envoye." };
+  }
+
+  if (!isUuid(projectId) || (elevatorId != null && elevatorId !== "" && !isUuid(elevatorId))) {
+    return staleIdsAction();
   }
 
   const { error } = await supabase.from("operator_messages").insert({
