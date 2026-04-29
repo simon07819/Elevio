@@ -30,6 +30,8 @@ export type Project = {
   created_at: string;
   updated_at: string;
   archived_at: string | null;
+  /** IANA timezone for passenger dispatch hours (e.g. America/Toronto). */
+  service_timezone?: string | null;
   /** Per-site logo on QR posters; falls back to profile `project_logo_url` when null. */
   logo_url?: string | null;
 };
@@ -57,6 +59,9 @@ export type Elevator = {
   operator_session_started_at: string | null;
   operator_session_heartbeat_at: string | null;
   operator_user_id: string | null;
+  /** Local wall-clock service window (project.service_timezone). Postgres `time`. */
+  service_start_time?: string | null;
+  service_end_time?: string | null;
 };
 
 export type HoistUser = {

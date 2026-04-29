@@ -11,7 +11,7 @@ export default async function RequestPage({
   searchParams: Promise<{ projectId?: string; floorToken?: string }>;
 }) {
   const params = await searchParams;
-  const { project, floors, currentFloor } = await getPublicRequestContext({
+  const { project, floors, currentFloor, dispatch } = await getPublicRequestContext({
     projectId: params.projectId,
     floorToken: params.floorToken,
   });
@@ -35,7 +35,7 @@ export default async function RequestPage({
           </div>
         </div>
 
-        <RequestForm project={project} floors={floors} currentFloor={currentFloor} />
+        <RequestForm project={project} floors={floors} currentFloor={currentFloor} dispatch={dispatch} />
       </section>
     </main>
   );

@@ -9,16 +9,64 @@ import { elevatorDuplicateMessage } from "@/lib/elevatorMessages";
 import type { Elevator, Floor, HoistRequest, Project, RequestEventType, RequestStatus } from "@/types/hoist";
 
 import { elevatorHasOperatorTabletBinding, isOperatorTabletSessionStale } from "@/lib/operatorTablet";
+import {
+  analyzePassengerDispatch,
+  assertValidTimeZone,
+  DEFAULT_PROJECT_TIMEZONE,
+  parsePostgresTimeToMinutes,
+  type DispatchBlockReason,
+} from "@/lib/operatorDispatchAvailability";
 
 function normalizeText(value: FormDataEntryValue | null) {
   const text = typeof value === "string" ? value.trim() : "";
   return text.length > 0 ? text : null;
 }
 
+function normalizedDbTimeFromInput(raw: string): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  if (/^\d{2}:\d{2}$/.test(t)) return `${t}:00`;
+  if (/^\d{2}:\d{2}:\d{2}$/.test(t)) return t;
+  return null;
+}
+
+function elevatorServiceTimesFromForm(formData: FormData): { ok: true; start: string; end: string } | { ok: false; message: string } {
+  let startRaw = String(formData.get("serviceStart") ?? "").trim();
+  let endRaw = String(formData.get("serviceEnd") ?? "").trim();
+  if (!startRaw) startRaw = "07:00";
+  if (!endRaw) endRaw = "15:00";
+  const start = normalizedDbTimeFromInput(startRaw);
+  const end = normalizedDbTimeFromInput(endRaw);
+  if (!start || !end) {
+    return { ok: false, message: "Heures de service invalides." };
+  }
+  const sm = parsePostgresTimeToMinutes(start);
+  const em = parsePostgresTimeToMinutes(end);
+  if (sm === null || em === null || sm >= em) {
+    return { ok: false, message: "L'heure de debut doit etre avant l'heure de fin." };
+  }
+  return { ok: true, start, end };
+}
+
+function passengerDispatchBlockedMessage(reason: DispatchBlockReason | null): string {
+  switch (reason) {
+    case "outside_hours":
+      return "Service hors plage horaire. Reessayez pendant les heures d'ouverture.";
+    case "no_live_operator":
+      return "Aucun operateur disponible pour le moment.";
+    default:
+      return "Service temporairement indisponible.";
+  }
+}
+
 function projectPayload(formData: FormData) {
+  let service_timezone = String(formData.get("serviceTimezone") ?? "").trim();
+  if (!service_timezone) service_timezone = DEFAULT_PROJECT_TIMEZONE;
+
   return {
     name: String(formData.get("name") ?? "").trim(),
     address: String(formData.get("address") ?? "").trim(),
+    service_timezone,
   };
 }
 
@@ -33,6 +81,12 @@ export async function createProject(formData: FormData) {
 
   if (!payload.name) {
     return { ok: false, message: "Le nom du projet est obligatoire." };
+  }
+
+  try {
+    assertValidTimeZone(payload.service_timezone);
+  } catch {
+    return { ok: false, message: "Fuseau horaire invalide (ex: America/Toronto)." };
   }
 
   if (!supabase) {
@@ -59,7 +113,7 @@ export async function createProject(formData: FormData) {
       active: makeActive,
       archived_at: null,
     })
-    .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url")
+    .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone")
     .single();
 
   if (error) {
@@ -77,6 +131,12 @@ export async function updateProject(projectId: string, formData: FormData) {
 
   if (!payload.name) {
     return { ok: false, message: "Le nom du projet est obligatoire." };
+  }
+
+  try {
+    assertValidTimeZone(payload.service_timezone);
+  } catch {
+    return { ok: false, message: "Fuseau horaire invalide (ex: America/Toronto)." };
   }
 
   if (!supabase) {
@@ -330,7 +390,7 @@ export async function deleteFloor(floorId: string, projectId: string) {
 }
 
 const elevatorSelectColumns =
-  "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id";
+  "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,service_start_time,service_end_time";
 
 function normalizeElevatorName(name: string) {
   return name.trim().toLowerCase();
@@ -366,6 +426,11 @@ export async function createElevator(
     return { ok: false, message: "Nom et capacite sont obligatoires." };
   }
 
+  const serviceTimes = elevatorServiceTimesFromForm(formData);
+  if (!serviceTimes.ok) {
+    return { ok: false, message: serviceTimes.message };
+  }
+
   if (!supabase) {
     const elevator: Elevator = {
       id: crypto.randomUUID(),
@@ -380,6 +445,8 @@ export async function createElevator(
       operator_session_started_at: null,
       operator_session_heartbeat_at: null,
       operator_user_id: null,
+      service_start_time: serviceTimes.start,
+      service_end_time: serviceTimes.end,
     };
     return { ok: true, message: "Mode demo: elevateur ajoute localement.", elevator };
   }
@@ -398,6 +465,8 @@ export async function createElevator(
       current_load: 0,
       direction: "idle",
       active: true,
+      service_start_time: serviceTimes.start,
+      service_end_time: serviceTimes.end,
     })
     .select(elevatorSelectColumns)
     .single();
@@ -439,6 +508,11 @@ export async function updateElevatorSettings(elevatorId: string, projectId: stri
     return { ok: false, message: "Nom et capacite sont obligatoires." };
   }
 
+  const serviceTimes = elevatorServiceTimesFromForm(formData);
+  if (!serviceTimes.ok) {
+    return { ok: false, message: serviceTimes.message };
+  }
+
   if (!supabase) {
     return { ok: true, message: "Mode demo: capacite modifiee localement." };
   }
@@ -452,6 +526,8 @@ export async function updateElevatorSettings(elevatorId: string, projectId: stri
     .update({
       name,
       capacity,
+      service_start_time: serviceTimes.start,
+      service_end_time: serviceTimes.end,
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId);
@@ -660,30 +736,24 @@ export async function createPassengerRequest(formData: FormData) {
   let toFloor = demoFloors.find((floor) => floor.id === toFloorId);
   let projectFloors = demoFloors.filter((floor) => floor.project_id === projectId);
 
-  if (supabase) {
-    const { data: dbFloors } = await supabase
-      .from("floors")
-      .select("id,project_id,label,sort_order,qr_token,access_code,active")
-      .eq("project_id", projectId);
-
-    projectFloors = (dbFloors ?? []) as Floor[];
-    fromFloor = dbFloors?.find((floor) => floor.id === fromFloorId) ?? fromFloor;
-    toFloor = dbFloors?.find((floor) => floor.id === toFloorId) ?? toFloor;
-  }
-
-  if (!fromFloor || !toFloor || fromFloor.id === toFloor.id) {
-    return { ok: false, message: "Selection d'etage invalide." };
-  }
-
   let elevators: Elevator[] = [];
   let activeRequests: HoistRequest[] = [];
+  let serviceTz = DEFAULT_PROJECT_TIMEZONE;
 
   if (supabase) {
-    const [{ data: dbElevators }, { data: dbRequests }] = await Promise.all([
+    const [{ data: dbFloors }, { data: projectRow }, { data: dbElevators }, { data: dbRequests }] = await Promise.all([
       supabase
-        .from("elevators")
-        .select("id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id")
+        .from("floors")
+        .select("id,project_id,label,sort_order,qr_token,access_code,active")
         .eq("project_id", projectId),
+      supabase
+        .from("projects")
+        .select("service_timezone")
+        .eq("id", projectId)
+        .eq("active", true)
+        .is("archived_at", null)
+        .maybeSingle(),
+      supabase.from("elevators").select(elevatorSelectColumns).eq("project_id", projectId),
       supabase
         .from("requests")
         .select("id,project_id,elevator_id,from_floor_id,to_floor_id,direction,passenger_count,original_passenger_count,remaining_passenger_count,split_required,priority,priority_reason,note,status,sequence_number,wait_started_at,created_at,updated_at,completed_at")
@@ -691,8 +761,31 @@ export async function createPassengerRequest(formData: FormData) {
         .in("status", ["pending", "assigned", "arriving", "boarded"]),
     ]);
 
+    projectFloors = (dbFloors ?? []) as Floor[];
+    fromFloor = dbFloors?.find((floor) => floor.id === fromFloorId) ?? fromFloor;
+    toFloor = dbFloors?.find((floor) => floor.id === toFloorId) ?? toFloor;
+
+    if (!projectRow) {
+      return { ok: false, message: "Chantier introuvable ou inactif." };
+    }
+
+    serviceTz = projectRow.service_timezone ?? DEFAULT_PROJECT_TIMEZONE;
     elevators = (dbElevators ?? []) as Elevator[];
     activeRequests = (dbRequests ?? []) as HoistRequest[];
+  }
+
+  if (!fromFloor || !toFloor || fromFloor.id === toFloor.id) {
+    return { ok: false, message: "Selection d'etage invalide." };
+  }
+
+  if (supabase) {
+    const dispatchAnalysis = analyzePassengerDispatch({
+      elevators,
+      timeZone: serviceTz,
+    });
+    if (!dispatchAnalysis.canDispatch) {
+      return { ok: false, message: passengerDispatchBlockedMessage(dispatchAnalysis.blockReason) };
+    }
   }
 
   const direction = getDirection(fromFloor.sort_order, toFloor.sort_order);

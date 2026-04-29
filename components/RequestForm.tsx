@@ -8,6 +8,7 @@ import { subscribeToTable, unsubscribe } from "@/lib/realtime";
 import { estimateArrivalWindow, formatFloorLabel } from "@/lib/utils";
 import { demoElevator } from "@/lib/demoData";
 import type { Floor, HoistRequest, Project, RequestStatus } from "@/types/hoist";
+import type { PassengerDispatchState } from "@/lib/operatorDispatchAvailability";
 import { FloorSelector } from "@/components/FloorSelector";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
@@ -24,10 +25,12 @@ export function RequestForm({
   project,
   floors,
   currentFloor,
+  dispatch,
 }: {
   project: Project;
   floors: Floor[];
   currentFloor: Floor;
+  dispatch: PassengerDispatchState;
 }) {
   const firstDestination = useMemo(
     () => floors.find((floor) => floor.id !== currentFloor.id && floor.active)?.id ?? "",
@@ -48,6 +51,12 @@ export function RequestForm({
     passengerFloorSortOrder: currentFloor.sort_order,
     pendingRequestsAhead: 0,
   });
+
+  const dispatchBlocked = !dispatch.canDispatch;
+  const serviceHoursLabel =
+    dispatch.hourRanges.length > 0
+      ? dispatch.hourRanges.map((r) => `${r.start}–${r.end}`).join(", ")
+      : "07:00–15:00";
 
   useEffect(() => {
     if (!submittedRequest || submittedRequest.requestId === "demo-local-request") {
@@ -151,25 +160,38 @@ export function RequestForm({
   }
 
   return (
-    <form
-      action={(formData) => {
-        startTransition(async () => {
-          const result = await createPassengerRequest(formData);
-          setMessage(result.message);
-          if (result.ok && result.requestId) {
-            setSubmittedRequest({
-              requestId: result.requestId,
-              status: result.status ?? "pending",
-              waitStartedAt: result.waitStartedAt ?? new Date().toISOString(),
-              fromFloorId: result.fromFloorId ?? currentFloor.id,
-              toFloorId: result.toFloorId ?? destinationId,
-              passengerCount: result.passengerCount ?? passengerCount,
-            });
-          }
-        });
-      }}
-      className="flex min-h-0 flex-1 flex-col gap-3"
-    >
+    <>
+      {dispatch.canDispatch ? (
+        <div className="shrink-0 rounded-[1.25rem] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-950">
+          {t("request.dispatchAvailableBanner", { hours: serviceHoursLabel })}
+        </div>
+      ) : (
+        <div className="shrink-0 rounded-[1.25rem] border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-950">
+          {dispatch.blockReason === "outside_hours"
+            ? t("request.dispatchOutsideHours")
+            : t("request.dispatchNoOperator")}
+        </div>
+      )}
+
+      <form
+        action={(formData) => {
+          startTransition(async () => {
+            const result = await createPassengerRequest(formData);
+            setMessage(result.message);
+            if (result.ok && result.requestId) {
+              setSubmittedRequest({
+                requestId: result.requestId,
+                status: result.status ?? "pending",
+                waitStartedAt: result.waitStartedAt ?? new Date().toISOString(),
+                fromFloorId: result.fromFloorId ?? currentFloor.id,
+                toFloorId: result.toFloorId ?? destinationId,
+                passengerCount: result.passengerCount ?? passengerCount,
+              });
+            }
+          });
+        }}
+        className={`flex min-h-0 flex-1 flex-col gap-3${dispatchBlocked ? " pointer-events-none opacity-50" : ""}`}
+      >
       <input type="hidden" name="projectId" value={project.id} />
       <input type="hidden" name="fromFloorId" value={currentFloor.id} />
       <input type="hidden" name="toFloorId" value={destinationId} />
@@ -256,7 +278,7 @@ export function RequestForm({
 
         <button
           type="submit"
-          disabled={isPending}
+          disabled={isPending || dispatchBlocked}
           className="touch-target mt-3 flex w-full items-center justify-center gap-3 rounded-[1.35rem] bg-slate-950 px-5 py-4 text-lg font-black text-white shadow-xl transition active:scale-[0.99] disabled:opacity-60"
         >
           <Send size={22} />
@@ -270,5 +292,6 @@ export function RequestForm({
         )}
       </section>
     </form>
+    </>
   );
 }

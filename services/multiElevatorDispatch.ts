@@ -1,4 +1,5 @@
 import type { Elevator, Floor, HoistRequest } from "@/types/hoist";
+import { isOperatorTabletSessionStale } from "@/lib/operatorTablet";
 
 type DispatchableRequest = Pick<
   HoistRequest,
@@ -91,7 +92,11 @@ export function assignRequestToBestElevator({
   requests: HoistRequest[];
 }): ElevatorAssignment {
   const candidates: DispatchElevator[] = elevators
-    .filter((elevator) => Boolean(elevator.operator_session_id))
+    .filter(
+      (elevator) =>
+        Boolean(elevator.operator_session_id) &&
+        !isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at),
+    )
     .map((elevator) => ({
       ...elevator,
       queue: requests.filter(

@@ -1,12 +1,27 @@
-import { demoFloors, demoProject } from "@/lib/demoData";
+import { demoElevator, demoFloors, demoProject } from "@/lib/demoData";
+import {
+  analyzePassengerDispatch,
+  DEFAULT_PROJECT_TIMEZONE,
+  uniqueServiceHourRanges,
+  type PassengerDispatchState,
+} from "@/lib/operatorDispatchAvailability";
 import { createClient } from "@/lib/supabase/server";
-import type { Floor, Project } from "@/types/hoist";
+import type { Elevator, Floor, Project } from "@/types/hoist";
+
+const PASSENGER_ELEVATORS_SELECT =
+  "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,service_start_time,service_end_time";
 
 export type PublicRequestContext = {
   project: Project;
   floors: Floor[];
   currentFloor: Floor;
+  dispatch: PassengerDispatchState;
 };
+
+function demoPassengerDispatch(): PassengerDispatchState {
+  const hourRanges = uniqueServiceHourRanges([demoElevator]);
+  return { canDispatch: true, blockReason: null, hourRanges };
+}
 
 export async function getPublicRequestContext({
   projectId,
@@ -19,13 +34,13 @@ export async function getPublicRequestContext({
 
   if (!supabase || !projectId || !floorToken) {
     const currentFloor = demoFloors.find((floor) => floor.qr_token === floorToken) ?? demoFloors[4];
-    return { project: demoProject, floors: demoFloors, currentFloor };
+    return { project: demoProject, floors: demoFloors, currentFloor, dispatch: demoPassengerDispatch() };
   }
 
-  const [{ data: project }, { data: floors }] = await Promise.all([
+  const [{ data: project }, { data: floors }, { data: elevators }] = await Promise.all([
     supabase
       .from("projects")
-      .select("id,owner_id,name,address,active,created_at,updated_at,archived_at")
+      .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,service_timezone")
       .eq("id", projectId)
       .eq("active", true)
       .is("archived_at", null)
@@ -36,19 +51,30 @@ export async function getPublicRequestContext({
       .eq("project_id", projectId)
       .eq("active", true)
       .order("sort_order", { ascending: true }),
+    supabase.from("elevators").select(PASSENGER_ELEVATORS_SELECT).eq("project_id", projectId).eq("active", true),
   ]);
 
   const typedFloors = (floors ?? []) as Floor[];
   const currentFloor = typedFloors.find((floor) => floor.qr_token === floorToken);
+  const typedElevators = (elevators ?? []) as Elevator[];
 
   if (!project || !currentFloor || typedFloors.length === 0) {
     const demoFloor = demoFloors.find((floor) => floor.qr_token === floorToken) ?? demoFloors[4];
-    return { project: demoProject, floors: demoFloors, currentFloor: demoFloor };
+    return { project: demoProject, floors: demoFloors, currentFloor: demoFloor, dispatch: demoPassengerDispatch() };
   }
+
+  const tz = project.service_timezone ?? DEFAULT_PROJECT_TIMEZONE;
+  const analysis = analyzePassengerDispatch({ elevators: typedElevators, timeZone: tz });
+  const hourRanges = uniqueServiceHourRanges(typedElevators.filter((e) => e.active !== false));
 
   return {
     project: project as Project,
     floors: typedFloors,
     currentFloor,
+    dispatch: {
+      canDispatch: analysis.canDispatch,
+      blockReason: analysis.blockReason,
+      hourRanges,
+    },
   };
 }

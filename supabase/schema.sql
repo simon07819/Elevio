@@ -117,13 +117,20 @@ create table if not exists elevators (
   operator_session_id text,
   operator_session_started_at timestamptz,
   operator_session_heartbeat_at timestamptz,
-  operator_user_id uuid references auth.users(id) on delete set null
+  operator_user_id uuid references auth.users(id) on delete set null,
+  service_start_time time not null default time '07:00',
+  service_end_time time not null default time '15:00'
 );
 
 alter table elevators add column if not exists operator_session_id text;
 alter table elevators add column if not exists operator_session_started_at timestamptz;
 alter table elevators add column if not exists operator_session_heartbeat_at timestamptz;
 alter table elevators add column if not exists operator_user_id uuid references auth.users(id) on delete set null;
+alter table elevators add column if not exists service_start_time time not null default time '07:00';
+alter table elevators add column if not exists service_end_time time not null default time '15:00';
+
+alter table elevators drop constraint if exists elevators_service_hours_order_chk;
+alter table elevators add constraint elevators_service_hours_order_chk check (service_start_time < service_end_time);
 
 create table if not exists users (
   id uuid primary key default gen_random_uuid(),
@@ -304,6 +311,7 @@ drop policy if exists "public read active floors for qr" on floors;
 drop policy if exists "admins manage floors" on floors;
 drop policy if exists "admins read elevators" on elevators;
 drop policy if exists "admins manage elevators" on elevators;
+drop policy if exists "public read active elevators for qr dispatch" on elevators;
 drop policy if exists "admins read users" on users;
 drop policy if exists "admins manage users" on users;
 drop policy if exists "admins read requests" on requests;
@@ -367,6 +375,18 @@ create policy "admins manage elevators" on elevators
 for all using (is_project_member(project_id) or is_superadmin())
 with check (is_project_member(project_id) or is_superadmin());
 
+create policy "public read active elevators for qr dispatch" on elevators
+for select using (
+  active = true
+  and exists (
+    select 1
+    from projects p
+    where p.id = elevators.project_id
+      and p.active = true
+      and p.archived_at is null
+  )
+);
+
 create policy "admins read users" on users
 for select using (project_id is null or is_project_member(project_id) or is_superadmin());
 
@@ -423,6 +443,7 @@ for insert with check (is_project_member(project_id) or is_superadmin());
 alter table profiles add column if not exists company_logo_url text;
 alter table profiles add column if not exists project_logo_url text;
 alter table projects add column if not exists logo_url text;
+alter table projects add column if not exists service_timezone text not null default 'America/Toronto';
 
 -- Storage: public bucket so poster URLs work without signed URLs; paths are scoped by auth.uid() prefix.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

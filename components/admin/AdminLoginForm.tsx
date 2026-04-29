@@ -67,10 +67,6 @@ export function AdminLoginForm() {
               placeholder={t("profile.phone")}
               className="rounded-2xl bg-white px-4 py-4 font-bold text-slate-950 outline-none"
             />
-            <div className="sm:col-span-2 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-xs font-bold leading-relaxed text-slate-300">
-              <p>{t("login.logoCompanyHint")}</p>
-              <p className="mt-2">{t("login.logoProjectHint")}</p>
-            </div>
           </>
         )}
         <input

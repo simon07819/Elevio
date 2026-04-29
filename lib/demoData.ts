@@ -20,6 +20,7 @@ export const demoProject: Project = {
   updated_at: minutesAgo(60),
   archived_at: null,
   logo_url: null,
+  service_timezone: "America/Toronto",
 };
 
 export const demoProjects: Project[] = [
@@ -33,6 +34,7 @@ export const demoProjects: Project[] = [
     updated_at: minutesAgo(240),
     archived_at: null,
     logo_url: null,
+    service_timezone: "America/Toronto",
   },
   {
     id: "project-demo-archive",
@@ -43,6 +45,7 @@ export const demoProjects: Project[] = [
     updated_at: minutesAgo(3600),
     archived_at: minutesAgo(3600),
     logo_url: null,
+    service_timezone: "America/Toronto",
   },
 ];
 
@@ -105,6 +108,8 @@ export const demoElevator: Elevator = {
   operator_session_started_at: null,
   operator_session_heartbeat_at: null,
   operator_user_id: null,
+  service_start_time: "07:00:00",
+  service_end_time: "15:00:00",
 };
 
 export const demoUsers: HoistUser[] = [

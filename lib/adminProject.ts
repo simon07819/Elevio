@@ -60,7 +60,7 @@ export async function getAdminProjectData(projectId: string): Promise<AdminProje
   ] = await Promise.all([
     supabase
       .from("projects")
-      .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url")
+      .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone")
       .eq("id", projectId)
       .eq("owner_id", user.id)
       .single(),
@@ -72,7 +72,7 @@ export async function getAdminProjectData(projectId: string): Promise<AdminProje
       .order("sort_order", { ascending: true }),
     supabase
       .from("elevators")
-      .select("id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id")
+      .select("id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,service_start_time,service_end_time")
       .eq("project_id", projectId)
       .order("name", { ascending: true }),
     supabase

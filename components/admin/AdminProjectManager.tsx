@@ -9,6 +9,7 @@ import {
   createProject,
   deleteProject,
 } from "@/lib/actions";
+import { DEFAULT_PROJECT_TIMEZONE } from "@/lib/operatorDispatchAvailability";
 import type { Project } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
@@ -86,6 +87,8 @@ export function AdminProjectManager({ projects }: { projects: Project[] }) {
             const name = String(formData.get("name") ?? "").trim();
             const address = String(formData.get("address") ?? "").trim();
             const active = formData.get("active") === "on";
+            const service_timezone =
+              String(formData.get("serviceTimezone") ?? "").trim() || DEFAULT_PROJECT_TIMEZONE;
 
             runAction(() => createProject(formData), (result) => {
               const now = new Date().toISOString();
@@ -98,6 +101,7 @@ export function AdminProjectManager({ projects }: { projects: Project[] }) {
                   created_at: now,
                   updated_at: now,
                   archived_at: null,
+                  service_timezone,
                 };
 
               setLocalProjects((current) => [
@@ -129,6 +133,13 @@ export function AdminProjectManager({ projects }: { projects: Project[] }) {
           >
             {t("project.createButton")}
           </button>
+          <input
+            name="serviceTimezone"
+            defaultValue={DEFAULT_PROJECT_TIMEZONE}
+            placeholder={t("project.serviceTimezonePlaceholder")}
+            aria-label={t("project.serviceTimezoneLabel")}
+            className="rounded-2xl border border-white/10 bg-white px-4 py-4 font-bold text-slate-950 outline-none lg:col-span-4"
+          />
         </form>
       </div>
 

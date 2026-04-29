@@ -21,7 +21,7 @@ export async function getSuperadminData(): Promise<SuperadminData> {
       .order("created_at", { ascending: false }),
     supabase
       .from("projects")
-      .select("id,owner_id,name,address,active,created_at,updated_at,archived_at")
+      .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,service_timezone")
       .order("created_at", { ascending: false }),
   ]);
 

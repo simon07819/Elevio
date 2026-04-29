@@ -102,7 +102,7 @@ export function ProjectElevatorSettings({
                 </button>
               </div>
             ) : null}
-            <div className="grid gap-3 lg:grid-cols-[1fr_160px_auto_auto]">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_88px_118px_118px_auto_auto]">
               <ElevatorFields elevator={elevator} />
               <button
                 disabled={isPending}
@@ -139,7 +139,7 @@ export function ProjectElevatorSettings({
               }
             });
           }}
-          className="mt-4 grid gap-3 rounded-3xl border border-white/10 bg-slate-950/50 p-4 lg:grid-cols-[1fr_160px_auto]"
+          className="mt-4 grid gap-3 rounded-3xl border border-white/10 bg-slate-950/50 p-4 lg:grid-cols-[minmax(0,1fr)_88px_118px_118px_auto]"
         >
           <ElevatorFields />
           <button
@@ -175,6 +175,20 @@ function ElevatorFields({ elevator }: { elevator?: Elevator }) {
         required
         className="rounded-2xl bg-white px-4 py-3 font-bold text-slate-950 outline-none"
         aria-label={t("elevator.capacityLabel")}
+      />
+      <input
+        name="serviceStart"
+        type="time"
+        defaultValue={(elevator?.service_start_time ?? "07:00:00").slice(0, 5)}
+        className="rounded-2xl bg-white px-2 py-3 font-bold text-slate-950 outline-none"
+        aria-label={t("elevator.serviceStartLabel")}
+      />
+      <input
+        name="serviceEnd"
+        type="time"
+        defaultValue={(elevator?.service_end_time ?? "15:00:00").slice(0, 5)}
+        className="rounded-2xl bg-white px-2 py-3 font-bold text-slate-950 outline-none"
+        aria-label={t("elevator.serviceEndLabel")}
       />
     </>
   );

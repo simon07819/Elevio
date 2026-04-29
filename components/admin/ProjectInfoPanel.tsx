@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Archive, Power, Save } from "lucide-react";
 import { activateProject, archiveProject, updateProject } from "@/lib/actions";
+import { DEFAULT_PROJECT_TIMEZONE } from "@/lib/operatorDispatchAvailability";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import type { Project } from "@/types/hoist";
 
@@ -58,6 +59,18 @@ export function ProjectInfoPanel({ project }: { project: Project }) {
           <Save className="mr-2 inline" size={18} />
           {t("profile.save")}
         </button>
+        <div className="lg:col-span-3">
+          <label className="block text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+            {t("project.serviceTimezoneLabel")}
+          </label>
+          <input
+            name="serviceTimezone"
+            defaultValue={project.service_timezone ?? DEFAULT_PROJECT_TIMEZONE}
+            placeholder={t("project.serviceTimezonePlaceholder")}
+            className="mt-1 w-full rounded-2xl border border-white/10 bg-white px-4 py-3 font-bold text-slate-950 outline-none"
+          />
+          <p className="mt-1 text-xs font-bold text-slate-500">{t("project.serviceTimezoneHelp")}</p>
+        </div>
       </form>
 
       <div className="mt-4 flex flex-wrap gap-2">

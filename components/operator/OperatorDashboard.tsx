@@ -140,17 +140,10 @@ export function OperatorDashboard({
       <RecommendedNextStop recommendation={recommendation} actionRequests={actionRequests} />
 
       <section className="rounded-3xl border border-white/10 bg-white/8 p-4">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300"><T k="operator.tablet" /></p>
-            <h2 className="text-2xl font-black text-white"><T k="operator.movements" /></h2>
-            <p className="mt-1 text-xs font-bold text-emerald-200"><T k="operator.requestsSynced" /></p>
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs font-black">
-            <span className="rounded-full bg-yellow-300 px-3 py-1 text-slate-950"><T k="operator.nextVisible" /></span>
-            <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-emerald-100"><T k="operator.up" /></span>
-            <span className="rounded-full bg-red-400/15 px-3 py-1 text-red-100"><T k="operator.down" /></span>
-          </div>
+        <div className="mb-3">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300"><T k="operator.tablet" /></p>
+          <h2 className="text-2xl font-black text-white"><T k="operator.movements" /></h2>
+          <p className="mt-1 text-xs font-bold text-emerald-200"><T k="operator.requestsSynced" /></p>
         </div>
 
         <MovementBoard requests={activeQueue} recommendedIds={recommendedIds} />
