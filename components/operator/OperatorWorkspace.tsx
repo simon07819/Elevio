@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { formatFloorLabel } from "@/lib/utils";
+import { ServiceTimePicker } from "@/components/ServiceTimePicker";
 import { isOperatorTabletSessionStale } from "@/lib/operatorTablet";
 import type { ActivePassenger, Elevator, Floor, HoistRequest, Project } from "@/types/hoist";
 import { OperatorDashboard } from "@/components/operator/OperatorDashboard";
@@ -49,6 +50,12 @@ function normalizeTabletLabelInput(raw: string): string | null {
   const t = raw.trim();
   if (!t) return null;
   return t.length > 120 ? t.slice(0, 120) : t;
+}
+
+/** Convertit les valeurs cachées du ServiceTimePicker (`HH:MM`) en `HH:MM:SS` pour l'état local. */
+function hhmmToPostgresTime(hhmm: string): string {
+  const t = hhmm.trim();
+  return /^\d{2}:\d{2}$/.test(t) ? `${t}:00` : t;
 }
 
 function storedElevatorId(projectId: string) {
@@ -130,9 +137,19 @@ export function OperatorWorkspace({
   function activate(elevator: Elevator, formData: FormData) {
     const currentFloorId = String(formData.get("currentFloorId") ?? "");
     const tabletLabel = normalizeTabletLabelInput(String(formData.get("tabletLabel") ?? ""));
+    const serviceStart = String(formData.get("serviceStart") ?? "");
+    const serviceEnd = String(formData.get("serviceEnd") ?? "");
 
     startTransition(async () => {
-      const result = await activateOperatorElevator(project.id, elevator.id, sessionId, currentFloorId, tabletLabel);
+      const result = await activateOperatorElevator(
+        project.id,
+        elevator.id,
+        sessionId,
+        currentFloorId,
+        tabletLabel,
+        serviceStart,
+        serviceEnd,
+      );
       setMessage(result.message);
 
       if (result.ok) {
@@ -147,6 +164,8 @@ export function OperatorWorkspace({
                   operator_session_started_at: new Date().toISOString(),
                   operator_session_heartbeat_at: new Date().toISOString(),
                   operator_tablet_label: tabletLabel,
+                  service_start_time: hhmmToPostgresTime(serviceStart),
+                  service_end_time: hhmmToPostgresTime(serviceEnd),
                   current_floor_id: currentFloorId || item.current_floor_id,
                   direction: "idle",
                   current_load: 0,
@@ -284,6 +303,27 @@ export function OperatorWorkspace({
                   className="rounded-2xl bg-white px-4 py-3 font-bold text-slate-950 outline-none placeholder:font-bold placeholder:text-slate-400 disabled:opacity-60"
                 />
               </label>
+
+              <div className="mt-3 grid gap-2">
+                <span className="text-sm font-black text-slate-200">{t("elevator.serviceStartLabel")}</span>
+                <ServiceTimePicker
+                  key={`${elevator.id}-op-serviceStart-${elevator.service_start_time ?? ""}`}
+                  name="serviceStart"
+                  defaultTime={elevator.service_start_time ?? "07:00:00"}
+                  ariaLabel={t("elevator.serviceStartLabel")}
+                  disabled={locked || isPending}
+                />
+              </div>
+              <div className="mt-3 grid gap-2">
+                <span className="text-sm font-black text-slate-200">{t("elevator.serviceEndLabel")}</span>
+                <ServiceTimePicker
+                  key={`${elevator.id}-op-serviceEnd-${elevator.service_end_time ?? ""}`}
+                  name="serviceEnd"
+                  defaultTime={elevator.service_end_time ?? "15:00:00"}
+                  ariaLabel={t("elevator.serviceEndLabel")}
+                  disabled={locked || isPending}
+                />
+              </div>
 
               <button
                 disabled={locked || isPending}

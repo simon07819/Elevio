@@ -31,12 +31,19 @@ function normalizedDbTimeFromInput(raw: string): string | null {
 }
 
 function elevatorServiceTimesFromForm(formData: FormData): { ok: true; start: string; end: string } | { ok: false; message: string } {
-  let startRaw = String(formData.get("serviceStart") ?? "").trim();
-  let endRaw = String(formData.get("serviceEnd") ?? "").trim();
-  if (!startRaw) startRaw = "07:00";
-  if (!endRaw) endRaw = "15:00";
-  const start = normalizedDbTimeFromInput(startRaw);
-  const end = normalizedDbTimeFromInput(endRaw);
+  return parseElevatorServiceTimes(String(formData.get("serviceStart") ?? ""), String(formData.get("serviceEnd") ?? ""));
+}
+
+function parseElevatorServiceTimes(
+  startRaw: string,
+  endRaw: string,
+): { ok: true; start: string; end: string } | { ok: false; message: string } {
+  let s = startRaw.trim();
+  let e = endRaw.trim();
+  if (!s) s = "07:00";
+  if (!e) e = "15:00";
+  const start = normalizedDbTimeFromInput(s);
+  const end = normalizedDbTimeFromInput(e);
   if (!start || !end) {
     return { ok: false, message: "Heures de service invalides." };
   }
@@ -469,11 +476,6 @@ export async function createElevator(
     return { ok: false, message: "Nom et capacite sont obligatoires." };
   }
 
-  const serviceTimes = elevatorServiceTimesFromForm(formData);
-  if (!serviceTimes.ok) {
-    return { ok: false, message: serviceTimes.message };
-  }
-
   if (!supabase) {
     const elevator: Elevator = {
       id: crypto.randomUUID(),
@@ -488,8 +490,8 @@ export async function createElevator(
       operator_session_started_at: null,
       operator_session_heartbeat_at: null,
       operator_user_id: null,
-      service_start_time: serviceTimes.start,
-      service_end_time: serviceTimes.end,
+      service_start_time: "07:00:00",
+      service_end_time: "15:00:00",
       operator_tablet_label: null,
     };
     return { ok: true, message: "Mode demo: elevateur ajoute localement.", elevator };
@@ -513,8 +515,6 @@ export async function createElevator(
       current_load: 0,
       direction: "idle",
       active: true,
-      service_start_time: serviceTimes.start,
-      service_end_time: serviceTimes.end,
     })
     .select(elevatorSelectColumns)
     .single();
@@ -605,6 +605,8 @@ export async function activateOperatorElevator(
   sessionId: string,
   currentFloorId: string,
   tabletLabel?: string | null,
+  serviceStart?: string | null,
+  serviceEnd?: string | null,
 ) {
   const supabase = await createClient();
 
@@ -612,8 +614,9 @@ export async function activateOperatorElevator(
     return { ok: false, message: "Session tablette invalide." };
   }
 
-  if (!supabase) {
-    return { ok: true, message: "Mode demo: tablette activee.", elevatorId };
+  const serviceTimes = parseElevatorServiceTimes(String(serviceStart ?? ""), String(serviceEnd ?? ""));
+  if (!serviceTimes.ok) {
+    return { ok: false, message: serviceTimes.message };
   }
 
   const normalizedTabletLabel = (() => {
@@ -621,6 +624,10 @@ export async function activateOperatorElevator(
     if (!t) return null;
     return t.length > 120 ? t.slice(0, 120) : t;
   })();
+
+  if (!supabase) {
+    return { ok: true, message: "Mode demo: tablette activee.", elevatorId };
+  }
 
   if (!isUuid(projectId) || !isUuid(elevatorId)) {
     return staleIdsAction();
@@ -690,6 +697,8 @@ export async function activateOperatorElevator(
       current_floor_id: currentFloorId || null,
       direction: "idle",
       current_load: 0,
+      service_start_time: serviceTimes.start,
+      service_end_time: serviceTimes.end,
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId);
