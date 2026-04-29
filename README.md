@@ -51,6 +51,10 @@ Sans variables Supabase, l'app fonctionne en mode demo avec les donnees locales 
 3. Executer `supabase/seed.sql` pour charger les donnees demo.
 4. Verifier que Realtime est active pour `projects`, `floors`, `elevators`, `requests`, `request_events` et `operator_messages`.
 
+### Bases deja creees (migration incrementale)
+
+Si l application ou Supabase renvoie une erreur du type **column elevators.operator_tablet_label does not exist**, ouvrir **SQL Editor** et executer le fichier **`supabase/elevator-operator-tablet-label.sql`** (une ligne `alter table ...`, idempotent). Meme chose pour les autres scripts `supabase/*.sql` hors `schema.sql` / `seed.sql` correspondant aux fonctionnalites ajoutees apres la creation du projet.
+
 ### Auth admin
 
 Dans Supabase Dashboard, configurer:
