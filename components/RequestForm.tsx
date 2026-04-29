@@ -5,7 +5,7 @@ import { CheckCircle2, Clock, Send, ShieldAlert, Users, XCircle } from "lucide-r
 import { createPassengerRequest, updateRequestStatus } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeToTable, unsubscribe } from "@/lib/realtime";
-import { estimateArrivalWindow, formatFloorLabel } from "@/lib/utils";
+import { estimateArrivalWindow, formatFloorLabel, formatPostgresTimeToAmPm } from "@/lib/utils";
 import { demoElevator } from "@/lib/demoData";
 import type { Floor, HoistRequest, Project, RequestStatus } from "@/types/hoist";
 import type { PassengerDispatchState } from "@/lib/operatorDispatchAvailability";
@@ -55,8 +55,10 @@ export function RequestForm({
   const dispatchBlocked = !dispatch.canDispatch;
   const serviceHoursLabel =
     dispatch.hourRanges.length > 0
-      ? dispatch.hourRanges.map((r) => `${r.start}–${r.end}`).join(", ")
-      : "07:00–15:00";
+      ? dispatch.hourRanges
+          .map((r) => `${formatPostgresTimeToAmPm(r.start)}–${formatPostgresTimeToAmPm(r.end)}`)
+          .join(", ")
+      : `${formatPostgresTimeToAmPm("07:00")}–${formatPostgresTimeToAmPm("15:00")}`;
 
   useEffect(() => {
     if (!submittedRequest || submittedRequest.requestId === "demo-local-request") {

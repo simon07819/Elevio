@@ -65,6 +65,21 @@ export function formatWaitTime(startedAt: string, now = new Date()) {
   return `${hours} h ${rest.toString().padStart(2, "0")}`;
 }
 
+/** Affiche une heure Postgres (`HH:MM` ou `HH:MM:SS`) en 12 h avec AM/PM (heure 1–12). */
+export function formatPostgresTimeToAmPm(isoTime: string | null | undefined): string {
+  const raw = (isoTime ?? "07:00:00").trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!raw) {
+    return "7:00 AM";
+  }
+  const h24 = Math.min(23, Math.max(0, Number(raw[1])));
+  const minuteNum = Math.min(59, Math.max(0, Number(raw[2])));
+  const mm = String(minuteNum).padStart(2, "0");
+  const period = h24 >= 12 ? "PM" : "AM";
+  let h12 = h24 % 12;
+  if (h12 === 0) h12 = 12;
+  return `${h12}:${mm} ${period}`;
+}
+
 export function requestDirectionLabel(direction: Direction) {
   if (direction === "up") return "Montee";
   if (direction === "down") return "Descente";
