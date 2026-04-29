@@ -12,27 +12,56 @@ import { formatFloorLabel } from "@/lib/utils";
 import type { ActivePassenger, Elevator, Floor, HoistRequest, Project } from "@/types/hoist";
 import { OperatorDashboard } from "@/components/operator/OperatorDashboard";
 
-function makeSessionId() {
+function sessionStorageKey(projectId: string) {
+  return `elevio-operator-session-id:${projectId}`;
+}
+
+function elevatorStorageKey(projectId: string) {
+  return `elevio-operator-elevator-id:${projectId}`;
+}
+
+function makeSessionId(projectId: string) {
   if (typeof window === "undefined") {
     return "";
   }
 
-  const existing = window.localStorage.getItem("elevio-operator-session-id");
-  if (existing) {
-    return existing;
+  const key = sessionStorageKey(projectId);
+  const scoped = window.localStorage.getItem(key);
+  if (scoped) {
+    return scoped;
+  }
+
+  const legacy = window.localStorage.getItem("elevio-operator-session-id");
+  if (legacy) {
+    window.localStorage.setItem(key, legacy);
+    window.localStorage.removeItem("elevio-operator-session-id");
+    return legacy;
   }
 
   const next = window.crypto?.randomUUID?.() ?? `operator-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  window.localStorage.setItem("elevio-operator-session-id", next);
+  window.localStorage.setItem(key, next);
   return next;
 }
 
-function storedElevatorId() {
+function storedElevatorId(projectId: string) {
   if (typeof window === "undefined") {
     return null;
   }
 
-  return window.localStorage.getItem("elevio-operator-elevator-id");
+  const key = elevatorStorageKey(projectId);
+  const scoped = window.localStorage.getItem(key);
+  if (scoped) {
+    return scoped;
+  }
+
+  const legacy = window.localStorage.getItem("elevio-operator-elevator-id");
+  if (legacy) {
+    window.localStorage.setItem(key, legacy);
+    window.localStorage.removeItem("elevio-operator-elevator-id");
+    return legacy;
+  }
+
+  return null;
 }
 
 export function OperatorWorkspace({
@@ -49,9 +78,9 @@ export function OperatorWorkspace({
   activePassengers: ActivePassenger[];
 }) {
   const { t } = useLanguage();
-  const [sessionId] = useState(makeSessionId);
+  const [sessionId] = useState(() => makeSessionId(project.id));
   const [localElevators, setLocalElevators] = useState(elevators);
-  const [selectedElevatorId, setSelectedElevatorId] = useState<string | null>(storedElevatorId);
+  const [selectedElevatorId, setSelectedElevatorId] = useState<string | null>(() => storedElevatorId(project.id));
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -83,7 +112,7 @@ export function OperatorWorkspace({
       setMessage(result.message);
 
       if (result.ok) {
-        window.localStorage.setItem("elevio-operator-elevator-id", elevator.id);
+        window.localStorage.setItem(elevatorStorageKey(project.id), elevator.id);
         setSelectedElevatorId(elevator.id);
         setLocalElevators((current) =>
           current.map((item) =>
@@ -114,7 +143,7 @@ export function OperatorWorkspace({
       setMessage(result.message);
 
       if (result.ok) {
-        window.localStorage.removeItem("elevio-operator-elevator-id");
+        window.localStorage.removeItem(elevatorStorageKey(project.id));
         setSelectedElevatorId(null);
         setLocalElevators((current) =>
           current.map((item) =>

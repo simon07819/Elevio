@@ -516,6 +516,26 @@ export async function activateOperatorElevator(
     return { ok: false, message: "Cet elevateur est deja active sur une autre tablette." };
   }
 
+  const sessionClear = {
+    operator_session_id: null,
+    operator_session_started_at: null,
+    operator_session_heartbeat_at: null,
+    operator_user_id: null,
+  };
+
+  /* Index unique sur operator_session_id: une session ne peut être que sur un ascenseur.
+   * Sans cette étape, activer un 2e ascenseur avec la même session (ex. heartbeats périmés,
+   * ou changement d’ascenseur sans libération) provoque duplicate key sur elevators_operator_session_idx. */
+  const { error: clearError } = await supabase
+    .from("elevators")
+    .update(sessionClear)
+    .eq("project_id", projectId)
+    .eq("operator_session_id", sessionId);
+
+  if (clearError) {
+    return { ok: false, message: clearError.message };
+  }
+
   const now = new Date().toISOString();
   const { error } = await supabase
     .from("elevators")
