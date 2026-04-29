@@ -65,9 +65,15 @@ export function OperatorKeepAwake() {
       ? t("operator.wakeActive")
       : t("operator.wakeUnavailable");
 
+  /* Wake Lock uniquement (anti-veille) — pas l’activation ascenseur (voir OperatorWorkspace). */
+  const tone =
+    state === "active"
+      ? "border border-sky-400/25 bg-sky-500/10 text-sky-100"
+      : "border border-amber-400/25 bg-amber-500/10 text-amber-100";
+
   return (
-    <div className="rounded-full bg-emerald-400/15 px-4 py-2 text-sm font-black text-emerald-100">
-      <TabletSmartphone className="mr-2 inline" size={16} />
+    <div title={state === "active" ? "Wake Lock navigateur" : undefined} className={`rounded-full px-4 py-2 text-sm font-black ${tone}`}>
+      <TabletSmartphone className="mr-2 inline opacity-90" size={16} />
       {text}
     </div>
   );
