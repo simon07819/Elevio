@@ -199,13 +199,13 @@ function ServiceTimePicker({
   const value = `${hour}:${minute}`;
 
   return (
-    <div className="inline-flex max-w-full items-center gap-2 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-slate-200/80">
+    <div className="inline-flex w-fit max-w-full items-center gap-1 rounded-xl bg-white px-1 py-1 shadow-sm ring-1 ring-slate-200/80">
       <input type="hidden" name={name} value={value} readOnly />
       <select
         aria-label={`${ariaLabel} (HH)`}
         value={hour}
         onChange={(e) => setHour(e.target.value)}
-        className="min-h-11 min-w-[3.25rem] shrink-0 rounded-xl border-0 bg-white py-2 pl-3 pr-8 text-center text-base font-black tabular-nums text-slate-950 outline-none focus:ring-2 focus:ring-yellow-400/60 sm:min-w-[4rem]"
+        className="min-h-10 min-w-[2.75rem] shrink-0 rounded-lg border-0 bg-transparent py-2 pl-2 pr-6 text-center text-sm font-black tabular-nums text-slate-950 outline-none focus:ring-2 focus:ring-yellow-400/50 sm:min-w-[3rem] sm:pr-7"
       >
         {HOUR_OPTIONS.map((h) => (
           <option key={h} value={h}>
@@ -213,14 +213,14 @@ function ServiceTimePicker({
           </option>
         ))}
       </select>
-      <span className="select-none text-base font-black text-slate-400" aria-hidden>
+      <span className="select-none text-sm font-black text-slate-400" aria-hidden>
         :
       </span>
       <select
         aria-label={`${ariaLabel} (MM)`}
         value={minute}
         onChange={(e) => setMinute(e.target.value)}
-        className="min-h-11 min-w-[3.25rem] shrink-0 rounded-xl border-0 bg-white py-2 pl-3 pr-8 text-center text-base font-black tabular-nums text-slate-950 outline-none focus:ring-2 focus:ring-yellow-400/60 sm:min-w-[4rem]"
+        className="min-h-10 min-w-[2.75rem] shrink-0 rounded-lg border-0 bg-transparent py-2 pl-2 pr-6 text-center text-sm font-black tabular-nums text-slate-950 outline-none focus:ring-2 focus:ring-yellow-400/50 sm:min-w-[3rem] sm:pr-7"
       >
         {MINUTE_QUARTER_OPTIONS.map((m) => (
           <option key={m} value={m}>
@@ -244,17 +244,22 @@ function ElevatorFields({ elevator }: { elevator?: Elevator }) {
         placeholder={t("elevator.namePlaceholder")}
         className="min-h-11 w-full min-w-0 rounded-2xl bg-white px-4 py-3 font-bold text-slate-950 outline-none"
       />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:items-end">
-        <input
-          name="capacity"
-          type="number"
-          min={1}
-          defaultValue={elevator?.capacity ?? 8}
-          required
-          className="min-h-11 w-full max-w-[8rem] rounded-2xl bg-white px-4 py-3 text-center font-bold text-slate-950 outline-none sm:max-w-none sm:text-left lg:max-w-[7rem]"
-          aria-label={t("elevator.capacityLabel")}
-        />
-        <div className="flex min-w-0 flex-col gap-1.5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:items-start lg:justify-items-start">
+        <div className="flex w-full max-w-full flex-col items-start gap-1.5 sm:max-w-[12rem]">
+          <label htmlFor={elevator ? `elev-cap-${elevator.id}` : "elev-cap-create"} className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+            {t("elevator.capacityLabel")}
+          </label>
+          <input
+            id={elevator ? `elev-cap-${elevator.id}` : "elev-cap-create"}
+            name="capacity"
+            type="number"
+            min={1}
+            defaultValue={elevator?.capacity ?? 8}
+            required
+            className="min-h-11 w-full max-w-[6.5rem] rounded-2xl bg-white px-3 py-3 text-center text-base font-black tabular-nums text-slate-950 outline-none"
+          />
+        </div>
+        <div className="flex w-full max-w-full flex-col items-start gap-1.5">
           <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
             {t("elevator.serviceStartLabel")}
           </span>
@@ -265,7 +270,7 @@ function ElevatorFields({ elevator }: { elevator?: Elevator }) {
             ariaLabel={t("elevator.serviceStartLabel")}
           />
         </div>
-        <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex w-full max-w-full flex-col items-start gap-1.5">
           <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
             {t("elevator.serviceEndLabel")}
           </span>
