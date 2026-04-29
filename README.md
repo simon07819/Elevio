@@ -1,0 +1,150 @@
+# Elevio
+
+Elevio est une PWA mobile-first pour gerer les demandes d'un elevateur exterieur sur chantier. Les travailleurs scannent un QR code a leur etage, choisissent leur destination et l'operateur recoit les demandes en temps reel avec une recommandation de trajectoire.
+
+## Stack
+
+- Next.js App Router
+- TypeScript
+- Tailwind CSS
+- Supabase PostgreSQL + Realtime
+- PWA mobile/tablette
+- Interface FR/EN ready, contenu initial en francais
+
+## Routes
+
+- `/` landing
+- `/select-mode` choix passager / operateur / admin
+- `/request?projectId=PROJECT_ID&floorToken=QR_TOKEN` demande passager via QR
+- `/operator` cockpit operateur
+- `/admin` hub admin
+- `/admin/projects` projets, capacite, elevateurs
+- `/admin/floors` etages et tokens QR
+- `/admin/qrcodes` QR codes imprimables
+- `/admin/stats` statistiques
+
+## Installation
+
+```bash
+npm install
+npm run dev
+```
+
+Ouvrir ensuite `http://localhost:3000`.
+
+## Variables ENV
+
+Créer `.env.local`:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+SUPERADMIN_EMAILS=owner@example.com
+```
+
+Sans variables Supabase, l'app fonctionne en mode demo avec les donnees locales dans `lib/demoData.ts`.
+
+## Supabase
+
+1. Creer un projet Supabase.
+2. Executer `supabase/schema.sql` dans le SQL editor.
+3. Executer `supabase/seed.sql` pour charger les donnees demo.
+4. Verifier que Realtime est active pour `projects`, `floors`, `elevators`, `requests`, `request_events` et `operator_messages`.
+
+### Auth admin
+
+Dans Supabase Dashboard, configurer:
+
+- Authentication -> URL Configuration -> Site URL: `http://localhost:3000`
+- Authentication -> URL Configuration -> Redirect URLs: `http://localhost:3000/auth/callback`
+
+En production, ajouter aussi l'URL du domaine Elevio dans les Redirect URLs.
+
+La creation d'un compte admin demande prenom, nom, compagnie, telephone, email et mot de passe. Supabase envoie un courriel de confirmation; le lien revient sur `/auth/callback`, cree/met a jour le profil, puis redirige vers `/admin/profile?onboarding=1` pour ajouter vos logos (vous pouvez passer cette etape et les ajouter plus tard).
+
+Les emails listes dans `SUPERADMIN_EMAILS` deviennent superadmins apres confirmation ou connexion.
+
+### Stockage des logos (bucket `brand-logos`)
+
+Les uploads utilisent le bucket Storage **`brand-logos`** (public, max 2 Mo, PNG / JPEG / WebP / SVG).
+
+Si l’app affiche **« Bucket not found »** au téléversement :
+
+1. Ouvrir **Supabase Dashboard** → **SQL Editor**.
+2. Copier-coller et exécuter tout le contenu de **`supabase/storage-brand-logos.sql`** (idempotent : peut être relancé).
+3. Vérifier dans **Storage** que le bucket **`brand-logos`** est bien listé.
+
+Ce fichier est aussi inclus à la fin de **`supabase/schema.sql`** si vous déployez une base neuve.
+
+### Template courriel Elevio
+
+Supabase utilise un courriel par defaut tant que le template n'est pas remplace dans le dashboard.
+
+Pour installer le courriel Elevio:
+
+1. Ouvrir Supabase Dashboard.
+2. Aller dans `Authentication` -> `Email Templates`.
+3. Ouvrir `Confirm signup`.
+4. Sujet recommande: `Confirmez votre compte Elevio`.
+5. Coller le contenu de `supabase/email-templates/confirm-signup.html` dans le template HTML.
+6. Sauvegarder.
+
+La version texte fallback est dans `supabase/email-templates/confirm-signup.txt`.
+
+Le template utilise les variables Supabase:
+
+- `{{ .ConfirmationURL }}` pour le bouton de confirmation.
+- `{{ .Email }}` pour afficher le courriel du compte.
+
+Le schema accepte toutes les demandes. La capacite ne bloque jamais l'insertion: elle sert uniquement au dispatch, aux badges et aux recommandations operateur.
+
+## Dispatch
+
+Le moteur principal est `services/dispatchEngine.ts`.
+
+Il prend:
+
+- etage courant
+- direction courante
+- demandes actives
+- capacite maximale
+- charge courante
+- passagers deja a bord
+
+Il retourne:
+
+- prochain etage recommande
+- raison lisible
+- demandes a prendre
+- passagers a deposer
+- direction suggeree
+- alertes de capacite
+
+Le scoring applique les regles demandees: priorite, temps d'attente, meme direction, sur le chemin, capacite, split, detour et penalite d'equite.
+
+## Deploiement
+
+Deploiement recommande sur Vercel:
+
+```bash
+npm run build
+```
+
+Puis configurer les variables `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_ANON_KEY` dans le dashboard Vercel.
+
+## Scripts
+
+```bash
+npm run dev
+npm run build
+npm run start
+npm run lint
+npm run typecheck
+```
+
+## Notes produit
+
+- Les gros boutons et cartes sont concus pour un usage avec gants.
+- Les QR codes de `/admin/qrcodes` sont imprimables.
+- Les demandes prioritaires exigent une raison.
+- Les groupes trop grands restent acceptes et visibles avec recommandation de plusieurs passages.

@@ -1,0 +1,18 @@
+Confirmez votre compte Elevio
+
+Bienvenue sur Elevio.
+
+Confirmez votre adresse courriel pour acceder a votre espace chantier et commencer a gerer vos projets, etages, QR codes et operateurs.
+
+Courriel du compte:
+{{ .Email }}
+
+Confirmer mon compte:
+{{ .ConfirmationURL }}
+
+Apres confirmation, vous serez redirige automatiquement vers votre espace admin Elevio.
+
+English:
+Confirm your email address to access your construction site workspace. After confirmation, Elevio will redirect you to your admin dashboard.
+
+Elevio - Gestion intelligente des elevateurs de chantier

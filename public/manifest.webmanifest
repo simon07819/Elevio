@@ -1,0 +1,18 @@
+{
+  "name": "Elevio",
+  "short_name": "Elevio",
+  "description": "Gestion temps reel des demandes d'elevateur de chantier.",
+  "start_url": "/select-mode",
+  "display": "standalone",
+  "background_color": "#05070a",
+  "theme_color": "#05070a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
