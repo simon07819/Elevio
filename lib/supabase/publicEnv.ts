@@ -20,7 +20,10 @@ export function getSupabasePublicEnv(): { url: string; anonKey: string } | null 
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return null;
     }
-    const url = parsed.href.replace(/\/$/, "");
+    /* Supabase-js construit auth/rest/etc. avec `new URL('auth/v1', baseUrl)`.
+     * Si la variable contient un chemin (ex. …/rest/v1 collé par erreur),
+     * les URLs Auth deviennent invalides → erreurs type « Invalid path specified in request URL ». */
+    const url = parsed.origin;
     return { url, anonKey };
   } catch {
     return null;
