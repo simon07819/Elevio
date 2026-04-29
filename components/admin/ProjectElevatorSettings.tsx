@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Gauge, Plus, Save, TabletSmartphone, Trash2 } from "lucide-react";
 import { adminDeactivateOperatorTablet, createElevator, deleteElevator, updateElevatorSettings } from "@/lib/actions";
 import { elevatorDuplicateMessage } from "@/lib/elevatorMessages";
+import { elevatorHasOperatorTabletBinding, elevatorOperatorSessionAppearsLive } from "@/lib/operatorTablet";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import type { Elevator } from "@/types/hoist";
 
@@ -68,10 +69,22 @@ export function ProjectElevatorSettings({
                 {t("elevator.summary", { capacity: elevator.capacity, load: elevator.current_load })}
               </p>
             </div>
-            <p className={elevator.operator_session_id ? "mb-3 rounded-2xl bg-emerald-400/15 px-3 py-2 text-xs font-black text-emerald-100" : "mb-3 rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-slate-300"}>
-              {elevator.operator_session_id ? t("elevator.tabletActive") : t("elevator.tabletInactive")}
+            <p
+              className={
+                elevatorOperatorSessionAppearsLive(elevator)
+                  ? "mb-3 rounded-2xl bg-emerald-400/15 px-3 py-2 text-xs font-black text-emerald-100"
+                  : elevatorHasOperatorTabletBinding(elevator)
+                    ? "mb-3 rounded-2xl bg-amber-500/15 px-3 py-2 text-xs font-black text-amber-100"
+                    : "mb-3 rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-slate-300"
+              }
+            >
+              {elevatorOperatorSessionAppearsLive(elevator)
+                ? t("elevator.tabletActive")
+                : elevatorHasOperatorTabletBinding(elevator)
+                  ? t("elevator.tabletStaleBinding")
+                  : t("elevator.tabletInactive")}
             </p>
-            {elevator.operator_session_id ? (
+            {elevatorHasOperatorTabletBinding(elevator) ? (
               <div className="mb-3">
                 <button
                   type="button"
@@ -83,7 +96,9 @@ export function ProjectElevatorSettings({
                   className="touch-target inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/40 bg-amber-500/15 px-4 py-3 text-sm font-black text-amber-100 sm:w-auto"
                 >
                   <TabletSmartphone size={18} />
-                  {t("elevator.deactivateTablet")}
+                  {elevatorOperatorSessionAppearsLive(elevator)
+                    ? t("elevator.deactivateTablet")
+                    : t("elevator.clearTabletSession")}
                 </button>
               </div>
             ) : null}

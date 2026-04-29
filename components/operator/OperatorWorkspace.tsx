@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { LockKeyhole, TabletSmartphone } from "lucide-react";
 import {
   activateOperatorElevator,
@@ -9,6 +10,7 @@ import {
 } from "@/lib/actions";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { formatFloorLabel } from "@/lib/utils";
+import { isOperatorTabletSessionStale } from "@/lib/operatorTablet";
 import type { ActivePassenger, Elevator, Floor, HoistRequest, Project } from "@/types/hoist";
 import { OperatorDashboard } from "@/components/operator/OperatorDashboard";
 
@@ -77,12 +79,27 @@ export function OperatorWorkspace({
   requests: HoistRequest[];
   activePassengers: ActivePassenger[];
 }) {
+  const router = useRouter();
   const { t } = useLanguage();
   const [sessionId] = useState(() => makeSessionId(project.id));
   const [localElevators, setLocalElevators] = useState(elevators);
   const [selectedElevatorId, setSelectedElevatorId] = useState<string | null>(() => storedElevatorId(project.id));
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setLocalElevators(elevators);
+  }, [elevators]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        router.refresh();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [router]);
 
   const selectedElevator = useMemo(
     () =>
@@ -206,7 +223,10 @@ export function OperatorWorkspace({
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {localElevators.map((elevator) => {
-          const locked = Boolean(elevator.operator_session_id && elevator.operator_session_id !== sessionId);
+          const heldByOtherSession =
+            Boolean(elevator.operator_session_id) && elevator.operator_session_id !== sessionId;
+          const lockActive = heldByOtherSession && !isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at);
+          const locked = lockActive;
           const defaultFloorId = elevator.current_floor_id ?? floors.find((floor) => floor.sort_order === 0)?.id ?? floors[0]?.id ?? "";
 
           return (

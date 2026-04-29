@@ -186,10 +186,6 @@ export const translations = {
     "brand.upload": "Televerser",
     "brand.autoUploadHint": "La miniature apparait uniquement une fois l'envoi termine.",
     "brand.remove": "Supprimer",
-    "login.logoCompanyHint":
-      "Logo entreprise : vous pourrez le deposer apres confirmation du courriel, depuis votre profil (meme emplacement que ci-dessous).",
-    "login.logoProjectHint":
-      "Logo projet : idem apres validation du courriel ; il sert de defaut pour les affiches QR.",
     "login.eyebrow": "Administration",
     "login.signIn": "Connexion",
     "login.signUp": "Creer un compte",
@@ -274,11 +270,14 @@ export const translations = {
     "elevator.capacityLabel": "Capacite passagers",
     "elevator.currentLoad": "Charge actuelle",
     "elevator.currentFloor": "Etage courant",
-    "elevator.tabletActive": "Tablette active",
+    "elevator.tabletActive": "Tablette connectee",
     "elevator.tabletInactive": "Tablette non active",
+    "elevator.tabletStaleBinding":
+      "Session residuelle (plus de heartbeat) — liberez avec le bouton ci-dessous si vous n’activez pas cette tablette.",
     "elevator.deactivateTablet": "Desactiver la tablette",
+    "elevator.clearTabletSession": "Nettoyer la session tablette",
     "elevator.deactivateTabletConfirm":
-      "Couper la session operateur sur cet ascenseur ? La tablette devra etre reactivee sur place.",
+      "Couper la session operateur sur cet ascenseur ? Les operateurs devront reactiver la tablette.",
     "elevator.duplicateName": "Un elevateur avec ce nom existe deja sur ce chantier.",
     "elevator.addAnother": "Ajouter un elevateur",
     "elevator.delete": "Supprimer",
@@ -567,10 +566,6 @@ export const translations = {
     "brand.upload": "Upload",
     "brand.autoUploadHint": "The thumbnail appears only after the upload finishes.",
     "brand.remove": "Remove",
-    "login.logoCompanyHint":
-      "Company logo: you can upload it after you confirm your email, from your profile (same place as below).",
-    "login.logoProjectHint":
-      "Project logo: same after email confirmation; it is the default for QR posters.",
     "login.eyebrow": "Administration",
     "login.signIn": "Sign in",
     "login.signUp": "Create account",
@@ -655,11 +650,14 @@ export const translations = {
     "elevator.capacityLabel": "Passenger capacity",
     "elevator.currentLoad": "Current load",
     "elevator.currentFloor": "Current floor",
-    "elevator.tabletActive": "Tablet active",
+    "elevator.tabletActive": "Tablet connected",
     "elevator.tabletInactive": "Tablet inactive",
+    "elevator.tabletStaleBinding":
+      "Stale session (no recent heartbeat) — clear below if this hoist should be free.",
     "elevator.deactivateTablet": "Deactivate tablet",
+    "elevator.clearTabletSession": "Clear tablet session",
     "elevator.deactivateTabletConfirm":
-      "End the operator session on this hoist? The tablet will need to be activated again on site.",
+      "End the operator session on this hoist? Operators will need to activate the tablet again.",
     "elevator.duplicateName":
       "A hoist with this name already exists on this site.",
     "elevator.addAnother": "Add another hoist",

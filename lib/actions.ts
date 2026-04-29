@@ -8,6 +8,8 @@ import { assignRequestToBestElevator } from "@/services/multiElevatorDispatch";
 import { elevatorDuplicateMessage } from "@/lib/elevatorMessages";
 import type { Elevator, Floor, HoistRequest, Project, RequestEventType, RequestStatus } from "@/types/hoist";
 
+import { elevatorHasOperatorTabletBinding, isOperatorTabletSessionStale } from "@/lib/operatorTablet";
+
 function normalizeText(value: FormDataEntryValue | null) {
   const text = typeof value === "string" ? value.trim() : "";
   return text.length > 0 ? text : null;
@@ -178,14 +180,6 @@ function revalidateAdminProject(projectId: string) {
   revalidatePath("/admin/floors");
   revalidatePath("/admin/qrcodes");
   revalidatePath("/operator");
-}
-
-function staleOperatorHeartbeat(heartbeat?: string | null) {
-  if (!heartbeat) {
-    return true;
-  }
-
-  return Date.now() - new Date(heartbeat).getTime() > 2 * 60_000;
 }
 
 export async function createFloor(projectId: string, formData: FormData) {
@@ -511,7 +505,7 @@ export async function activateOperatorElevator(
   if (
     elevator.operator_session_id &&
     elevator.operator_session_id !== sessionId &&
-    !staleOperatorHeartbeat(elevator.operator_session_heartbeat_at as string | null)
+    !isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at as string | null)
   ) {
     return { ok: false, message: "Cet elevateur est deja active sur une autre tablette." };
   }
@@ -616,7 +610,7 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
 
   const { data: elevator, error: fetchError } = await supabase
     .from("elevators")
-    .select("id,operator_session_id")
+    .select("id,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id")
     .eq("id", elevatorId)
     .eq("project_id", projectId)
     .maybeSingle();
@@ -625,8 +619,8 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
     return { ok: false, message: fetchError.message };
   }
 
-  if (!elevator?.operator_session_id) {
-    return { ok: false, message: "Aucune tablette active sur cet elevateur." };
+  if (!elevator || !elevatorHasOperatorTabletBinding(elevator as Elevator)) {
+    return { ok: false, message: "Aucune session tablette a nettoyer sur cet elevateur." };
   }
 
   const { error } = await supabase
