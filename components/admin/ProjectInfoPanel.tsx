@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Archive, Power, Save } from "lucide-react";
-import { activateProject, archiveProject, updateProject } from "@/lib/actions";
+import { Save } from "lucide-react";
+import { updateProject } from "@/lib/actions";
 import { DEFAULT_PROJECT_TIMEZONE } from "@/lib/operatorDispatchAvailability";
+import { PROJECT_TIMEZONE_OPTIONS } from "@/lib/projectTimezoneOptions";
+import type { TranslationKey } from "@/lib/i18n";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import type { Project } from "@/types/hoist";
 
@@ -11,6 +13,9 @@ export function ProjectInfoPanel({ project }: { project: Project }) {
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const { t } = useLanguage();
+
+  const tz = project.service_timezone ?? DEFAULT_PROJECT_TIMEZONE;
+  const tzInPresetList = PROJECT_TIMEZONE_OPTIONS.some((o) => o.value === tz);
 
   function runAction(action: () => Promise<{ ok: boolean; message: string }>) {
     startTransition(async () => {
@@ -60,41 +65,27 @@ export function ProjectInfoPanel({ project }: { project: Project }) {
           {t("profile.save")}
         </button>
         <div className="lg:col-span-3">
-          <label className="block text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+          <label htmlFor={`serviceTimezone-${project.id}`} className="block text-xs font-black uppercase tracking-[0.18em] text-slate-400">
             {t("project.serviceTimezoneLabel")}
           </label>
-          <input
+          <select
+            id={`serviceTimezone-${project.id}`}
             name="serviceTimezone"
-            defaultValue={project.service_timezone ?? DEFAULT_PROJECT_TIMEZONE}
-            placeholder={t("project.serviceTimezonePlaceholder")}
+            defaultValue={tz}
             className="mt-1 w-full rounded-2xl border border-white/10 bg-white px-4 py-3 font-bold text-slate-950 outline-none"
-          />
+          >
+            {!tzInPresetList ? (
+              <option value={tz}>{tz}</option>
+            ) : null}
+            {PROJECT_TIMEZONE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {t(o.labelKey as TranslationKey)}
+              </option>
+            ))}
+          </select>
           <p className="mt-1 text-xs font-bold text-slate-500">{t("project.serviceTimezoneHelp")}</p>
         </div>
       </form>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        {!project.active && (
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() => runAction(() => activateProject(project.id))}
-            className="rounded-2xl bg-emerald-400 px-4 py-3 text-sm font-black text-slate-950 disabled:opacity-60"
-          >
-            <Power className="mr-2 inline" size={16} />
-            {t("project.activateThis")}
-          </button>
-        )}
-        <button
-          type="button"
-          disabled={isPending}
-          onClick={() => runAction(() => archiveProject(project.id))}
-          className="rounded-2xl bg-white/10 px-4 py-3 text-sm font-black text-white disabled:opacity-60"
-        >
-          <Archive className="mr-2 inline" size={16} />
-          {t("project.archiveThis")}
-        </button>
-      </div>
     </section>
   );
 }

@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Archive, ArrowRight, Building2, Power, Settings, Trash2 } from "lucide-react";
+import { Archive, Building2, Power, Settings, Trash2 } from "lucide-react";
 import {
   activateProject,
   archiveProject,
   createProject,
   deleteProject,
 } from "@/lib/actions";
-import { DEFAULT_PROJECT_TIMEZONE } from "@/lib/operatorDispatchAvailability";
 import type { Project } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
@@ -37,8 +36,6 @@ export function AdminProjectManager({ projects }: { projects: Project[] }) {
     return t("common.inactive");
   }
 
-  const activeProject = localProjects.find((project) => project.active);
-
   function runAction(action: () => Promise<ProjectActionResult>, onSuccess?: (result: ProjectActionResult) => void) {
     startTransition(async () => {
       const result = await action();
@@ -52,7 +49,7 @@ export function AdminProjectManager({ projects }: { projects: Project[] }) {
   return (
     <section className="grid gap-5">
       <div className="glass-panel rounded-[2rem] p-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start gap-4">
           <div className="flex items-center gap-3">
             <span className="grid size-12 place-items-center rounded-2xl bg-yellow-300/15 text-yellow-200">
               <Building2 />
@@ -65,15 +62,6 @@ export function AdminProjectManager({ projects }: { projects: Project[] }) {
               </p>
             </div>
           </div>
-          {activeProject && (
-            <Link
-              href={`/admin/projects/${activeProject.id}`}
-              className="touch-target rounded-2xl bg-white/10 px-4 py-3 text-sm font-black text-white"
-            >
-              {t("project.continue", { name: activeProject.name })}
-              <ArrowRight className="ml-2 inline" size={16} />
-            </Link>
-          )}
         </div>
 
         {message && (
@@ -87,8 +75,6 @@ export function AdminProjectManager({ projects }: { projects: Project[] }) {
             const name = String(formData.get("name") ?? "").trim();
             const address = String(formData.get("address") ?? "").trim();
             const active = formData.get("active") === "on";
-            const service_timezone =
-              String(formData.get("serviceTimezone") ?? "").trim() || DEFAULT_PROJECT_TIMEZONE;
 
             runAction(() => createProject(formData), (result) => {
               const now = new Date().toISOString();
@@ -101,7 +87,6 @@ export function AdminProjectManager({ projects }: { projects: Project[] }) {
                   created_at: now,
                   updated_at: now,
                   archived_at: null,
-                  service_timezone,
                 };
 
               setLocalProjects((current) => [
@@ -133,13 +118,6 @@ export function AdminProjectManager({ projects }: { projects: Project[] }) {
           >
             {t("project.createButton")}
           </button>
-          <input
-            name="serviceTimezone"
-            defaultValue={DEFAULT_PROJECT_TIMEZONE}
-            placeholder={t("project.serviceTimezonePlaceholder")}
-            aria-label={t("project.serviceTimezoneLabel")}
-            className="rounded-2xl border border-white/10 bg-white px-4 py-4 font-bold text-slate-950 outline-none lg:col-span-4"
-          />
         </form>
       </div>
 

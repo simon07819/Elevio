@@ -45,6 +45,9 @@ function elevatorServiceTimesFromForm(formData: FormData): { ok: true; start: st
   if (sm === null || em === null || sm >= em) {
     return { ok: false, message: "L'heure de debut doit etre avant l'heure de fin." };
   }
+  if (sm % 15 !== 0 || em % 15 !== 0) {
+    return { ok: false, message: "Les heures de service doivent etre en quarts d'heure (00, 15, 30, 45)." };
+  }
   return { ok: true, start, end };
 }
 

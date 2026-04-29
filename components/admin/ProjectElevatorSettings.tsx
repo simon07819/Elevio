@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Gauge, Plus, Save, TabletSmartphone, Trash2 } from "lucide-react";
 import { adminDeactivateOperatorTablet, createElevator, deleteElevator, updateElevatorSettings } from "@/lib/actions";
@@ -20,6 +20,7 @@ export function ProjectElevatorSettings({
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [createFormKey, setCreateFormKey] = useState(0);
   const createFormRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
   const { t } = useLanguage();
@@ -102,7 +103,7 @@ export function ProjectElevatorSettings({
                 </button>
               </div>
             ) : null}
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_88px_118px_118px_auto_auto]">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(4.25rem,5rem)_minmax(7.25rem,8.5rem)_minmax(7.25rem,8.5rem)_auto_auto] lg:items-end">
               <ElevatorFields elevator={elevator} />
               <button
                 disabled={isPending}
@@ -131,15 +132,17 @@ export function ProjectElevatorSettings({
       <div className="mt-8 border-t border-white/10 pt-6">
         <p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-200">{t("elevator.addAnother")}</p>
         <form
+          key={createFormKey}
           ref={createFormRef}
           action={(formData) => {
             runAction(() => createElevator(projectId, formData), (result) => {
               if (result.elevator) {
                 createFormRef.current?.reset();
+                setCreateFormKey((k) => k + 1);
               }
             });
           }}
-          className="mt-4 grid gap-3 rounded-3xl border border-white/10 bg-slate-950/50 p-4 lg:grid-cols-[minmax(0,1fr)_88px_118px_118px_auto]"
+          className="mt-4 grid gap-3 rounded-3xl border border-white/10 bg-slate-950/50 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(4.25rem,5rem)_minmax(7.25rem,8.5rem)_minmax(7.25rem,8.5rem)_auto] lg:items-end"
         >
           <ElevatorFields />
           <button
@@ -155,6 +158,78 @@ export function ProjectElevatorSettings({
   );
 }
 
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+const MINUTE_QUARTER_OPTIONS = ["00", "15", "30", "45"];
+
+function snapMinuteToQuarter(totalMinuteValue: number): string {
+  const clamped = Math.min(59, Math.max(0, totalMinuteValue));
+  const quarters = [0, 15, 30, 45];
+  const nearest = quarters.reduce((best, q) =>
+    Math.abs(clamped - q) < Math.abs(clamped - best) ? q : best,
+  );
+  return String(nearest).padStart(2, "0");
+}
+
+function parseHourMinute(isoTime: string | null | undefined): { hour: string; minute: string } {
+  const raw = (isoTime ?? "07:00:00").trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!raw) {
+    return { hour: "07", minute: "00" };
+  }
+  const hour = String(Math.min(23, Math.max(0, Number(raw[1])))).padStart(2, "0");
+  const minuteNum = Math.min(59, Math.max(0, Number(raw[2])));
+  const minute = snapMinuteToQuarter(minuteNum);
+  return { hour, minute };
+}
+
+function ServiceTimePicker({
+  name,
+  defaultTime,
+  ariaLabel,
+}: {
+  name: string;
+  defaultTime: string;
+  ariaLabel: string;
+}) {
+  const initial = useMemo(() => parseHourMinute(defaultTime), [defaultTime]);
+  const [hour, setHour] = useState(initial.hour);
+  const [minute, setMinute] = useState(initial.minute);
+
+  const value = `${hour}:${minute}`;
+
+  return (
+    <div className="flex min-w-0 max-w-full items-stretch gap-1">
+      <input type="hidden" name={name} value={value} readOnly />
+      <select
+        aria-label={`${ariaLabel} (HH)`}
+        value={hour}
+        onChange={(e) => setHour(e.target.value)}
+        className="min-w-0 w-[3.75rem] shrink-0 rounded-2xl bg-white py-3 pl-2 pr-1 text-center text-sm font-black tabular-nums text-slate-950 outline-none sm:w-[4.25rem] sm:px-2"
+      >
+        {HOUR_OPTIONS.map((h) => (
+          <option key={h} value={h}>
+            {h}
+          </option>
+        ))}
+      </select>
+      <span className="grid w-4 shrink-0 place-items-center text-sm font-black text-white/70" aria-hidden>
+        :
+      </span>
+      <select
+        aria-label={`${ariaLabel} (MM)`}
+        value={minute}
+        onChange={(e) => setMinute(e.target.value)}
+        className="min-w-0 w-[3.75rem] shrink-0 rounded-2xl bg-white py-3 pl-2 pr-1 text-center text-sm font-black tabular-nums text-slate-950 outline-none sm:w-[4.25rem] sm:px-2"
+      >
+        {MINUTE_QUARTER_OPTIONS.map((m) => (
+          <option key={m} value={m}>
+            {m}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function ElevatorFields({ elevator }: { elevator?: Elevator }) {
   const { t } = useLanguage();
 
@@ -165,7 +240,7 @@ function ElevatorFields({ elevator }: { elevator?: Elevator }) {
         defaultValue={elevator?.name}
         required
         placeholder={t("elevator.namePlaceholder")}
-        className="rounded-2xl bg-white px-4 py-3 font-bold text-slate-950 outline-none"
+        className="min-w-0 rounded-2xl bg-white px-4 py-3 font-bold text-slate-950 outline-none"
       />
       <input
         name="capacity"
@@ -173,22 +248,20 @@ function ElevatorFields({ elevator }: { elevator?: Elevator }) {
         min={1}
         defaultValue={elevator?.capacity ?? 8}
         required
-        className="rounded-2xl bg-white px-4 py-3 font-bold text-slate-950 outline-none"
+        className="min-w-0 rounded-2xl bg-white px-2 py-3 text-center font-bold text-slate-950 outline-none"
         aria-label={t("elevator.capacityLabel")}
       />
-      <input
+      <ServiceTimePicker
+        key={`${elevator?.id ?? "create"}-serviceStart-${elevator?.service_start_time ?? ""}`}
         name="serviceStart"
-        type="time"
-        defaultValue={(elevator?.service_start_time ?? "07:00:00").slice(0, 5)}
-        className="rounded-2xl bg-white px-2 py-3 font-bold text-slate-950 outline-none"
-        aria-label={t("elevator.serviceStartLabel")}
+        defaultTime={elevator?.service_start_time ?? "07:00:00"}
+        ariaLabel={t("elevator.serviceStartLabel")}
       />
-      <input
+      <ServiceTimePicker
+        key={`${elevator?.id ?? "create"}-serviceEnd-${elevator?.service_end_time ?? ""}`}
         name="serviceEnd"
-        type="time"
-        defaultValue={(elevator?.service_end_time ?? "15:00:00").slice(0, 5)}
-        className="rounded-2xl bg-white px-2 py-3 font-bold text-slate-950 outline-none"
-        aria-label={t("elevator.serviceEndLabel")}
+        defaultTime={elevator?.service_end_time ?? "15:00:00"}
+        ariaLabel={t("elevator.serviceEndLabel")}
       />
     </>
   );
