@@ -103,27 +103,29 @@ export function ProjectElevatorSettings({
                 </button>
               </div>
             ) : null}
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(4.25rem,5rem)_minmax(7.25rem,8.5rem)_minmax(7.25rem,8.5rem)_auto_auto] lg:items-end">
+            <div className="flex flex-col gap-4 border-t border-white/10 pt-4">
               <ElevatorFields elevator={elevator} />
-              <button
-                disabled={isPending}
-                className="touch-target rounded-2xl bg-yellow-300 px-5 py-3 font-black text-slate-950 disabled:opacity-60"
-              >
-                <Save className="mr-2 inline" size={18} />
-                {t("elevator.save")}
-              </button>
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => {
-                  if (!window.confirm(t("elevator.deleteConfirm"))) return;
-                  runAction(() => deleteElevator(elevator.id, projectId));
-                }}
-                className="touch-target grid size-11 place-items-center rounded-2xl border border-red-400/40 bg-red-500/15 text-red-100 disabled:opacity-60"
-                aria-label={t("elevator.delete")}
-              >
-                <Trash2 size={18} />
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  disabled={isPending}
+                  className="touch-target rounded-2xl bg-yellow-300 px-5 py-3 font-black text-slate-950 disabled:opacity-60"
+                >
+                  <Save className="mr-2 inline" size={18} />
+                  {t("elevator.save")}
+                </button>
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => {
+                    if (!window.confirm(t("elevator.deleteConfirm"))) return;
+                    runAction(() => deleteElevator(elevator.id, projectId));
+                  }}
+                  className="touch-target grid size-12 place-items-center rounded-2xl border border-red-400/40 bg-red-500/15 text-red-100 disabled:opacity-60"
+                  aria-label={t("elevator.delete")}
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
             </div>
           </form>
         ))}
@@ -142,12 +144,12 @@ export function ProjectElevatorSettings({
               }
             });
           }}
-          className="mt-4 grid gap-3 rounded-3xl border border-white/10 bg-slate-950/50 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(4.25rem,5rem)_minmax(7.25rem,8.5rem)_minmax(7.25rem,8.5rem)_auto] lg:items-end"
+          className="mt-4 flex flex-col gap-4 rounded-3xl border border-white/10 bg-slate-950/50 p-4"
         >
           <ElevatorFields />
           <button
             disabled={isPending}
-            className="touch-target rounded-2xl bg-yellow-300 px-5 py-3 font-black text-slate-950 disabled:opacity-60"
+            className="touch-target w-full rounded-2xl bg-yellow-300 px-5 py-3 font-black text-slate-950 disabled:opacity-60 sm:w-auto"
           >
             <Plus className="mr-2 inline" size={18} />
             {t("elevator.create")}
@@ -197,13 +199,13 @@ function ServiceTimePicker({
   const value = `${hour}:${minute}`;
 
   return (
-    <div className="flex min-w-0 max-w-full items-stretch gap-1">
+    <div className="inline-flex max-w-full items-center gap-2 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-slate-200/80">
       <input type="hidden" name={name} value={value} readOnly />
       <select
         aria-label={`${ariaLabel} (HH)`}
         value={hour}
         onChange={(e) => setHour(e.target.value)}
-        className="min-w-0 w-[3.75rem] shrink-0 rounded-2xl bg-white py-3 pl-2 pr-1 text-center text-sm font-black tabular-nums text-slate-950 outline-none sm:w-[4.25rem] sm:px-2"
+        className="min-h-11 min-w-[3.25rem] shrink-0 rounded-xl border-0 bg-white py-2 pl-3 pr-8 text-center text-base font-black tabular-nums text-slate-950 outline-none focus:ring-2 focus:ring-yellow-400/60 sm:min-w-[4rem]"
       >
         {HOUR_OPTIONS.map((h) => (
           <option key={h} value={h}>
@@ -211,14 +213,14 @@ function ServiceTimePicker({
           </option>
         ))}
       </select>
-      <span className="grid w-4 shrink-0 place-items-center text-sm font-black text-white/70" aria-hidden>
+      <span className="select-none text-base font-black text-slate-400" aria-hidden>
         :
       </span>
       <select
         aria-label={`${ariaLabel} (MM)`}
         value={minute}
         onChange={(e) => setMinute(e.target.value)}
-        className="min-w-0 w-[3.75rem] shrink-0 rounded-2xl bg-white py-3 pl-2 pr-1 text-center text-sm font-black tabular-nums text-slate-950 outline-none sm:w-[4.25rem] sm:px-2"
+        className="min-h-11 min-w-[3.25rem] shrink-0 rounded-xl border-0 bg-white py-2 pl-3 pr-8 text-center text-base font-black tabular-nums text-slate-950 outline-none focus:ring-2 focus:ring-yellow-400/60 sm:min-w-[4rem]"
       >
         {MINUTE_QUARTER_OPTIONS.map((m) => (
           <option key={m} value={m}>
@@ -234,35 +236,47 @@ function ElevatorFields({ elevator }: { elevator?: Elevator }) {
   const { t } = useLanguage();
 
   return (
-    <>
+    <div className="flex flex-col gap-4">
       <input
         name="name"
         defaultValue={elevator?.name}
         required
         placeholder={t("elevator.namePlaceholder")}
-        className="min-w-0 rounded-2xl bg-white px-4 py-3 font-bold text-slate-950 outline-none"
+        className="min-h-11 w-full min-w-0 rounded-2xl bg-white px-4 py-3 font-bold text-slate-950 outline-none"
       />
-      <input
-        name="capacity"
-        type="number"
-        min={1}
-        defaultValue={elevator?.capacity ?? 8}
-        required
-        className="min-w-0 rounded-2xl bg-white px-2 py-3 text-center font-bold text-slate-950 outline-none"
-        aria-label={t("elevator.capacityLabel")}
-      />
-      <ServiceTimePicker
-        key={`${elevator?.id ?? "create"}-serviceStart-${elevator?.service_start_time ?? ""}`}
-        name="serviceStart"
-        defaultTime={elevator?.service_start_time ?? "07:00:00"}
-        ariaLabel={t("elevator.serviceStartLabel")}
-      />
-      <ServiceTimePicker
-        key={`${elevator?.id ?? "create"}-serviceEnd-${elevator?.service_end_time ?? ""}`}
-        name="serviceEnd"
-        defaultTime={elevator?.service_end_time ?? "15:00:00"}
-        ariaLabel={t("elevator.serviceEndLabel")}
-      />
-    </>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:items-end">
+        <input
+          name="capacity"
+          type="number"
+          min={1}
+          defaultValue={elevator?.capacity ?? 8}
+          required
+          className="min-h-11 w-full max-w-[8rem] rounded-2xl bg-white px-4 py-3 text-center font-bold text-slate-950 outline-none sm:max-w-none sm:text-left lg:max-w-[7rem]"
+          aria-label={t("elevator.capacityLabel")}
+        />
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+            {t("elevator.serviceStartLabel")}
+          </span>
+          <ServiceTimePicker
+            key={`${elevator?.id ?? "create"}-serviceStart-${elevator?.service_start_time ?? ""}`}
+            name="serviceStart"
+            defaultTime={elevator?.service_start_time ?? "07:00:00"}
+            ariaLabel={t("elevator.serviceStartLabel")}
+          />
+        </div>
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+            {t("elevator.serviceEndLabel")}
+          </span>
+          <ServiceTimePicker
+            key={`${elevator?.id ?? "create"}-serviceEnd-${elevator?.service_end_time ?? ""}`}
+            name="serviceEnd"
+            defaultTime={elevator?.service_end_time ?? "15:00:00"}
+            ariaLabel={t("elevator.serviceEndLabel")}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
