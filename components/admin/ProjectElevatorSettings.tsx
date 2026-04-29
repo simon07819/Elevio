@@ -2,8 +2,8 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Gauge, Plus, Save, Trash2 } from "lucide-react";
-import { createElevator, deleteElevator, updateElevatorSettings } from "@/lib/actions";
+import { Gauge, Plus, Save, TabletSmartphone, Trash2 } from "lucide-react";
+import { adminDeactivateOperatorTablet, createElevator, deleteElevator, updateElevatorSettings } from "@/lib/actions";
 import { elevatorDuplicateMessage } from "@/lib/elevatorMessages";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import type { Elevator } from "@/types/hoist";
@@ -71,6 +71,22 @@ export function ProjectElevatorSettings({
             <p className={elevator.operator_session_id ? "mb-3 rounded-2xl bg-emerald-400/15 px-3 py-2 text-xs font-black text-emerald-100" : "mb-3 rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-slate-300"}>
               {elevator.operator_session_id ? t("elevator.tabletActive") : t("elevator.tabletInactive")}
             </p>
+            {elevator.operator_session_id ? (
+              <div className="mb-3">
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => {
+                    if (!window.confirm(t("elevator.deactivateTabletConfirm"))) return;
+                    runAction(() => adminDeactivateOperatorTablet(projectId, elevator.id));
+                  }}
+                  className="touch-target inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-400/40 bg-amber-500/15 px-4 py-3 text-sm font-black text-amber-100 sm:w-auto"
+                >
+                  <TabletSmartphone size={18} />
+                  {t("elevator.deactivateTablet")}
+                </button>
+              </div>
+            ) : null}
             <div className="grid gap-3 lg:grid-cols-[1fr_160px_auto_auto]">
               <ElevatorFields elevator={elevator} />
               <button

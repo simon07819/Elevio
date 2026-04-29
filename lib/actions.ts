@@ -607,6 +607,47 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
   return { ok: true, message: "Tablette operateur liberee." };
 }
 
+export async function adminDeactivateOperatorTablet(projectId: string, elevatorId: string) {
+  const supabase = await createClient();
+
+  if (!supabase) {
+    return { ok: true, message: "Mode demo: tablette desactivee." };
+  }
+
+  const { data: elevator, error: fetchError } = await supabase
+    .from("elevators")
+    .select("id,operator_session_id")
+    .eq("id", elevatorId)
+    .eq("project_id", projectId)
+    .maybeSingle();
+
+  if (fetchError) {
+    return { ok: false, message: fetchError.message };
+  }
+
+  if (!elevator?.operator_session_id) {
+    return { ok: false, message: "Aucune tablette active sur cet elevateur." };
+  }
+
+  const { error } = await supabase
+    .from("elevators")
+    .update({
+      operator_session_id: null,
+      operator_session_started_at: null,
+      operator_session_heartbeat_at: null,
+      operator_user_id: null,
+    })
+    .eq("id", elevatorId)
+    .eq("project_id", projectId);
+
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+
+  revalidateAdminProject(projectId);
+  return { ok: true, message: "Tablette desactivee. L’operateur devra reactiver depuis son appareil." };
+}
+
 export async function createPassengerRequest(formData: FormData) {
   const supabase = await createClient();
   const projectId = String(formData.get("projectId") ?? "");

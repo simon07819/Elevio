@@ -276,6 +276,9 @@ export const translations = {
     "elevator.currentFloor": "Etage courant",
     "elevator.tabletActive": "Tablette active",
     "elevator.tabletInactive": "Tablette non active",
+    "elevator.deactivateTablet": "Desactiver la tablette",
+    "elevator.deactivateTabletConfirm":
+      "Couper la session operateur sur cet ascenseur ? La tablette devra etre reactivee sur place.",
     "elevator.duplicateName": "Un elevateur avec ce nom existe deja sur ce chantier.",
     "elevator.addAnother": "Ajouter un elevateur",
     "elevator.delete": "Supprimer",
@@ -654,6 +657,9 @@ export const translations = {
     "elevator.currentFloor": "Current floor",
     "elevator.tabletActive": "Tablet active",
     "elevator.tabletInactive": "Tablet inactive",
+    "elevator.deactivateTablet": "Deactivate tablet",
+    "elevator.deactivateTabletConfirm":
+      "End the operator session on this hoist? The tablet will need to be activated again on site.",
     "elevator.duplicateName":
       "A hoist with this name already exists on this site.",
     "elevator.addAnother": "Add another hoist",
