@@ -174,13 +174,36 @@ export function RequestForm({
       {dispatch.canDispatch ? (
         <div className="shrink-0 rounded-[1.25rem] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-950">
           {dispatch.dispatchOperators.length > 0 ? (
-            <ul className="list-none space-y-2 leading-snug">
-              {dispatch.dispatchOperators.map((op, idx) => (
-                <li key={`${op.displayName ?? ""}-${op.hoursRange}-${idx}`}>
-                  <span className="font-black">{op.displayName?.trim() || t("request.dispatchOperatorFallback")}</span>{" "}
-                  <span className="font-bold opacity-90">({op.hoursRange})</span>
-                </li>
-              ))}
+            <ul className="list-none space-y-3 leading-snug">
+              {dispatch.dispatchOperators.map((op, idx) => {
+                const name = op.displayName?.trim() || t("request.dispatchOperatorFallback");
+                return (
+                  <li
+                    key={`${op.displayName ?? ""}-${op.hoursRange}-${op.outsideScheduledHours}-${idx}`}
+                    className={
+                      op.outsideScheduledHours
+                        ? "rounded-xl border border-amber-300/80 bg-amber-50/90 px-3 py-2 text-amber-950"
+                        : ""
+                    }
+                  >
+                    {op.outsideScheduledHours ? (
+                      <>
+                        <p>
+                          <span className="font-black">{name}</span> {t("request.dispatchOperatorOnlineStatus")}
+                        </p>
+                        <p className="mt-1.5 text-[13px] font-bold leading-snug opacity-95">
+                          {t("request.dispatchOutsideScheduleExplainer")}
+                        </p>
+                      </>
+                    ) : (
+                      <p>
+                        <span className="font-black">{name}</span>{" "}
+                        <span className="font-bold opacity-90">({op.hoursRange})</span>
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p>
@@ -191,9 +214,7 @@ export function RequestForm({
         </div>
       ) : (
         <div className="shrink-0 rounded-[1.25rem] border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-950">
-          {dispatch.blockReason === "outside_hours"
-            ? t("request.dispatchOutsideHours")
-            : t("request.dispatchNoOperator")}
+          {t("request.dispatchNoOperator")}
         </div>
       )}
 

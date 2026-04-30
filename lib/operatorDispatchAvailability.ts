@@ -4,20 +4,23 @@ import type { Elevator } from "@/types/hoist";
 
 export const DEFAULT_PROJECT_TIMEZONE = "America/Toronto";
 
-export type DispatchBlockReason = "outside_hours" | "no_live_operator";
+/** Bloqué uniquement quand aucune cabine n’a de session opérateur vivante (heartbeat). */
+export type DispatchBlockReason = "no_live_operator";
 
 export type PassengerDispatchOperatorSummary = {
   /** null si profil sans nom — UI affiche une etiquette generique */
   displayName: string | null;
   /** Plage horaire cabine (fuseau chantier), ex. 12 h AM–3 h PM */
   hoursRange: string;
+  /** Session vivante mais heure actuelle hors plage configurée — UI sans affichage des heures. */
+  outsideScheduledHours: boolean;
 };
 
 export type PassengerDispatchState = {
   canDispatch: boolean;
   blockReason: DispatchBlockReason | null;
   hourRanges: Array<{ start: string; end: string }>;
-  /** Opérateurs actuellement joignables avec horaires cabine */
+  /** Opérateurs en ligne ; hors plage configurée → pas d’horaire affiché, libellé dédié. */
   dispatchOperators: PassengerDispatchOperatorSummary[];
 };
 
@@ -82,56 +85,59 @@ export function elevatorServiceHoursAmPmRange(elevator: Elevator): string {
 }
 
 /** Liste dedupliquee pour la vue demande passager. */
-export function passengerDispatchOperatorSummaries(elevators: Elevator[]): PassengerDispatchOperatorSummary[] {
-  const raw = elevators.map((e) => ({
-    displayName: e.operator_display_name?.trim() || null,
-    hoursRange: elevatorServiceHoursAmPmRange(e),
-  }));
-  const seen = new Set<string>();
-  return raw.filter((row) => {
-    const key = `${row.displayName ?? ""}|${row.hoursRange}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-export function isElevatorDispatchableNow(elevator: Elevator, timeZone: string, now?: Date): boolean {
-  return elevatorOperatorSessionAppearsLive(elevator) && isElevatorWithinServiceHours(elevator, timeZone, now);
-}
-
-export function analyzePassengerDispatch({
-  elevators,
-  timeZone,
-  now = new Date(),
-}: {
-  elevators: Elevator[];
-  timeZone: string;
-  now?: Date;
-}): {
-  canDispatch: boolean;
-  blockReason: DispatchBlockReason | null;
-  anyWindowOpen: boolean;
-  dispatchableElevators: Elevator[];
-} {
+export function passengerDispatchOperatorSummaries(
+  elevators: Elevator[],
+  timeZone: string,
+  now: Date = new Date(),
+): PassengerDispatchOperatorSummary[] {
   let tz = timeZone?.trim() || DEFAULT_PROJECT_TIMEZONE;
   try {
     assertValidTimeZone(tz);
   } catch {
     tz = DEFAULT_PROJECT_TIMEZONE;
   }
-  const activeElevators = elevators.filter((e) => e.active !== false);
+  const raw = elevators.map((e) => ({
+    displayName: e.operator_display_name?.trim() || null,
+    hoursRange: elevatorServiceHoursAmPmRange(e),
+    outsideScheduledHours: !isElevatorWithinServiceHours(e, tz, now),
+  }));
+  const seen = new Set<string>();
+  return raw.filter((row) => {
+    const key = `${row.displayName ?? ""}|${row.hoursRange}|${row.outsideScheduledHours}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
-  const anyWindowOpen = activeElevators.some((e) => isElevatorWithinServiceHours(e, tz, now));
-  const dispatchableElevators = activeElevators.filter((e) => isElevatorDispatchableNow(e, tz, now));
+/** Ascenseur peut recevoir une demande passager : session tablette vivante (sans garde-heures). */
+export function isElevatorDispatchableNow(elevator: Elevator, _timeZone?: string, now?: Date): boolean {
+  return elevatorOperatorSessionAppearsLive(elevator, now?.getTime());
+}
+
+export function analyzePassengerDispatch({
+  elevators,
+  timeZone: _timeZone,
+  now = new Date(),
+}: {
+  elevators: Elevator[];
+  /** Conservé pour compatibilité appelants ; la disponibilité passager ne dépend plus des heures. */
+  timeZone: string;
+  now?: Date;
+}): {
+  canDispatch: boolean;
+  blockReason: DispatchBlockReason | null;
+  dispatchableElevators: Elevator[];
+} {
+  const activeElevators = elevators.filter((e) => e.active !== false);
+  const nowMs = now.getTime();
+  const dispatchableElevators = activeElevators.filter((e) => elevatorOperatorSessionAppearsLive(e, nowMs));
 
   if (dispatchableElevators.length > 0) {
-    return { canDispatch: true, blockReason: null, anyWindowOpen, dispatchableElevators };
+    return { canDispatch: true, blockReason: null, dispatchableElevators };
   }
 
-  const blockReason: DispatchBlockReason = !anyWindowOpen ? "outside_hours" : "no_live_operator";
-
-  return { canDispatch: false, blockReason, anyWindowOpen, dispatchableElevators: [] };
+  return { canDispatch: false, blockReason: "no_live_operator", dispatchableElevators: [] };
 }
 
 /** Compare les plages HH:MM pour affichage ; retourne une seule plage si toutes identiques. */

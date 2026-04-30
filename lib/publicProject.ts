@@ -24,7 +24,7 @@ function demoPassengerDispatch(): PassengerDispatchState {
     canDispatch: true,
     blockReason: null,
     hourRanges,
-    dispatchOperators: passengerDispatchOperatorSummaries([demoElevator]),
+    dispatchOperators: passengerDispatchOperatorSummaries([demoElevator], DEFAULT_PROJECT_TIMEZONE),
   };
 }
 
@@ -81,7 +81,7 @@ export async function getPublicRequestContext({
       blockReason: analysis.blockReason,
       hourRanges,
       dispatchOperators: analysis.canDispatch
-        ? passengerDispatchOperatorSummaries(analysis.dispatchableElevators)
+        ? passengerDispatchOperatorSummaries(analysis.dispatchableElevators, tz)
         : [],
     },
   };

@@ -89,8 +89,10 @@ export const translations = {
     "request.submit": "Demander l'elevateur",
     "request.sending": "Envoi...",
     "request.dispatchOperatorFallback": "Operateur",
-    "request.dispatchOutsideHours": "Hors plage horaire : aucun ascenseur ne prend les demandes pour le moment.",
     "request.dispatchNoOperator": "Aucun operateur en ligne pour le moment : les demandes sont suspendues.",
+    "request.dispatchOperatorOnlineStatus": "est en ligne.",
+    "request.dispatchOutsideScheduleExplainer":
+      "L’heure actuelle sort des heures habituellement prévues pour cette cabine — vous pouvez quand même envoyer votre demande.",
     "eta.label": "Arrivee estimee dans environ {min} a {max} min",
     "operator.title": "Operateur",
     "operator.realtime": "Temps reel",
@@ -516,8 +518,10 @@ export const translations = {
     "request.submit": "Request the hoist",
     "request.sending": "Sending...",
     "request.dispatchOperatorFallback": "Operator",
-    "request.dispatchOutsideHours": "Outside service hours: no hoist is accepting requests right now.",
     "request.dispatchNoOperator": "No operator is online right now: requests are paused.",
+    "request.dispatchOperatorOnlineStatus": "is online.",
+    "request.dispatchOutsideScheduleExplainer":
+      "It’s outside the usual scheduled window for this hoist — you can still send your request.",
     "eta.label": "Estimated arrival in about {min} to {max} min",
     "operator.title": "Operator",
     "operator.realtime": "Realtime",

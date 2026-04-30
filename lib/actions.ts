@@ -56,8 +56,6 @@ function parseElevatorServiceTimes(
 
 function passengerDispatchBlockedMessage(reason: DispatchBlockReason | null): string {
   switch (reason) {
-    case "outside_hours":
-      return "Service hors plage horaire. Reessayez pendant les heures d'ouverture.";
     case "no_live_operator":
       return "Aucun operateur disponible pour le moment.";
     default:
