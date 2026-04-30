@@ -63,7 +63,7 @@ export function RecommendedNextStop({
     <button
       type="button"
       onClick={pickup}
-      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-yellow-300 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(234,179,8,0.48)] ring-4 ring-yellow-100/45 transition active:scale-[0.98]"
+      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-sky-300 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(56,189,248,0.42)] ring-4 ring-sky-100/40 transition active:scale-[0.98]"
     >
       <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.6),transparent)] opacity-75 motion-safe:animate-[action-shine_1.45s_ease-in-out_infinite]" />
       <span className="relative flex w-full items-center justify-center gap-4 text-4xl font-black uppercase tracking-wide">
@@ -140,10 +140,10 @@ export function RecommendedNextStop({
   }
 
   return (
-    <section className="grid gap-3">
+    <section className="w-full">
       {actionButton}
       {recommendation.capacityWarnings.length > 0 && (
-        <div className="rounded-2xl bg-slate-950/90 p-3 text-yellow-100">
+        <div className="mt-3 rounded-2xl bg-slate-950/90 p-3 text-yellow-100">
           <p className="flex items-center gap-2 text-sm font-black">
             <TriangleAlert size={18} />
             {t("operator.capacityAlerts")}
