@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Navigation, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
@@ -23,11 +23,21 @@ export function RecommendedNextStop({
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const { t } = useLanguage();
-  const actionRequest = actionRequests.find(
-    (request) =>
-      !handledIds.has(request.id) &&
-      (request.status === "pending" || request.status === "assigned" || request.status === "arriving"),
-  );
+  const actionRequest = useMemo(() => {
+    const candidates = actionRequests.filter(
+      (request) =>
+        !handledIds.has(request.id) &&
+        (request.status === "pending" || request.status === "assigned" || request.status === "arriving"),
+    );
+    const primaryId = recommendation.primaryPickupRequestId;
+    if (primaryId) {
+      const primary = candidates.find((request) => request.id === primaryId);
+      if (primary) {
+        return primary;
+      }
+    }
+    return candidates[0];
+  }, [actionRequests, handledIds, recommendation.primaryPickupRequestId]);
 
   function pickup() {
     if (!actionRequest) {
@@ -56,11 +66,9 @@ export function RecommendedNextStop({
         <div className="min-w-0 flex-1">
           <p className="text-xs font-black uppercase tracking-[0.2em]">{t("operator.nextRequest")}</p>
           <h2 className="text-3xl font-black leading-tight">
-            {actionRequest
-              ? `${formatFloorLabel(actionRequest.from_floor)} -> ${formatFloorLabel(actionRequest.to_floor)}`
-              : `${t("operator.stop")} ${
-                  recommendation.nextFloor ? formatFloorLabel(recommendation.nextFloor) : t("operator.pause")
-                }`}
+            {recommendation.nextFloor
+              ? `${t("operator.stop")} ${formatFloorLabel(recommendation.nextFloor)}`
+              : t("operator.pause")}
           </h2>
           <p className="mt-1 line-clamp-2 text-sm font-bold leading-5">{recommendation.reason}</p>
         </div>

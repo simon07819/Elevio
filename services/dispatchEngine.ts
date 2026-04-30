@@ -214,6 +214,7 @@ export function getRecommendedNextStop({
     return {
       nextFloor: resolveFloorEntity(floors, nextDropoffSort),
       nextFloorSortOrder: nextDropoffSort,
+      primaryPickupRequestId: null,
       reason: buildReason(currentFloor, null, requestsToDropoff, prioritiesEnabled, floors),
       requestsToPickup: [],
       requestsToDropoff,
@@ -246,6 +247,7 @@ export function getRecommendedNextStop({
     return {
       nextFloor: null,
       nextFloorSortOrder: null,
+      primaryPickupRequestId: null,
       reason: buildReason(currentFloor, null, [], prioritiesEnabled, floors),
       requestsToPickup: [],
       requestsToDropoff: [],
@@ -255,7 +257,9 @@ export function getRecommendedNextStop({
   }
 
   const nextSortOrder = winner.request.from_sort_order;
-  const suggestedDirection = nextSortOrder > currentSortOrder ? "up" : nextSortOrder < currentSortOrder ? "down" : winner.request.direction;
+  /** Sens pour rejoindre le prochain arrêt — pas le trajet passager après embarquement (évite « monter » alors qu’on est déjà à l’étage). */
+  const suggestedDirection =
+    nextSortOrder > currentSortOrder ? "up" : nextSortOrder < currentSortOrder ? "down" : "idle";
   const pickupAtSameStop = viable
     .filter((item) => item.request.from_sort_order === nextSortOrder)
     .map((item) => item.request);
@@ -263,6 +267,7 @@ export function getRecommendedNextStop({
   return {
     nextFloor: resolveFloorEntity(floors, nextSortOrder),
     nextFloorSortOrder: nextSortOrder,
+    primaryPickupRequestId: winner.request.id,
     reason: buildReason(currentFloor, winner, [], prioritiesEnabled, floors),
     requestsToPickup: pickupAtSameStop,
     requestsToDropoff: [],

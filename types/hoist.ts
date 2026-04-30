@@ -160,6 +160,8 @@ export type DispatchInput = {
 export type DispatchRecommendation = {
   nextFloor: Floor | null;
   nextFloorSortOrder: number | null;
+  /** Demande choisie par le score pour le ramassage ; null si dépose seule ou aucune action pickup. */
+  primaryPickupRequestId: string | null;
   reason: string;
   requestsToPickup: DispatchRequest[];
   requestsToDropoff: ActivePassenger[];

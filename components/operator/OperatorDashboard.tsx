@@ -145,23 +145,11 @@ export function OperatorDashboard({
   const displayFloor =
     recommendation.nextFloor ?? actionRequests[0]?.from_floor ?? currentFloor;
 
-  let displayDirection: Direction =
-    recommendation.suggestedDirection !== "idle"
-      ? recommendation.suggestedDirection
-      : elevator.direction !== "idle"
-        ? elevator.direction
-        : "idle";
-
-  if (
-    displayDirection === "idle" &&
-    Number(displayFloor.sort_order) !== Number(currentFloor.sort_order)
-  ) {
-    if (Number(displayFloor.sort_order) > Number(currentFloor.sort_order)) {
-      displayDirection = "up";
-    } else if (Number(displayFloor.sort_order) < Number(currentFloor.sort_order)) {
-      displayDirection = "down";
-    }
-  }
+  /** Toujours dériver de la géométrie étages : évite direction passager / état ascenseur périmé (« monter » vers P1 alors qu’il faut descendre). */
+  const targetSort = Number(displayFloor.sort_order);
+  const currentSort = Number(currentFloor.sort_order);
+  const displayDirection: Direction =
+    targetSort > currentSort ? "up" : targetSort < currentSort ? "down" : "idle";
 
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
