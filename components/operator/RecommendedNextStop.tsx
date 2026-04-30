@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { DoorOpen, Navigation, TriangleAlert, UserCheck } from "lucide-react";
+import { DoorOpen, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
 import type { DispatchRecommendation, EnrichedRequest } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
@@ -51,22 +51,28 @@ export function RecommendedNextStop({
     <button
       type="button"
       onClick={dropoff}
-      className="touch-target flex h-full min-h-32 w-full items-center justify-center gap-4 rounded-3xl bg-emerald-300 px-6 py-6 text-4xl font-black uppercase tracking-wide text-slate-950 shadow-[0_18px_44px_rgba(16,185,129,0.34)] ring-4 ring-emerald-100/30 transition active:scale-[0.98]"
+      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-emerald-300 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(16,185,129,0.42)] ring-4 ring-emerald-100/40 transition active:scale-[0.98]"
     >
-      <DoorOpen size={36} strokeWidth={2.7} />
-      {t("operator.dropoff")}
+      <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.55),transparent)] opacity-70 motion-safe:animate-[action-shine_1.45s_ease-in-out_infinite]" />
+      <span className="relative flex w-full items-center justify-center gap-4 text-4xl font-black uppercase tracking-wide">
+        <DoorOpen size={38} strokeWidth={2.8} />
+        {t("operator.dropoff")}
+      </span>
     </button>
   ) : showPickup ? (
     <button
       type="button"
       onClick={pickup}
-      className="touch-target flex h-full min-h-32 w-full items-center justify-center gap-4 rounded-3xl bg-yellow-300 px-6 py-6 text-4xl font-black uppercase tracking-wide text-slate-950 shadow-[0_18px_44px_rgba(234,179,8,0.38)] ring-4 ring-yellow-100/35 transition active:scale-[0.98]"
+      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-yellow-300 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(234,179,8,0.48)] ring-4 ring-yellow-100/45 transition active:scale-[0.98]"
     >
-      <UserCheck size={36} strokeWidth={2.7} />
-      {t("operator.pickup")}
+      <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.6),transparent)] opacity-75 motion-safe:animate-[action-shine_1.45s_ease-in-out_infinite]" />
+      <span className="relative flex w-full items-center justify-center gap-4 text-4xl font-black uppercase tracking-wide">
+        <UserCheck size={38} strokeWidth={2.8} />
+        {t("operator.pickup")}
+      </span>
     </button>
   ) : (
-    <div className="flex h-full min-h-32 w-full items-center justify-center rounded-3xl border border-white/10 bg-slate-950/80 px-5 py-5 text-center text-xl font-black text-slate-200">
+    <div className="flex min-h-28 w-full items-center justify-center rounded-3xl border border-white/10 bg-slate-950/80 px-5 py-5 text-center text-xl font-black text-slate-200">
       {t("operator.noAction")}
     </div>
   );
@@ -134,32 +140,10 @@ export function RecommendedNextStop({
   }
 
   return (
-    <section className="grid gap-3 lg:grid-cols-[1fr_340px] lg:items-stretch">
-      <div className="rounded-3xl border border-yellow-400/55 bg-yellow-300 p-4 text-slate-950 shadow-[0_14px_42px_rgba(15,23,42,0.22)]">
-        <div className="flex gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-slate-950 text-yellow-300">
-            <Navigation size={24} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-black uppercase tracking-[0.2em]">{t("operator.afterArrival")}</p>
-            <h2 className="mt-1 text-2xl font-black leading-tight">
-              {showDropoff
-                ? t("operator.dropoff")
-                : showPickup
-                  ? t("operator.pickup")
-                  : t("operator.pause")}
-            </h2>
-            <p className="mt-1 line-clamp-2 text-sm font-bold leading-5">{recommendation.reason}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-0 shadow-[0_14px_42px_rgba(15,23,42,0.34)]">
-        {actionButton}
-      </div>
-
+    <section className="grid gap-3">
+      {actionButton}
       {recommendation.capacityWarnings.length > 0 && (
-        <div className="rounded-2xl bg-slate-950/90 p-3 text-yellow-100 lg:col-span-2">
+        <div className="rounded-2xl bg-slate-950/90 p-3 text-yellow-100">
           <p className="flex items-center gap-2 text-sm font-black">
             <TriangleAlert size={18} />
             {t("operator.capacityAlerts")}
