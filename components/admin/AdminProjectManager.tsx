@@ -96,6 +96,7 @@ export function AdminProjectManager({
         </div>
 
         <form
+          encType="multipart/form-data"
           action={(formData) => {
             const name = String(formData.get("name") ?? "").trim();
             const address = String(formData.get("address") ?? "").trim();
@@ -110,6 +111,7 @@ export function AdminProjectManager({
                   address,
                   active,
                   priorities_enabled: true,
+                  logo_url: null,
                   created_at: now,
                   updated_at: now,
                   archived_at: null,
@@ -148,6 +150,17 @@ export function AdminProjectManager({
               />
             </label>
           </div>
+
+          <label className="grid gap-2 text-sm font-black text-slate-200">
+            <span>{t("project.sitePhotoLabel")}</span>
+            <input
+              name="projectPhoto"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              className="rounded-2xl border border-white/10 bg-white px-4 py-3 text-sm font-bold text-slate-950 file:mr-3 file:rounded-xl file:border-0 file:bg-yellow-300 file:px-4 file:py-2 file:text-sm file:font-black file:text-slate-950"
+            />
+            <span className="text-xs font-bold text-slate-500">{t("project.sitePhotoHint")}</span>
+          </label>
 
           <div className="flex flex-col gap-4 border-t border-white/10 pt-5 lg:flex-row lg:flex-nowrap lg:items-center lg:justify-between lg:gap-6">
             <label className="flex cursor-pointer items-center gap-2 text-sm font-black text-white lg:shrink-0">

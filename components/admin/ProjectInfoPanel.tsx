@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Save } from "lucide-react";
+import { BrandLogoUploader } from "@/components/admin/BrandLogoUploader";
 import { updateProject } from "@/lib/actions";
 import { DEFAULT_PROJECT_TIMEZONE } from "@/lib/operatorDispatchAvailability";
 import { PROJECT_TIMEZONE_OPTIONS } from "@/lib/projectTimezoneOptions";
@@ -40,6 +41,16 @@ export function ProjectInfoPanel({ project }: { project: Project }) {
       </div>
 
       {message && <div className="mt-4 rounded-2xl bg-white/10 p-3 text-sm font-bold text-slate-100">{message}</div>}
+
+      <div className="mt-6">
+        <BrandLogoUploader
+          kind="site"
+          projectId={project.id}
+          currentUrl={project.logo_url ?? null}
+          titleKey="brand.siteTitle"
+          bodyKey="brand.siteBody"
+        />
+      </div>
 
       <form action={(formData) => runAction(() => updateProject(project.id, formData))} className="mt-6 grid gap-6">
         <div className="grid gap-4 sm:grid-cols-2">

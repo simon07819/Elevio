@@ -134,7 +134,7 @@ function QrFloorPoster({
     <article
       data-floor-id={floor.id}
       data-print-selected={printFloorId === floor.id ? "true" : undefined}
-      className="qr-floor-poster min-w-0 max-w-full overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-lg print:rounded-none print:shadow-none"
+      className="qr-floor-poster w-full max-w-full overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-lg print:rounded-none print:shadow-none"
     >
       <QrSheetHeader requestTitle={requestTitle} projectName={project.name} address={project.address ?? ""} />
 
@@ -226,7 +226,7 @@ export function QRCodeGenerator({
         <div
           className={
             compact
-              ? "mt-3 grid min-w-0 gap-3 text-left text-xs font-bold sm:grid-cols-2 print:mt-2 print:grid-cols-1 print:gap-2 print:[&>div]:p-2"
+              ? "mt-3 grid min-w-0 grid-cols-1 gap-3 text-left text-xs font-bold print:mt-2 print:gap-2 print:[&>div]:p-2"
               : "mt-4 grid gap-4 text-left text-base font-bold md:grid-cols-2"
           }
         >
@@ -422,7 +422,7 @@ export function QRCodeGenerator({
       </div>
 
       <div
-        className={`qr-poster-grid grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3 transition-[filter] duration-300 ease-out ${printBlackWhite ? "grayscale" : ""}`}
+        className={`qr-poster-grid grid w-full min-w-0 gap-4 transition-[filter] duration-300 ease-out [grid-template-columns:repeat(auto-fit,minmax(min(100%,24rem),1fr))] ${printBlackWhite ? "grayscale" : ""}`}
       >
         {floors.map((floor) => (
           <QrFloorPoster

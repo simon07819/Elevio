@@ -8,6 +8,7 @@ import { assignRequestToBestElevator } from "@/services/multiElevatorDispatch";
 import { elevatorDuplicateMessage } from "@/lib/elevatorMessages";
 import type { Direction, Elevator, Floor, HoistRequest, Project, RequestEventType, RequestStatus } from "@/types/hoist";
 
+import { uploadBrandLogo } from "@/lib/brandUpload";
 import { elevatorHasOperatorTabletBinding, isOperatorTabletSessionStale } from "@/lib/operatorTablet";
 import {
   analyzePassengerDispatch,
@@ -131,9 +132,36 @@ export async function createProject(formData: FormData) {
     return { ok: false, message: error.message };
   }
 
+  let created = project as Project;
+  const photo = formData.get("projectPhoto");
+  if (photo instanceof File && photo.size > 0) {
+    const uploadFd = new FormData();
+    uploadFd.set("kind", "site");
+    uploadFd.set("projectId", created.id);
+    uploadFd.set("file", photo);
+    const uploadResult = await uploadBrandLogo(uploadFd);
+    if (!uploadResult.ok) {
+      revalidatePath("/admin");
+      revalidatePath("/admin/projects");
+      return {
+        ok: true,
+        message: `Projet cree. ${uploadResult.message}`,
+        project: created,
+      };
+    }
+    const { data: refreshed } = await supabase
+      .from("projects")
+      .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled")
+      .eq("id", created.id)
+      .single();
+    if (refreshed) {
+      created = refreshed as Project;
+    }
+  }
+
   revalidatePath("/admin");
   revalidatePath("/admin/projects");
-  return { ok: true, message: "Projet cree.", project: project as Project };
+  return { ok: true, message: "Projet cree.", project: created };
 }
 
 export async function updateProject(projectId: string, formData: FormData) {

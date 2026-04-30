@@ -20,19 +20,12 @@ export function AdminProfileForm({ profile, onboarding }: { profile: Profile; on
           <p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-200">{t("profile.onboardingEyebrow")}</p>
           <h2 className="mt-2 text-2xl font-black text-white">{t("profile.onboardingTitle")}</h2>
           <p className="mt-2 text-sm font-bold text-slate-300">{t("profile.onboardingBody")}</p>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="mt-4 max-w-xl grid gap-4">
             <BrandLogoUploader
               kind="company"
               currentUrl={profile.company_logo_url ?? null}
               titleKey="brand.companyTitle"
               bodyKey="brand.companyBody"
-              showHints={false}
-            />
-            <BrandLogoUploader
-              kind="project"
-              currentUrl={profile.project_logo_url ?? null}
-              titleKey="brand.projectTitle"
-              bodyKey="brand.projectBody"
               showHints={false}
             />
           </div>
@@ -115,19 +108,12 @@ export function AdminProfileForm({ profile, onboarding }: { profile: Profile; on
           <div className="mt-6 border-t border-white/10 pt-6">
             <p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-200">{t("profile.logosEyebrow")}</p>
             <p className="mt-1 text-sm font-bold text-slate-400">{t("profile.logosIntro")}</p>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div className="mt-4 max-w-xl grid gap-4">
               <BrandLogoUploader
                 kind="company"
                 currentUrl={profile.company_logo_url ?? null}
                 titleKey="brand.companyTitle"
                 bodyKey="brand.companyBody"
-                showHints={false}
-              />
-              <BrandLogoUploader
-                kind="project"
-                currentUrl={profile.project_logo_url ?? null}
-                titleKey="brand.projectTitle"
-                bodyKey="brand.projectBody"
                 showHints={false}
               />
             </div>

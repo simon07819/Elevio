@@ -39,7 +39,7 @@ export type Project = {
   archived_at: string | null;
   /** IANA timezone for passenger dispatch hours (e.g. America/Toronto). */
   service_timezone?: string | null;
-  /** Per-site logo on QR posters; falls back to profile `project_logo_url` when null. */
+  /** Photo/logo on QR posters for this site; legacy fallback: profile `project_logo_url` when null. */
   logo_url?: string | null;
   /** When false, passenger/operator hide priority UI and dispatch ignores priority scoring. */
   priorities_enabled?: boolean;

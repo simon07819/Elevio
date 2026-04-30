@@ -47,6 +47,8 @@ async function deleteStoredUrl(
 }
 
 function revalidateBrandPaths(projectId?: string) {
+  revalidatePath("/admin");
+  revalidatePath("/admin/projects");
   revalidatePath("/admin/profile");
   revalidatePath("/admin/qrcodes");
   if (projectId) {
