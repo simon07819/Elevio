@@ -393,6 +393,10 @@ export const translations = {
     "operator.currentFloor": "Etage actuel",
     "operator.locked": "Verrouille",
     "operator.available": "Disponible",
+    "operator.sessionInactive": "Session inactive",
+    "operator.sessionInactiveHint":
+      "Une tablette etait liee sans reponse. Desactivez-la ci-dessus ou reprenez la cabine ici.",
+    "operator.retakeTablet": "Reprendre",
     "operator.activate": "Activer",
     "operator.releaseTablet": "Liberer cette tablette",
     "operator.tabletSessionsEyebrow": "Gestion chantier",
@@ -817,6 +821,10 @@ export const translations = {
     "operator.currentFloor": "Current floor",
     "operator.locked": "Locked",
     "operator.available": "Available",
+    "operator.sessionInactive": "Inactive session",
+    "operator.sessionInactiveHint":
+      "A tablet was linked but stopped responding. Deactivate above or reclaim the hoist here.",
+    "operator.retakeTablet": "Reclaim",
     "operator.activate": "Activate",
     "operator.releaseTablet": "Release this tablet",
     "operator.tabletSessionsEyebrow": "Site management",

@@ -14,7 +14,7 @@ import { subscribeToTable, unsubscribe, type ElevatorRealtimePayload } from "@/l
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { formatFloorLabel } from "@/lib/utils";
 import { ServiceTimePicker } from "@/components/ServiceTimePicker";
-import { isOperatorTabletSessionStale } from "@/lib/operatorTablet";
+import { elevatorHasOperatorTabletBinding, isOperatorTabletSessionStale } from "@/lib/operatorTablet";
 import { formatStoredTabletLabel, getOperatorDeviceLabel } from "@/lib/deviceLabel";
 import type { ActivePassenger, Elevator, Floor, HoistRequest, Project } from "@/types/hoist";
 import { OperatorDashboard } from "@/components/operator/OperatorDashboard";
@@ -318,8 +318,13 @@ export function OperatorWorkspace({
           {localElevators.map((elevator) => {
             const heldByOtherSession =
               Boolean(elevator.operator_session_id) && elevator.operator_session_id !== sessionId;
-            const lockActive = heldByOtherSession && !isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at);
+            const heartbeatStale = isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at);
+            const lockActive = heldByOtherSession && !heartbeatStale;
             const locked = lockActive;
+            const staleOtherBinding =
+              heldByOtherSession &&
+              heartbeatStale &&
+              elevatorHasOperatorTabletBinding(elevator);
             const defaultFloorId = elevator.current_floor_id ?? floors.find((floor) => floor.sort_order === 0)?.id ?? floors[0]?.id ?? "";
 
             function onActivateSubmit(event: FormEvent<HTMLFormElement>) {
@@ -341,10 +346,24 @@ export function OperatorWorkspace({
                       {elevator.capacity} {t("operator.places")}
                     </p>
                   </div>
-                  <span className={locked ? "rounded-full bg-red-500/20 px-3 py-1 text-xs font-black text-red-100" : "rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-black text-emerald-100"}>
-                    {locked ? t("operator.locked") : t("operator.available")}
+                  <span
+                    className={
+                      locked
+                        ? "rounded-full bg-red-500/20 px-3 py-1 text-xs font-black text-red-100"
+                        : staleOtherBinding
+                          ? "rounded-full bg-amber-400/15 px-3 py-1 text-xs font-black text-amber-100"
+                          : "rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-black text-emerald-100"
+                    }
+                  >
+                    {locked ? t("operator.locked") : staleOtherBinding ? t("operator.sessionInactive") : t("operator.available")}
                   </span>
                 </div>
+
+                {staleOtherBinding ? (
+                  <p className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-50">
+                    {t("operator.sessionInactiveHint")}
+                  </p>
+                ) : null}
 
                 <label className="mt-4 grid gap-2 text-sm font-black text-slate-200">
                   {t("operator.currentFloor")}
@@ -404,7 +423,7 @@ export function OperatorWorkspace({
                   className="touch-target mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-yellow-300 px-5 py-4 font-black text-slate-950 disabled:opacity-50"
                 >
                   <LockKeyhole size={18} />
-                  {t("operator.activate")}
+                  {staleOtherBinding ? t("operator.retakeTablet") : t("operator.activate")}
                 </button>
               </form>
             );
