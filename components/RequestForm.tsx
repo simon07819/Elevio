@@ -320,7 +320,7 @@ export function RequestForm({
     const submittedRequestId = submittedRequest.requestId;
 
     async function cancelAndReset() {
-      const result = await updateRequestStatus(submittedRequestId, "cancelled", "Annule par le passager.");
+      const result = await updateRequestStatus(submittedRequestId, "cancelled", t("request.cancelNoteByPassenger"));
       if (result.ok) {
         clearPassengerPendingRequest(project.id, currentFloor.qr_token, submittedRequestId);
         setSubmittedRequest(null);

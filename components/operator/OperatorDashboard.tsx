@@ -18,6 +18,7 @@ import {
   type RequestRealtimePayload,
 } from "@/lib/realtime";
 import type { TranslationKey } from "@/lib/i18n";
+import { formatDispatchRecommendationReason } from "@/lib/recommendationReason";
 import { formatFloorLabel } from "@/lib/utils";
 import { getRecommendedNextStop } from "@/services/dispatchEngine";
 import {
@@ -29,7 +30,7 @@ import {
   isOperatorMovementQueueStatus,
 } from "@/types/hoist";
 import { CapacityPanel } from "@/components/operator/CapacityPanel";
-import { T } from "@/components/i18n/LanguageProvider";
+import { T, useLanguage } from "@/components/i18n/LanguageProvider";
 import { MovementBoard } from "@/components/operator/MovementBoard";
 import { RecommendedNextStop } from "@/components/operator/RecommendedNextStop";
 
@@ -52,6 +53,7 @@ export function OperatorDashboard({
   prioritiesEnabled?: boolean;
   onElevatorPatch?: (elevatorId: string, patch: Partial<Elevator>) => void;
 }) {
+  const { locale } = useLanguage();
   const [liveRequests, setLiveRequests] = useState(requests);
   const [isClearing, startClearTransition] = useTransition();
   const projectId = elevator.project_id;
@@ -159,31 +161,47 @@ export function OperatorDashboard({
       : fallbackPickupFloor && Number(fallbackPickupFloor.sort_order) < Number(currentFloor.sort_order)
         ? "down"
         : "idle";
-  const visibleRecommendation = hasOperatorWork
-    ? recommendation.nextFloor || recommendation.requestsToDropoff.length > 0 || !fallbackPickup || !fallbackPickupFloor
-      ? recommendation
-      : {
-          ...recommendation,
-          nextFloor: fallbackPickupFloor,
-          nextFloorSortOrder: Number(fallbackPickupFloor.sort_order),
-          primaryPickupRequestId: fallbackPickup.id,
-          reason: `Ramasser ${fallbackPickup.passenger_count} personne(s).`,
-          requestsToPickup: fallbackPickupRequests,
-          requestsToDropoff: [],
-          suggestedDirection: fallbackSuggestedDirection,
-          capacityWarnings: recommendation.capacityWarnings,
-        }
-    : {
+  const visibleRecommendation = useMemo(() => {
+    if (!hasOperatorWork) {
+      const idleDetail = { kind: "idle_empty" as const };
+      return {
         ...recommendation,
         nextFloor: null,
         nextFloorSortOrder: null,
         primaryPickupRequestId: null,
-        reason: "Aucune demande maintenant.",
+        reasonDetail: idleDetail,
+        reason: formatDispatchRecommendationReason(idleDetail, locale, recommendation.reason),
         requestsToPickup: [],
         requestsToDropoff: [],
         suggestedDirection: "idle" as const,
         capacityWarnings: [],
       };
+    }
+    if (recommendation.nextFloor || recommendation.requestsToDropoff.length > 0 || !fallbackPickup || !fallbackPickupFloor) {
+      return recommendation;
+    }
+    const fbDetail = { kind: "pickup_fallback" as const, passengerCount: fallbackPickup.passenger_count };
+    return {
+      ...recommendation,
+      nextFloor: fallbackPickupFloor,
+      nextFloorSortOrder: Number(fallbackPickupFloor.sort_order),
+      primaryPickupRequestId: fallbackPickup.id,
+      reasonDetail: fbDetail,
+      reason: formatDispatchRecommendationReason(fbDetail, locale, recommendation.reason),
+      requestsToPickup: fallbackPickupRequests,
+      requestsToDropoff: [],
+      suggestedDirection: fallbackSuggestedDirection,
+      capacityWarnings: recommendation.capacityWarnings,
+    };
+  }, [
+    recommendation,
+    hasOperatorWork,
+    fallbackPickup,
+    fallbackPickupFloor,
+    fallbackPickupRequests,
+    fallbackSuggestedDirection,
+    locale,
+  ]);
   const visibleRecommendedIds = new Set(visibleRecommendation.requestsToPickup.map((request) => request.id));
   const actionRequests = [
     ...activeQueue.filter((request) => visibleRecommendedIds.has(request.id)),

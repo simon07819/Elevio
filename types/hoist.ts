@@ -136,8 +136,22 @@ export type ActivePassenger = {
 export type CapacityWarning = {
   requestId: string;
   type: "insufficient_remaining" | "group_exceeds_total" | "split_required";
+  /** @deprecated Prefer `type` + i18n in UI */
   message: string;
 };
+
+export type DispatchRecommendationReason =
+  | { kind: "idle_empty" }
+  | { kind: "idle_blocked" }
+  | { kind: "dropoff_before_pickups"; passengers: number }
+  | {
+      kind: "pickup";
+      atCurrentFloor: boolean;
+      passengerCount: number;
+      destinationLabel: string;
+      priority: boolean;
+    }
+  | { kind: "pickup_fallback"; passengerCount: number };
 
 export type DispatchRequest = HoistRequest & {
   from_sort_order: number;
@@ -162,7 +176,9 @@ export type DispatchRecommendation = {
   nextFloorSortOrder: number | null;
   /** Demande choisie par le score pour le ramassage ; null si dépose seule ou aucune action pickup. */
   primaryPickupRequestId: string | null;
+  /** French fallback / logs ; UI should prefer `reasonDetail` + formatter when present. */
   reason: string;
+  reasonDetail?: DispatchRecommendationReason;
   requestsToPickup: DispatchRequest[];
   requestsToDropoff: ActivePassenger[];
   suggestedDirection: Direction;

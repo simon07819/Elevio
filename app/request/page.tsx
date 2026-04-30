@@ -18,23 +18,22 @@ export default async function RequestPage({
 
   return (
     <main className="relative z-10 min-h-dvh bg-[#f4f5f7] text-slate-950">
-      <section className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-3 py-3 pb-8">
-        <div className="mb-3 flex shrink-0 items-center justify-between gap-3 px-1">
+      <section className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 py-5 pb-8">
+        <header className="mb-5 flex shrink-0 items-center justify-between gap-3">
           <BrandLogo size="sm" tone="light" priority />
           <div className="flex shrink-0 items-center gap-2">
-            <LanguageSwitcher />
-            <Link href="/" className="rounded-full bg-slate-950 px-3 py-2 text-xs font-black text-yellow-200">
+            <LanguageSwitcher light />
+            <Link
+              href="/"
+              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-900 shadow-sm ring-1 ring-slate-900/[0.04] transition hover:bg-slate-50"
+            >
               <T k="scan.start" />
             </Link>
           </div>
-        </div>
-        <div className="mb-3 shrink-0 rounded-[1.5rem] bg-slate-950 p-4 text-white shadow-xl">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-black leading-tight"><T k="request.title" /></h1>
-              <p className="mt-1 text-sm font-semibold text-slate-300"><T k="request.detected" /></p>
-            </div>
-          </div>
+        </header>
+        <div className="mb-3 shrink-0 rounded-[1.5rem] border border-slate-200 bg-white px-4 py-4 shadow-sm ring-1 ring-slate-900/[0.04]">
+          <h1 className="text-2xl font-black leading-tight text-slate-950"><T k="request.title" /></h1>
+          <p className="mt-1 text-sm font-semibold text-slate-600"><T k="request.detected" /></p>
         </div>
 
         <RequestForm

@@ -3,8 +3,21 @@
 import { useMemo, useState } from "react";
 import { DoorOpen, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
+import type { TranslationKey } from "@/lib/i18n";
+import { formatDispatchRecommendationReason } from "@/lib/recommendationReason";
 import type { DispatchRecommendation, EnrichedRequest } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
+
+function capacityWarningTranslationKey(type: DispatchRecommendation["capacityWarnings"][number]["type"]): TranslationKey {
+  switch (type) {
+    case "insufficient_remaining":
+      return "operator.capacityWarningInsufficient";
+    case "group_exceeds_total":
+      return "operator.capacityWarningGroup";
+    case "split_required":
+      return "operator.capacityWarningSplit";
+  }
+}
 
 export function RecommendedNextStop({
   recommendation,
@@ -22,7 +35,13 @@ export function RecommendedNextStop({
 }) {
   const [completedDropoffIds, setCompletedDropoffIds] = useState<Set<string>>(() => new Set());
   const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
+
+  const reasonLine = formatDispatchRecommendationReason(
+    recommendation.reasonDetail,
+    locale,
+    recommendation.reason,
+  );
 
   const dropFloorId =
     recommendation.nextFloor?.id ?? recommendation.requestsToDropoff[0]?.to_floor_id ?? "";
@@ -141,6 +160,9 @@ export function RecommendedNextStop({
 
   return (
     <section className="w-full">
+      <p className="mb-3 rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-center text-base font-bold leading-snug text-slate-100">
+        {reasonLine}
+      </p>
       {actionButton}
       {recommendation.capacityWarnings.length > 0 && (
         <div className="mt-3 rounded-2xl bg-slate-950/90 p-3 text-yellow-100">
@@ -150,7 +172,7 @@ export function RecommendedNextStop({
           </p>
           <ul className="mt-2 space-y-1 text-sm">
             {recommendation.capacityWarnings.slice(0, 3).map((warning) => (
-              <li key={`${warning.requestId}-${warning.type}`}>{warning.message}</li>
+              <li key={`${warning.requestId}-${warning.type}`}>{t(capacityWarningTranslationKey(warning.type))}</li>
             ))}
           </ul>
         </div>

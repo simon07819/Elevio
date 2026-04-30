@@ -9,9 +9,11 @@ import {
   pickupFromSortOnSegmentToDropoff,
   routeLimitForElevator,
 } from "../lib/elevatorRouting";
+import { formatDispatchRecommendationReason } from "../lib/recommendationReason";
 import type {
   ActivePassenger,
   Direction,
+  DispatchRecommendationReason,
   DispatchRequest,
   Elevator,
   Floor,
@@ -80,6 +82,7 @@ export type OperatorActionResult = {
   nextFloorSortOrder: number | null;
   primaryPickupRequestId: string | null;
   reason: string;
+  reasonDetail?: DispatchRecommendationReason;
   requestsToPickup: DispatchRequest[];
   requestsToDropoff: ActivePassenger[];
   suggestedDirection: Direction;
@@ -232,7 +235,7 @@ function scoreElevatorForRequest({
     score,
     eligible,
     reason: eligible
-      ? `${elevator.name}: ETA ${etaFloors} etage(s), ${remainingCapacity} place(s) libres.`
+      ? `${elevator.name}: ETA ${etaFloors} étage(s), ${remainingCapacity} place(s) libre(s).`
       : `${elevator.name}: indisponible pour cette demande.`,
     etaFloors,
     remainingCapacity,
@@ -266,7 +269,7 @@ export function computeBestElevatorForRequest({
       return {
         elevatorId: existing.elevator_id,
         score: Number.NEGATIVE_INFINITY,
-        reason: "Demande deja assignee; conservation de l'elevateur existant.",
+        reason: "Demande déjà assignée ; conservation de l'ascenseur existant.",
         candidates: [],
       };
     }
@@ -291,7 +294,7 @@ export function computeBestElevatorForRequest({
     return {
       elevatorId: null,
       score: Number.POSITIVE_INFINITY,
-      reason: "Aucun elevateur disponible avec capacite suffisante.",
+      reason: "Aucun ascenseur disponible avec capacité suffisante.",
       candidates,
     };
   }
@@ -310,14 +313,14 @@ function capacityWarnings(request: DispatchRequest, capacity: number, remainingC
     warnings.push({
       requestId: request.id,
       type: "insufficient_remaining",
-      message: "Capacite insuffisante - prochain passage",
+      message: "Capacité insuffisante — prochain passage",
     });
   }
   if (request.passenger_count > capacity) {
     warnings.push({
       requestId: request.id,
       type: "group_exceeds_total",
-      message: "Groupe trop grand - plusieurs passages requis",
+      message: "Groupe trop grand — plusieurs passages requis",
     });
   }
   if (request.split_required) {
@@ -373,14 +376,19 @@ function pickupScore({
   return { score, onRoute, capacityValid };
 }
 
-function pickupReason(request: DispatchRequest, currentSort: number, prioritiesEnabled: boolean, floors: Floor[]) {
-  const currentText = request.from_sort_order === currentSort ? "Ramasser ici" : "Ramasser en chemin";
-  const priorityText = prioritiesEnabled && request.priority ? " Priorite active." : "";
-  return `${currentText}: ${request.passenger_count} personne(s) vers ${floorLabel(
-    floors,
-    request.to_floor_id,
-    request.to_sort_order,
-  )}.${priorityText}`;
+function pickupReasonDetail(
+  request: DispatchRequest,
+  currentSort: number,
+  prioritiesEnabled: boolean,
+  floors: Floor[],
+): DispatchRecommendationReason {
+  return {
+    kind: "pickup",
+    atCurrentFloor: request.from_sort_order === currentSort,
+    passengerCount: request.passenger_count,
+    destinationLabel: floorLabel(floors, request.to_floor_id, request.to_sort_order),
+    priority: prioritiesEnabled && request.priority,
+  };
 }
 
 function scoreIdlePickupRequest({
@@ -470,12 +478,14 @@ export function computeNextOperatorAction({
       const sameFloor = scored
         .filter((item) => item.capacityValid && item.request.from_sort_order === pickup.request.from_sort_order)
         .map((item) => item.request);
+      const reasonDetail = pickupReasonDetail(pickup.request, currentSort, prioritiesEnabled, projectFloors);
       return {
         action: "pickup",
         nextFloor: resolveFloorEntity(projectFloors, pickup.request.from_sort_order),
         nextFloorSortOrder: pickup.request.from_sort_order,
         primaryPickupRequestId: pickup.request.id,
-        reason: pickupReason(pickup.request, currentSort, prioritiesEnabled, projectFloors),
+        reasonDetail,
+        reason: formatDispatchRecommendationReason(reasonDetail, "fr", ""),
         requestsToPickup: sameFloor,
         requestsToDropoff: [],
         suggestedDirection: directionToward(currentSort, pickup.request.from_sort_order),
@@ -484,12 +494,15 @@ export function computeNextOperatorAction({
     }
 
     const dropoffs = onboardPassengers.filter((passenger) => Number(passenger.to_sort_order) === Number(nextDropSort));
+    const passengers = dropoffs.reduce((sum, p) => sum + p.passenger_count, 0);
+    const dropDetail: DispatchRecommendationReason = { kind: "dropoff_before_pickups", passengers };
     return {
       action: "dropoff",
       nextFloor: resolveFloorEntity(projectFloors, nextDropSort),
       nextFloorSortOrder: nextDropSort,
       primaryPickupRequestId: null,
-      reason: `Deposer ${dropoffs.reduce((sum, p) => sum + p.passenger_count, 0)} personne(s) avant de reprendre les appels palier.`,
+      reasonDetail: dropDetail,
+      reason: formatDispatchRecommendationReason(dropDetail, "fr", ""),
       requestsToPickup: [],
       requestsToDropoff: dropoffs,
       suggestedDirection: directionToward(currentSort, nextDropSort),
@@ -514,15 +527,15 @@ export function computeNextOperatorAction({
   const warnings = openRequests.flatMap((request) => capacityWarnings(request, elevator.capacity, remainingCapacity));
 
   if (!winner) {
+    const waitDetail: DispatchRecommendationReason =
+      openRequests.length === 0 ? { kind: "idle_empty" } : { kind: "idle_blocked" };
     return {
       action: "wait",
       nextFloor: null,
       nextFloorSortOrder: null,
       primaryPickupRequestId: null,
-      reason:
-        openRequests.length === 0
-          ? "Aucune demande maintenant."
-          : "Cabine pleine ou groupe trop grand : deposer d'abord, ou attendre une autre cabine disponible.",
+      reasonDetail: waitDetail,
+      reason: formatDispatchRecommendationReason(waitDetail, "fr", ""),
       requestsToPickup: [],
       requestsToDropoff: [],
       suggestedDirection: "idle",
@@ -534,12 +547,15 @@ export function computeNextOperatorAction({
     .filter((item) => item.capacityValid && item.request.from_sort_order === winner.request.from_sort_order)
     .map((item) => item.request);
 
+  const idlePickupDetail = pickupReasonDetail(winner.request, currentSort, prioritiesEnabled, projectFloors);
+
   return {
     action: "pickup",
     nextFloor: resolveFloorEntity(projectFloors, winner.request.from_sort_order),
     nextFloorSortOrder: winner.request.from_sort_order,
     primaryPickupRequestId: winner.request.id,
-    reason: pickupReason(winner.request, currentSort, prioritiesEnabled, projectFloors),
+    reasonDetail: idlePickupDetail,
+    reason: formatDispatchRecommendationReason(idlePickupDetail, "fr", ""),
     requestsToPickup: pickupAtSameStop,
     requestsToDropoff: [],
     suggestedDirection: directionToward(currentSort, winner.request.from_sort_order),

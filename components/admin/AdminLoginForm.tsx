@@ -21,7 +21,7 @@ export function AdminLoginForm() {
           <LockKeyhole />
         </span>
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-200">Administration</p>
+          <p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-200">{t("login.eyebrow")}</p>
           <h1 className="text-3xl font-black">{mode === "signin" ? t("login.signIn") : t("login.signUp")}</h1>
         </div>
       </div>

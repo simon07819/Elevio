@@ -14,7 +14,7 @@ export function getRecommendedNextStop({
   const elevator: Elevator = {
     id: "operator-current-elevator",
     project_id: currentFloor.project_id,
-    name: "Elevateur",
+    name: "Élévateur",
     current_floor_id: currentFloor.id,
     direction,
     capacity,
@@ -39,6 +39,7 @@ export function getRecommendedNextStop({
     nextFloorSortOrder: result.nextFloorSortOrder,
     primaryPickupRequestId: result.primaryPickupRequestId,
     reason: result.reason,
+    reasonDetail: result.reasonDetail,
     requestsToPickup: result.requestsToPickup,
     requestsToDropoff: result.requestsToDropoff,
     suggestedDirection: result.suggestedDirection,
