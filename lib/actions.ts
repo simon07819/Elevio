@@ -438,8 +438,8 @@ export async function deleteFloor(floorId: string, projectId: string) {
   return { ok: true, message: "Etage supprime." };
 }
 
-const elevatorSelectColumns =
-  "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,operator_tablet_label,operator_display_name,service_start_time,service_end_time";
+/** `*` évite les erreurs si la base n’a pas encore toutes les colonnes (migrations partielles). */
+const elevatorSelectColumns = "*";
 
 const TABLET_SESSION_FIELDS_CLEAR = {
   operator_session_id: null,

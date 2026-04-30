@@ -405,6 +405,11 @@ export const translations = {
     "operator.tabletStatusQuiet": "Plus de reponse",
     "operator.tabletDeactivate": "Desactiver",
     "operator.noElevator": "Creez un projet et un elevateur avant d'ouvrir le module operateur.",
+    "operator.noProjectAccess":
+      "Aucun chantier accessible avec ce compte. Verifiez la connexion ou demandez une invitation sur le projet (membre du chantier).",
+    "operator.noElevatorsConfigured":
+      "Ce chantier n'a pas encore d'ascenseur configure. Ajoutez-en un dans Administration > Projets.",
+    "operator.loadProjectsError": "Erreur lors du chargement des chantiers : {detail}",
     "requestCard.recommended": "Recommandé",
     "requestCard.peopleShort": "{count} pers.",
     "requestCard.waiting": "Attente {time}",
@@ -824,6 +829,11 @@ export const translations = {
     "operator.tabletStatusQuiet": "No longer responding",
     "operator.tabletDeactivate": "Deactivate",
     "operator.noElevator": "Create a project and a hoist before opening operator mode.",
+    "operator.noProjectAccess":
+      "No site accessible with this account. Check that you are signed in and invited to the project.",
+    "operator.noElevatorsConfigured":
+      "This site has no hoist configured yet. Add one under Admin > Projects.",
+    "operator.loadProjectsError": "Error loading sites: {detail}",
     "requestCard.recommended": "Recommended",
     "requestCard.peopleShort": "{count} people",
     "requestCard.waiting": "Waiting {time}",

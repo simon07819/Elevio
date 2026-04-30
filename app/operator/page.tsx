@@ -6,7 +6,18 @@ import { OperatorWorkspace } from "@/components/operator/OperatorWorkspace";
 import { getCurrentProfile, requireUser } from "@/lib/auth";
 import { getAdminProjectData } from "@/lib/adminProject";
 import { getProjects } from "@/lib/projects";
-import type { ActivePassenger } from "@/types/hoist";
+import type { ActivePassenger, Project } from "@/types/hoist";
+
+function pickOperatorProject(projects: Project[]): Project | undefined {
+  if (projects.length === 0) {
+    return undefined;
+  }
+
+  const open = projects.filter((p) => p.archived_at == null);
+  const pool = open.length > 0 ? open : projects;
+
+  return pool.find((p) => p.active) ?? pool[0];
+}
 
 export default async function OperatorPage() {
   const user = await requireUser();
@@ -14,8 +25,8 @@ export default async function OperatorPage() {
   const operatorDisplayName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() || profile?.email || user.email || "";
 
-  const { projects } = await getProjects();
-  const project = projects.find((item) => item.active) ?? projects[0];
+  const { projects, loadError } = await getProjects();
+  const project = pickOperatorProject(projects);
   const data = project ? await getAdminProjectData(project.id) : null;
   const activePassengers: ActivePassenger[] =
     data?.requests
@@ -47,7 +58,15 @@ export default async function OperatorPage() {
           <LanguageSwitcher />
         </div>
       </header>
-      {data && project && data.elevators.length > 0 ? (
+      {loadError ? (
+        <div className="mx-auto max-w-7xl rounded-3xl border border-red-400/40 bg-red-500/10 p-5 text-red-100">
+          <T k="operator.loadProjectsError" values={{ detail: loadError }} />
+        </div>
+      ) : !project ? (
+        <div className="mx-auto max-w-7xl rounded-3xl border border-white/10 bg-white/8 p-5 text-white">
+          <T k="operator.noProjectAccess" />
+        </div>
+      ) : data && data.elevators.length > 0 ? (
         <OperatorWorkspace
           project={project}
           floors={data.floors}
@@ -58,7 +77,7 @@ export default async function OperatorPage() {
         />
       ) : (
         <div className="mx-auto max-w-7xl rounded-3xl border border-white/10 bg-white/8 p-5 text-white">
-          <T k="operator.noElevator" />
+          <T k="operator.noElevatorsConfigured" />
         </div>
       )}
     </main>
