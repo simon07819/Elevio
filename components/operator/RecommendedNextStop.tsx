@@ -48,6 +48,29 @@ export function RecommendedNextStop({
 
   const showDropoff = pendingDropoffs.length > 0 && dropFloorId !== "";
   const showPickup = !showDropoff && actionRequest !== null;
+  const actionButton = showDropoff ? (
+    <button
+      type="button"
+      onClick={dropoff}
+      className="touch-target flex min-h-24 w-full items-center justify-center gap-3 rounded-[1.35rem] bg-slate-950 px-5 py-5 text-3xl font-black uppercase tracking-wide text-yellow-300 shadow-xl transition active:scale-[0.98]"
+    >
+      <DoorOpen size={30} />
+      {t("operator.dropoff")}
+    </button>
+  ) : showPickup ? (
+    <button
+      type="button"
+      onClick={pickup}
+      className="touch-target flex min-h-24 w-full items-center justify-center gap-3 rounded-[1.35rem] bg-slate-950 px-5 py-5 text-3xl font-black uppercase tracking-wide text-yellow-300 shadow-xl transition active:scale-[0.98]"
+    >
+      <UserCheck size={30} />
+      {t("operator.pickup")}
+    </button>
+  ) : (
+    <div className="flex min-h-24 w-full items-center justify-center rounded-[1.35rem] border border-white/10 bg-slate-950/80 px-5 py-5 text-center text-xl font-black text-slate-200">
+      {t("operator.noAction")}
+    </div>
+  );
 
   function pickup() {
     if (!actionRequest) {
@@ -112,44 +135,36 @@ export function RecommendedNextStop({
   }
 
   return (
-    <section className="grid gap-4 rounded-3xl border border-yellow-400/55 bg-yellow-300 p-4 text-slate-950 shadow-[0_14px_42px_rgba(15,23,42,0.28)] lg:grid-cols-[1fr_360px] lg:items-center">
-      <div className="flex gap-4">
-        <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-slate-950 text-yellow-300">
-          <Navigation size={28} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-black uppercase tracking-[0.2em]">{t("operator.nextRequest")}</p>
-          <h2 className="text-3xl font-black leading-tight">
-            {recommendation.nextFloor
-              ? `${t("operator.stop")} ${formatFloorLabel(recommendation.nextFloor)}`
-              : t("operator.pause")}
-          </h2>
-          <p className="mt-1 line-clamp-2 text-sm font-bold leading-5">{recommendation.reason}</p>
+    <section className="grid gap-3 lg:grid-cols-[1fr_340px] lg:items-stretch">
+      <div className="rounded-3xl border border-yellow-400/55 bg-yellow-300 p-4 text-slate-950 shadow-[0_14px_42px_rgba(15,23,42,0.22)]">
+        <div className="flex gap-4">
+          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-slate-950 text-yellow-300">
+            <Navigation size={24} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-black uppercase tracking-[0.2em]">{t("operator.nextRequest")}</p>
+            <h2 className="mt-1 text-2xl font-black leading-tight">
+              {showDropoff
+                ? t("operator.dropoff")
+                : showPickup
+                  ? t("operator.pickup")
+                  : t("operator.pause")}
+            </h2>
+            <p className="mt-1 line-clamp-2 text-sm font-bold leading-5">{recommendation.reason}</p>
+          </div>
         </div>
+        {recommendation.nextFloor ? (
+          <div className="mt-4 grid grid-cols-[auto_1fr] items-center gap-3 rounded-2xl bg-slate-950/10 px-3 py-2">
+            <span className="text-xs font-black uppercase tracking-[0.18em] opacity-70">{t("operator.stop")}</span>
+            <span className="truncate text-right text-xl font-black">{formatFloorLabel(recommendation.nextFloor)}</span>
+          </div>
+        ) : null}
       </div>
-      {showDropoff ? (
-        <button
-          type="button"
-          onClick={dropoff}
-          className="touch-target flex min-h-28 w-full items-center justify-center gap-3 rounded-[1.5rem] bg-slate-950 px-5 py-5 text-4xl font-black uppercase tracking-wide text-yellow-300 shadow-xl transition active:scale-[0.98] disabled:opacity-60"
-        >
-          <DoorOpen size={30} />
-          {t("operator.dropoff")}
-        </button>
-      ) : showPickup ? (
-        <button
-          type="button"
-          onClick={pickup}
-          className="touch-target flex min-h-28 w-full items-center justify-center gap-3 rounded-[1.5rem] bg-slate-950 px-5 py-5 text-4xl font-black uppercase tracking-wide text-yellow-300 shadow-xl transition active:scale-[0.98] disabled:opacity-60"
-        >
-          <UserCheck size={30} />
-          {t("operator.pickup")}
-        </button>
-      ) : (
-        <div className="rounded-[1.5rem] bg-slate-950/90 px-5 py-5 text-center text-xl font-black text-yellow-100">
-          {t("operator.noAction")}
-        </div>
-      )}
+
+      <div className="rounded-3xl border border-white/10 bg-white/8 p-3">
+        {actionButton}
+      </div>
+
       {recommendation.capacityWarnings.length > 0 && (
         <div className="rounded-2xl bg-slate-950/90 p-3 text-yellow-100 lg:col-span-2">
           <p className="flex items-center gap-2 text-sm font-black">

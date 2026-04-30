@@ -117,6 +117,14 @@ function resolveFloorEntity(floors: Floor[] | undefined, sortOrder: number): Flo
   return floors?.find((f) => Number(f.sort_order) === Number(sortOrder)) ?? floorFromSortOrder(sortOrder);
 }
 
+function floorLabel(floors: Floor[], floorId: string, sortOrder: number): string {
+  const floor = floors.find((item) => item.id === floorId) ?? resolveFloorEntity(floors, sortOrder);
+  if (Number(floor.sort_order) <= 0) {
+    return floorFromSortOrder(Number(floor.sort_order)).label;
+  }
+  return floor.label || floorFromSortOrder(Number(floor.sort_order)).label;
+}
+
 function asDispatchRequest(request: BrainRequest, floors: Floor[]): DispatchRequest {
   return {
     ...(request as HoistRequest),
@@ -365,10 +373,46 @@ function pickupScore({
   return { score, onRoute, capacityValid };
 }
 
-function pickupReason(request: DispatchRequest, currentSort: number, prioritiesEnabled: boolean) {
+function pickupReason(request: DispatchRequest, currentSort: number, prioritiesEnabled: boolean, floors: Floor[]) {
   const currentText = request.from_sort_order === currentSort ? "Ramasser ici" : "Ramasser en chemin";
   const priorityText = prioritiesEnabled && request.priority ? " Priorite active." : "";
-  return `${currentText}: ${request.passenger_count} personne(s) vers l'etage ${request.to_sort_order}.${priorityText}`;
+  return `${currentText}: ${request.passenger_count} personne(s) vers ${floorLabel(
+    floors,
+    request.to_floor_id,
+    request.to_sort_order,
+  )}.${priorityText}`;
+}
+
+function scoreIdlePickupRequest({
+  request,
+  currentSortOrder,
+  remainingCapacity,
+  capacity,
+  oldestSequence,
+  prioritiesEnabled,
+  nowMs,
+}: {
+  request: DispatchRequest;
+  currentSortOrder: number;
+  remainingCapacity: number;
+  capacity: number;
+  oldestSequence: number;
+  prioritiesEnabled: boolean;
+  nowMs: number;
+}) {
+  const capacityValid = request.passenger_count <= remainingCapacity && request.passenger_count <= capacity;
+  const pickupDistance = Math.abs(request.from_sort_order - currentSortOrder);
+  const age = minutesWaiting(request.wait_started_at, nowMs);
+  const sequenceLag = oldestSequence === Number.MAX_SAFE_INTEGER ? 0 : Math.max(0, request.sequence_number - oldestSequence);
+
+  let score = 0;
+  score += capacityValid ? 1000 : -1000;
+  score += prioritiesEnabled && request.priority ? 260 : 0;
+  score += Math.min(220, age * 5);
+  score -= pickupDistance * 90;
+  score -= Math.min(260, sequenceLag * 18);
+
+  return { request, score, capacityValid };
 }
 
 export function computeNextOperatorAction({
@@ -431,7 +475,7 @@ export function computeNextOperatorAction({
         nextFloor: resolveFloorEntity(projectFloors, pickup.request.from_sort_order),
         nextFloorSortOrder: pickup.request.from_sort_order,
         primaryPickupRequestId: pickup.request.id,
-        reason: pickupReason(pickup.request, currentSort, prioritiesEnabled),
+        reason: pickupReason(pickup.request, currentSort, prioritiesEnabled, projectFloors),
         requestsToPickup: sameFloor,
         requestsToDropoff: [],
         suggestedDirection: directionToward(currentSort, pickup.request.from_sort_order),
@@ -453,31 +497,18 @@ export function computeNextOperatorAction({
     };
   }
 
-  const targetDirection =
-    elevator.direction !== "idle"
-      ? elevator.direction
-      : openRequests.length > 0
-        ? directionToward(currentSort, openRequests.reduce((best, request) =>
-            Math.abs(request.from_sort_order - currentSort) < Math.abs(best.from_sort_order - currentSort) ? request : best,
-          ).from_sort_order)
-        : "idle";
-  const routeStops = openRequests.flatMap((request) => [request.from_sort_order, request.to_sort_order]);
-  const routeLimit = routeLimitForElevator(currentSort, targetDirection, routeStops);
   const scored = openRequests
-    .map((request) => ({
-      request,
-      ...pickupScore({
+    .map((request) =>
+      scoreIdlePickupRequest({
         request,
         currentSortOrder: currentSort,
-        travelDirection: targetDirection,
-        routeLimit,
         remainingCapacity,
         capacity: elevator.capacity,
         oldestSequence,
         prioritiesEnabled,
         nowMs,
       }),
-    }))
+    )
     .sort((a, b) => b.score - a.score || a.request.sequence_number - b.request.sequence_number);
   const winner = scored.find((item) => item.capacityValid) ?? null;
   const warnings = openRequests.flatMap((request) => capacityWarnings(request, elevator.capacity, remainingCapacity));
@@ -508,7 +539,7 @@ export function computeNextOperatorAction({
     nextFloor: resolveFloorEntity(projectFloors, winner.request.from_sort_order),
     nextFloorSortOrder: winner.request.from_sort_order,
     primaryPickupRequestId: winner.request.id,
-    reason: pickupReason(winner.request, currentSort, prioritiesEnabled),
+    reason: pickupReason(winner.request, currentSort, prioritiesEnabled, projectFloors),
     requestsToPickup: pickupAtSameStop,
     requestsToDropoff: [],
     suggestedDirection: directionToward(currentSort, winner.request.from_sort_order),

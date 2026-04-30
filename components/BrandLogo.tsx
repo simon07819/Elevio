@@ -2,6 +2,7 @@ type BrandLogoProps = {
   className?: string;
   priority?: boolean;
   size?: "sm" | "md" | "lg";
+  tone?: "light" | "dark";
 };
 
 const sizes = {
@@ -31,8 +32,9 @@ const sizes = {
   },
 };
 
-export function BrandLogo({ className = "", size = "md" }: BrandLogoProps) {
+export function BrandLogo({ className = "", size = "md", tone = "dark" }: BrandLogoProps) {
   const logoSize = sizes[size];
+  const textColor = tone === "light" ? "text-slate-950" : "text-white";
 
   return (
     <span className={`inline-flex items-center ${logoSize.gap} ${className}`} aria-label="Elevio">
@@ -44,7 +46,7 @@ export function BrandLogo({ className = "", size = "md" }: BrandLogoProps) {
           <span className={`rounded-full bg-[#EAB308] ${logoSize.mark}`} />
         </span>
       </span>
-      <span className={`font-black leading-none tracking-[-0.06em] text-white ${logoSize.text}`}>
+      <span className={`font-black leading-none tracking-[-0.06em] ${textColor} ${logoSize.text}`}>
         Elevio
       </span>
     </span>

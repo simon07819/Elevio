@@ -5,11 +5,16 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Clock, Loader2, Send, ShieldAlert, Users, XCircle } from "lucide-react";
 import { createPassengerRequest, resumePassengerRequest, updateRequestStatus } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
-import { subscribeToTable, unsubscribe } from "@/lib/realtime";
+import { subscribeToTable, unsubscribe, type ElevatorRealtimePayload } from "@/lib/realtime";
 import { estimateArrivalWindow, formatFloorLabel, formatPostgresTimeToAmPm } from "@/lib/utils";
 import { demoElevator, demoProject } from "@/lib/demoData";
-import type { Floor, HoistRequest, Project, RequestStatus } from "@/types/hoist";
-import type { PassengerDispatchState } from "@/lib/operatorDispatchAvailability";
+import type { Elevator, Floor, HoistRequest, Project, RequestStatus } from "@/types/hoist";
+import {
+  analyzePassengerDispatch,
+  passengerDispatchOperatorSummaries,
+  uniqueServiceHourRanges,
+  DEFAULT_PROJECT_TIMEZONE,
+} from "@/lib/operatorDispatchAvailability";
 import {
   clearPassengerPendingRequest,
   loadPassengerPendingSnapshot,
@@ -45,12 +50,12 @@ export function RequestForm({
   project,
   floors,
   currentFloor,
-  dispatch,
+  elevators,
 }: {
   project: Project;
   floors: Floor[];
   currentFloor: Floor;
-  dispatch: PassengerDispatchState;
+  elevators: Elevator[];
 }) {
   const firstDestination = useMemo(
     () => floors.find((floor) => floor.id !== currentFloor.id && floor.active)?.id ?? "",
@@ -62,11 +67,25 @@ export function RequestForm({
   const [showSpecialNeed, setShowSpecialNeed] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [submittedRequest, setSubmittedRequest] = useState<SubmittedRequest | null>(null);
+  const [liveElevators, setLiveElevators] = useState(elevators);
   const [passengerResumeReady, setPassengerResumeReady] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const { t } = useLanguage();
   const prioritiesEnabled = project.priorities_enabled !== false;
+  const liveDispatch = useMemo(() => {
+    const tz = project.service_timezone ?? DEFAULT_PROJECT_TIMEZONE;
+    const analysis = analyzePassengerDispatch({ elevators: liveElevators, timeZone: tz });
+    const hourRanges = uniqueServiceHourRanges(liveElevators.filter((elevator) => elevator.active !== false));
+    return {
+      canDispatch: analysis.canDispatch,
+      blockReason: analysis.blockReason,
+      hourRanges,
+      dispatchOperators: analysis.canDispatch
+        ? passengerDispatchOperatorSummaries(analysis.dispatchableElevators, tz)
+        : [],
+    };
+  }, [liveElevators, project.service_timezone]);
   const currentElevatorFloor = floors.find((floor) => floor.id === demoElevator.current_floor_id);
   const estimatedArrival = estimateArrivalWindow({
     currentElevatorSortOrder: currentElevatorFloor?.sort_order ?? currentFloor.sort_order,
@@ -74,13 +93,41 @@ export function RequestForm({
     pendingRequestsAhead: 0,
   });
 
-  const dispatchBlocked = !dispatch.canDispatch;
+  const dispatchBlocked = !liveDispatch.canDispatch;
   const serviceHoursLabel =
-    dispatch.hourRanges.length > 0
-      ? dispatch.hourRanges
+    liveDispatch.hourRanges.length > 0
+      ? liveDispatch.hourRanges
           .map((r) => `${formatPostgresTimeToAmPm(r.start)}–${formatPostgresTimeToAmPm(r.end)}`)
           .join(", ")
       : `${formatPostgresTimeToAmPm("07:00")}–${formatPostgresTimeToAmPm("15:00")}`;
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setLiveElevators(elevators), 0);
+    return () => window.clearTimeout(id);
+  }, [elevators]);
+
+  useEffect(() => {
+    const client = createClient();
+    const channel = subscribeToTable<ElevatorRealtimePayload>({
+      client,
+      table: "elevators",
+      filter: `project_id=eq.${project.id}`,
+      onChange: (payload) => {
+        if (payload.eventType === "DELETE") {
+          setLiveElevators((current) => current.filter((elevator) => elevator.id !== payload.old.id));
+          return;
+        }
+        if (!payload.new?.id) return;
+        setLiveElevators((current) =>
+          current.some((elevator) => elevator.id === payload.new.id)
+            ? current.map((elevator) => (elevator.id === payload.new.id ? { ...elevator, ...payload.new } : elevator))
+            : [...current, payload.new],
+        );
+      },
+    });
+
+    return () => unsubscribe(client, channel);
+  }, [project.id]);
 
   useEffect(() => {
     if (!prioritiesEnabled) {
@@ -278,11 +325,21 @@ export function RequestForm({
     return (
       <section className="flex flex-1 flex-col justify-between gap-4 rounded-[1.75rem] bg-white p-5 text-slate-950 shadow-sm">
         <div className="grid gap-4">
-          <div className="rounded-[1.5rem] bg-emerald-50 p-5 text-emerald-950">
-            <CheckCircle2 className="text-emerald-600" size={44} />
+          <div
+            className={
+              liveDispatch.canDispatch
+                ? "rounded-[1.5rem] bg-emerald-50 p-5 text-emerald-950"
+                : "rounded-[1.5rem] border border-red-200 bg-red-50 p-5 text-red-950"
+            }
+          >
+            {liveDispatch.canDispatch ? (
+              <CheckCircle2 className="text-emerald-600" size={44} />
+            ) : (
+              <ShieldAlert className="text-red-700" size={44} />
+            )}
             <h2 className="mt-4 text-3xl font-black">{t("request.sent")}</h2>
             <p className="mt-3 text-base font-bold leading-7">
-              {t("request.sentBody")}
+              {liveDispatch.canDispatch ? t("request.sentBody") : t("request.dispatchNoOperator")}
             </p>
           </div>
 
@@ -296,13 +353,21 @@ export function RequestForm({
             </p>
           </div>
 
-          <div className="rounded-[1.5rem] bg-yellow-300 p-4 text-slate-950">
+          <div
+            className={
+              liveDispatch.canDispatch
+                ? "rounded-[1.5rem] bg-yellow-300 p-4 text-slate-950"
+                : "rounded-[1.5rem] bg-slate-100 p-4 text-slate-700"
+            }
+          >
             <div className="flex items-center gap-3">
-              <Clock size={28} />
+              {liveDispatch.canDispatch ? <Clock size={28} /> : <ShieldAlert size={28} />}
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] opacity-70">{t("request.eta")}</p>
                 <p className="text-xl font-black">
-                  {t("eta.label", { min: estimatedArrival.min, max: estimatedArrival.max })}
+                  {liveDispatch.canDispatch
+                    ? t("eta.label", { min: estimatedArrival.min, max: estimatedArrival.max })
+                    : t("request.dispatchNoOperator")}
                 </p>
               </div>
             </div>
@@ -342,11 +407,11 @@ export function RequestForm({
 
   return (
     <>
-      {dispatch.canDispatch ? (
+      {liveDispatch.canDispatch ? (
         <div className="shrink-0 rounded-[1.25rem] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-950">
-          {dispatch.dispatchOperators.length > 0 ? (
+          {liveDispatch.dispatchOperators.length > 0 ? (
             <ul className="list-none space-y-3 leading-snug">
-              {dispatch.dispatchOperators.map((op, idx) => {
+              {liveDispatch.dispatchOperators.map((op, idx) => {
                 const name = op.displayName?.trim() || t("request.dispatchOperatorFallback");
                 return (
                   <li

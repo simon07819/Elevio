@@ -96,11 +96,16 @@ export function passengerDispatchOperatorSummaries(
   } catch {
     tz = DEFAULT_PROJECT_TIMEZONE;
   }
-  const raw = elevators.map((e) => ({
-    displayName: e.operator_display_name?.trim() || null,
-    hoursRange: elevatorServiceHoursAmPmRange(e),
-    outsideScheduledHours: !isElevatorWithinServiceHours(e, tz, now),
-  }));
+  const raw = elevators
+    .map((e) => {
+      const displayName = e.operator_display_name?.trim() || null;
+      return {
+        displayName,
+        hoursRange: elevatorServiceHoursAmPmRange(e),
+        outsideScheduledHours: !isElevatorWithinServiceHours(e, tz, now),
+      };
+    })
+    .filter((row) => row.displayName !== null);
   const seen = new Set<string>();
   return raw.filter((row) => {
     const key = `${row.displayName ?? ""}|${row.hoursRange}|${row.outsideScheduledHours}`;

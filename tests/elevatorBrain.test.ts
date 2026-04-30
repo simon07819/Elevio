@@ -20,6 +20,8 @@ const floors: Floor[] = [
   floor("5", "5", 5),
   floor("5-5", "5.5", 5.5),
   floor("6", "6", 6),
+  floor("8", "8", 7),
+  floor("16", "16", 15),
 ];
 
 function floor(id: string, label: string, sort_order: number): Floor {
@@ -252,4 +254,54 @@ test("les places reservees par des demandes assignees comptent dans la capacite 
   });
 
   assert.equal(result.elevatorId, "e2");
+});
+
+test("le message de pickup utilise le vrai libelle d'etage, pas le sort_order", () => {
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc"),
+    assignedRequests: enrichDispatchRequests([request("r12", "rdc", "8", { elevator_id: "e1" })], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.match(action.reason, /vers 8/);
+  assert.doesNotMatch(action.reason, /etage 7/);
+});
+
+test("en descente vers RDC, l'ascenseur ne depasse pas la depose pour ramasser P1", () => {
+  const onboard = request("r13", "16", "rdc", { elevator_id: "e1", status: "boarded" });
+  const p1Pickup = request("r14", "p1", "8", { elevator_id: "e1" });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "8", "down", { current_load: 1 }),
+    assignedRequests: enrichDispatchRequests([p1Pickup], floors),
+    onboardPassengers: enrichDispatchRequests([onboard], floors).map((r) => ({
+      requestId: r.id,
+      from_floor_id: r.from_floor_id,
+      to_floor_id: r.to_floor_id,
+      from_sort_order: r.from_sort_order,
+      to_sort_order: r.to_sort_order,
+      passenger_count: r.passenger_count,
+    })),
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(action.action, "dropoff");
+  assert.equal(action.nextFloor?.id, "rdc");
+});
+
+test("sans passager a bord, une direction stale ne force pas une montee inutile", () => {
+  const p1Pickup = request("r15", "p1", "8", { elevator_id: "e1", sequence_number: 1 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "8", "up"),
+    assignedRequests: enrichDispatchRequests([p1Pickup], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(action.primaryPickupRequestId, "r15");
+  assert.equal(action.nextFloor?.id, "p1");
+  assert.equal(action.suggestedDirection, "down");
 });

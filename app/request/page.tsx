@@ -11,7 +11,7 @@ export default async function RequestPage({
   searchParams: Promise<{ projectId?: string; floorToken?: string }>;
 }) {
   const params = await searchParams;
-  const { project, floors, currentFloor, dispatch } = await getPublicRequestContext({
+  const { project, floors, currentFloor, elevators } = await getPublicRequestContext({
     projectId: params.projectId,
     floorToken: params.floorToken,
   });
@@ -19,23 +19,30 @@ export default async function RequestPage({
   return (
     <main className="relative z-10 min-h-dvh bg-[#f4f5f7] text-slate-950">
       <section className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-3 py-3 pb-8">
+        <div className="mb-3 flex shrink-0 items-center justify-between gap-3 px-1">
+          <BrandLogo size="sm" tone="light" priority />
+          <div className="flex shrink-0 items-center gap-2">
+            <LanguageSwitcher />
+            <Link href="/" className="rounded-full bg-slate-950 px-3 py-2 text-xs font-black text-yellow-200">
+              <T k="scan.start" />
+            </Link>
+          </div>
+        </div>
         <div className="mb-3 shrink-0 rounded-[1.5rem] bg-slate-950 p-4 text-white shadow-xl">
-          <BrandLogo size="sm" priority />
-          <div className="mt-2 flex items-end justify-between gap-3">
+          <div className="flex items-end justify-between gap-3">
             <div>
               <h1 className="text-2xl font-black leading-tight"><T k="request.title" /></h1>
               <p className="mt-1 text-sm font-semibold text-slate-300"><T k="request.detected" /></p>
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-2">
-              <LanguageSwitcher />
-              <Link href="/" className="rounded-full bg-white/10 px-3 py-2 text-xs font-black text-yellow-200">
-                <T k="scan.start" />
-              </Link>
-            </div>
           </div>
         </div>
 
-        <RequestForm project={project} floors={floors} currentFloor={currentFloor} dispatch={dispatch} />
+        <RequestForm
+          project={project}
+          floors={floors}
+          currentFloor={currentFloor}
+          elevators={elevators}
+        />
       </section>
     </main>
   );

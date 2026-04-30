@@ -15,6 +15,7 @@ export type PublicRequestContext = {
   project: Project;
   floors: Floor[];
   currentFloor: Floor;
+  elevators: Elevator[];
   dispatch: PassengerDispatchState;
 };
 
@@ -39,7 +40,7 @@ export async function getPublicRequestContext({
 
   if (!supabase || !projectId || !floorToken) {
     const currentFloor = demoFloors.find((floor) => floor.qr_token === floorToken) ?? demoFloors[4];
-    return { project: demoProject, floors: demoFloors, currentFloor, dispatch: demoPassengerDispatch() };
+    return { project: demoProject, floors: demoFloors, currentFloor, elevators: [demoElevator], dispatch: demoPassengerDispatch() };
   }
 
   const [{ data: project }, { data: floors }, { data: elevators }] = await Promise.all([
@@ -65,7 +66,7 @@ export async function getPublicRequestContext({
 
   if (!project || !currentFloor || typedFloors.length === 0) {
     const demoFloor = demoFloors.find((floor) => floor.qr_token === floorToken) ?? demoFloors[4];
-    return { project: demoProject, floors: demoFloors, currentFloor: demoFloor, dispatch: demoPassengerDispatch() };
+    return { project: demoProject, floors: demoFloors, currentFloor: demoFloor, elevators: [demoElevator], dispatch: demoPassengerDispatch() };
   }
 
   const tz = project.service_timezone ?? DEFAULT_PROJECT_TIMEZONE;
@@ -76,6 +77,7 @@ export async function getPublicRequestContext({
     project: project as Project,
     floors: typedFloors,
     currentFloor,
+    elevators: typedElevators,
     dispatch: {
       canDispatch: analysis.canDispatch,
       blockReason: analysis.blockReason,
