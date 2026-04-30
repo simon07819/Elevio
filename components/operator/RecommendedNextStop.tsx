@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { DoorOpen, Navigation, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
-import { formatFloorLabel } from "@/lib/utils";
 import type { DispatchRecommendation, EnrichedRequest } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
@@ -52,22 +51,22 @@ export function RecommendedNextStop({
     <button
       type="button"
       onClick={dropoff}
-      className="touch-target flex min-h-24 w-full items-center justify-center gap-3 rounded-[1.35rem] bg-slate-950 px-5 py-5 text-3xl font-black uppercase tracking-wide text-yellow-300 shadow-xl transition active:scale-[0.98]"
+      className="touch-target flex h-full min-h-32 w-full items-center justify-center gap-4 rounded-3xl bg-emerald-300 px-6 py-6 text-4xl font-black uppercase tracking-wide text-slate-950 shadow-[0_18px_44px_rgba(16,185,129,0.34)] ring-4 ring-emerald-100/30 transition active:scale-[0.98]"
     >
-      <DoorOpen size={30} />
+      <DoorOpen size={36} strokeWidth={2.7} />
       {t("operator.dropoff")}
     </button>
   ) : showPickup ? (
     <button
       type="button"
       onClick={pickup}
-      className="touch-target flex min-h-24 w-full items-center justify-center gap-3 rounded-[1.35rem] bg-slate-950 px-5 py-5 text-3xl font-black uppercase tracking-wide text-yellow-300 shadow-xl transition active:scale-[0.98]"
+      className="touch-target flex h-full min-h-32 w-full items-center justify-center gap-4 rounded-3xl bg-yellow-300 px-6 py-6 text-4xl font-black uppercase tracking-wide text-slate-950 shadow-[0_18px_44px_rgba(234,179,8,0.38)] ring-4 ring-yellow-100/35 transition active:scale-[0.98]"
     >
-      <UserCheck size={30} />
+      <UserCheck size={36} strokeWidth={2.7} />
       {t("operator.pickup")}
     </button>
   ) : (
-    <div className="flex min-h-24 w-full items-center justify-center rounded-[1.35rem] border border-white/10 bg-slate-950/80 px-5 py-5 text-center text-xl font-black text-slate-200">
+    <div className="flex h-full min-h-32 w-full items-center justify-center rounded-3xl border border-white/10 bg-slate-950/80 px-5 py-5 text-center text-xl font-black text-slate-200">
       {t("operator.noAction")}
     </div>
   );
@@ -142,7 +141,7 @@ export function RecommendedNextStop({
             <Navigation size={24} />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-black uppercase tracking-[0.2em]">{t("operator.nextRequest")}</p>
+            <p className="text-xs font-black uppercase tracking-[0.2em]">{t("operator.afterArrival")}</p>
             <h2 className="mt-1 text-2xl font-black leading-tight">
               {showDropoff
                 ? t("operator.dropoff")
@@ -153,15 +152,9 @@ export function RecommendedNextStop({
             <p className="mt-1 line-clamp-2 text-sm font-bold leading-5">{recommendation.reason}</p>
           </div>
         </div>
-        {recommendation.nextFloor ? (
-          <div className="mt-4 grid grid-cols-[auto_1fr] items-center gap-3 rounded-2xl bg-slate-950/10 px-3 py-2">
-            <span className="text-xs font-black uppercase tracking-[0.18em] opacity-70">{t("operator.stop")}</span>
-            <span className="truncate text-right text-xl font-black">{formatFloorLabel(recommendation.nextFloor)}</span>
-          </div>
-        ) : null}
       </div>
 
-      <div className="rounded-3xl border border-white/10 bg-white/8 p-3">
+      <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-0 shadow-[0_14px_42px_rgba(15,23,42,0.34)]">
         {actionButton}
       </div>
 
