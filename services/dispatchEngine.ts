@@ -1,3 +1,11 @@
+import {
+  directionToward,
+  effectiveServiceDirection,
+  isBetween,
+  nextBoardedDropoffSortOrder,
+  pickupFromSortOnSegmentToDropoff,
+  targetForDirection,
+} from "@/lib/elevatorRouting";
 import { formatFloorLabel } from "@/lib/utils";
 import type {
   ActivePassenger,
@@ -22,26 +30,6 @@ const WAITING_STATUSES = new Set(["pending", "assigned", "arriving"]);
 
 function minutesWaiting(request: DispatchRequest) {
   return Math.max(0, Math.floor((Date.now() - new Date(request.wait_started_at).getTime()) / 60000));
-}
-
-function isBetween(target: number, start: number, end: number) {
-  return target >= Math.min(start, end) && target <= Math.max(start, end);
-}
-
-function targetForDirection(current: number, direction: Direction, requests: DispatchRequest[], active: ActivePassenger[]) {
-  const requestStops = requests.flatMap((request) => [request.from_sort_order, request.to_sort_order]);
-  const passengerStops = active.map((passenger) => passenger.to_sort_order);
-  const allStops = [...requestStops, ...passengerStops];
-
-  if (direction === "up") {
-    return Math.max(current, ...allStops.filter((floor) => floor >= current));
-  }
-
-  if (direction === "down") {
-    return Math.min(current, ...allStops.filter((floor) => floor <= current));
-  }
-
-  return current;
 }
 
 function getWarnings(request: DispatchRequest, capacity: number, remainingCapacity: number): CapacityWarning[] {
@@ -144,13 +132,24 @@ function resolveFloorLabel(floors: Floor[] | undefined, floorId: string, sortOrd
   return formatFloorLabel(row ?? floorFromSortOrder(sortOrder));
 }
 
+function buildDropoffReason(dropoffs: ActivePassenger[], nextDropSort: number, floors?: Floor[]) {
+  const total = dropoffs.reduce((sum, passenger) => sum + passenger.passenger_count, 0);
+  const label = formatFloorLabel(resolveFloorEntity(floors, nextDropSort));
+  return `Depose ${total} personne${total > 1 ? "s" : ""} a ${label} (arret cabine). Les appels paliers attendront la fin de cette sequence.`;
+}
+
 function buildReason(
   currentFloor: Floor,
   winner: ScoredPickup | null,
   dropoffs: ActivePassenger[],
   prioritiesEnabled: boolean,
   floors?: Floor[],
+  nextDropSort?: number,
 ) {
+  if (dropoffs.length > 0 && nextDropSort !== undefined) {
+    return buildDropoffReason(dropoffs, nextDropSort, floors);
+  }
+
   if (dropoffs.length > 0) {
     const total = dropoffs.reduce((sum, passenger) => sum + passenger.passenger_count, 0);
     return `Depose ${total} personne${total > 1 ? "s" : ""} avant de reprendre des demandes, ce qui libere de la capacite.`;
@@ -194,34 +193,78 @@ export function getRecommendedNextStop({
   prioritiesEnabled = true,
 }: DispatchInput): DispatchRecommendation {
   const remainingCapacity = Math.max(0, capacity - currentLoad);
-  const currentSortOrder = currentFloor.sort_order;
+  const currentSortOrder = Number(currentFloor.sort_order);
   const openRequests = requests
     .filter((request) => WAITING_STATUSES.has(request.status))
     .sort((a, b) => a.sequence_number - b.sequence_number);
   const oldestSequence = openRequests[0]?.sequence_number ?? Number.MAX_SAFE_INTEGER;
-  const routeLimit = targetForDirection(currentSortOrder, direction, openRequests, activePassengers);
 
-  const requestsToDropoff = activePassengers.filter((passenger) => {
-    const target = passenger.to_sort_order;
-    return target === currentSortOrder || (direction !== "idle" && isBetween(target, currentSortOrder, routeLimit));
-  });
+  const serviceDir = effectiveServiceDirection(currentSortOrder, direction, activePassengers);
+  const nextDropSort = nextBoardedDropoffSortOrder(currentSortOrder, serviceDir, activePassengers);
 
-  if (requestsToDropoff.length > 0) {
-    const nextDropoffSort = requestsToDropoff
-      .map((passenger) => passenger.to_sort_order)
-      .sort((a, b) => Math.abs(a - currentSortOrder) - Math.abs(b - currentSortOrder))[0];
+  if (nextDropSort !== null) {
+    const travelDir = directionToward(currentSortOrder, nextDropSort);
+    const segmentRouteLimit = nextDropSort;
+
+    const enRouteCandidates = openRequests.filter((request) =>
+      pickupFromSortOnSegmentToDropoff(request.from_sort_order, currentSortOrder, nextDropSort),
+    );
+
+    if (enRouteCandidates.length > 0 && travelDir !== "idle") {
+      const scoredEnRoute = enRouteCandidates.map((request) =>
+        scoreRequest({
+          request,
+          currentSortOrder,
+          direction: travelDir,
+          capacity,
+          remainingCapacity,
+          oldestSequence,
+          routeLimit: segmentRouteLimit,
+          prioritiesEnabled,
+        }),
+      );
+      const viableEnRoute = scoredEnRoute
+        .filter((item) => item.isCapacityValid)
+        .sort((a, b) => b.score - a.score || a.request.sequence_number - b.request.sequence_number);
+
+      const enRouteWinner = viableEnRoute[0];
+      if (enRouteWinner) {
+        const ns = enRouteWinner.request.from_sort_order;
+        const pickupAtSameStop = viableEnRoute
+          .filter((item) => item.request.from_sort_order === ns)
+          .map((item) => item.request);
+        const capacityWarnings = scoredEnRoute.flatMap((item) => item.warnings);
+        return {
+          nextFloor: resolveFloorEntity(floors, ns),
+          nextFloorSortOrder: ns,
+          primaryPickupRequestId: enRouteWinner.request.id,
+          reason: buildReason(currentFloor, enRouteWinner, [], prioritiesEnabled, floors),
+          requestsToPickup: pickupAtSameStop,
+          requestsToDropoff: [],
+          suggestedDirection: ns > currentSortOrder ? "up" : ns < currentSortOrder ? "down" : "idle",
+          capacityWarnings,
+        };
+      }
+    }
+
+    const passengersDebarkingHere = activePassengers.filter(
+      (passenger) => Number(passenger.to_sort_order) === Number(nextDropSort),
+    );
 
     return {
-      nextFloor: resolveFloorEntity(floors, nextDropoffSort),
-      nextFloorSortOrder: nextDropoffSort,
+      nextFloor: resolveFloorEntity(floors, nextDropSort),
+      nextFloorSortOrder: nextDropSort,
       primaryPickupRequestId: null,
-      reason: buildReason(currentFloor, null, requestsToDropoff, prioritiesEnabled, floors),
+      reason: buildReason(currentFloor, null, passengersDebarkingHere, prioritiesEnabled, floors, nextDropSort),
       requestsToPickup: [],
-      requestsToDropoff,
-      suggestedDirection: nextDropoffSort > currentSortOrder ? "up" : nextDropoffSort < currentSortOrder ? "down" : "idle",
+      requestsToDropoff: passengersDebarkingHere,
+      suggestedDirection:
+        nextDropSort > currentSortOrder ? "up" : nextDropSort < currentSortOrder ? "down" : "idle",
       capacityWarnings: [],
     };
   }
+
+  const routeLimit = targetForDirection(currentSortOrder, direction, openRequests, activePassengers);
 
   const scored = openRequests.map((request) =>
     scoreRequest({
@@ -257,7 +300,6 @@ export function getRecommendedNextStop({
   }
 
   const nextSortOrder = winner.request.from_sort_order;
-  /** Sens pour rejoindre le prochain arrêt — pas le trajet passager après embarquement (évite « monter » alors qu’on est déjà à l’étage). */
   const suggestedDirection =
     nextSortOrder > currentSortOrder ? "up" : nextSortOrder < currentSortOrder ? "down" : "idle";
   const pickupAtSameStop = viable

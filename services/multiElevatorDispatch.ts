@@ -1,4 +1,12 @@
 import type { Elevator, Floor, HoistRequest } from "@/types/hoist";
+import {
+  effectiveServiceDirection,
+  estimateFloorsToReachPickup,
+  hoistQueueToActivePassengersBoarded,
+  hoistQueueToShaftRequests,
+  isBetween,
+  routeLimitForElevator,
+} from "@/lib/elevatorRouting";
 import { isOperatorTabletSessionStale } from "@/lib/operatorTablet";
 
 type DispatchableRequest = Pick<
@@ -27,54 +35,50 @@ function minutesWaiting(request: DispatchableRequest) {
   return Math.max(0, Math.floor((Date.now() - new Date(request.wait_started_at).getTime()) / 60000));
 }
 
-function isBetween(target: number, start: number, end: number) {
-  return target >= Math.min(start, end) && target <= Math.max(start, end);
-}
-
-function routeLimit(elevator: DispatchElevator, floors: Floor[]) {
-  const stops = elevator.queue.flatMap((request) => [
-    floorSortOrder(floors, request.from_floor_id),
-    floorSortOrder(floors, request.to_floor_id),
-  ]);
-
-  if (stops.length === 0) {
-    return elevator.current_sort_order;
-  }
-
-  if (elevator.direction === "up") {
-    return Math.max(elevator.current_sort_order, ...stops.filter((stop) => stop >= elevator.current_sort_order));
-  }
-
-  if (elevator.direction === "down") {
-    return Math.min(elevator.current_sort_order, ...stops.filter((stop) => stop <= elevator.current_sort_order));
-  }
-
-  return elevator.current_sort_order;
-}
-
+/**
+ * Assignation multi-cabines : même géométrie que le dispatch cabine ([`lib/elevatorRouting`](lib/elevatorRouting)),
+ * plus estimation du trajet jusqu’au palier d’appel (déposes SCAN avant ramassage).
+ */
 function scoreElevator(
   elevator: DispatchElevator,
   request: DispatchableRequest,
   floors: Floor[],
   prioritiesEnabled: boolean,
 ) {
+  const cur = elevator.current_sort_order;
   const fromSort = floorSortOrder(floors, request.from_floor_id);
-  const distance = Math.abs(fromSort - elevator.current_sort_order);
-  const sameDirection = elevator.direction !== "idle" && elevator.direction === request.direction;
-  const target = routeLimit(elevator, floors);
+  const floorSort = (floorId: string) => floorSortOrder(floors, floorId);
+
+  const boardedActive = hoistQueueToActivePassengersBoarded(elevator.queue, floorSort);
+  const effectiveDir = effectiveServiceDirection(cur, elevator.direction, boardedActive);
+
+  const shaftStops = hoistQueueToShaftRequests(elevator.queue, floorSort).flatMap((s) => [
+    s.from_sort_order,
+    s.to_sort_order,
+  ]);
+  const routeLimit = routeLimitForElevator(cur, effectiveDir, shaftStops);
+
+  const sameDirection = effectiveDir !== "idle" && effectiveDir === request.direction;
   const onRoute =
-    elevator.direction === "idle" || (sameDirection && isBetween(fromSort, elevator.current_sort_order, target));
+    effectiveDir === "idle"
+      ? fromSort === cur
+      : sameDirection && isBetween(fromSort, cur, routeLimit);
+
   const remainingCapacity = Math.max(0, elevator.capacity - elevator.current_load);
   const queuePenalty = elevator.queue.length * 4;
-  const capacityPenalty = request.passenger_count > elevator.capacity ? 1000 : request.passenger_count > remainingCapacity ? 90 : 0;
-  const tightStopPenalty = onRoute && sameDirection && distance <= 1 && elevator.queue.length > 0 ? 160 : 0;
-  const detourPenalty = onRoute ? 0 : distance * 18;
-  const directionBonus = sameDirection ? -20 : elevator.direction === "idle" ? -8 : 24;
+  const capacityPenalty =
+    request.passenger_count > elevator.capacity ? 1000 : request.passenger_count > remainingCapacity ? 90 : 0;
+  const tightStopPenalty =
+    onRoute && sameDirection && Math.abs(fromSort - cur) <= 1 && elevator.queue.length > 0 ? 160 : 0;
+  const detourPenalty = onRoute ? 0 : Math.abs(fromSort - cur) * 18;
+  const directionBonus = sameDirection ? -20 : effectiveDir === "idle" ? -8 : 24;
   const priorityBonus = prioritiesEnabled && request.priority ? -60 : 0;
   const waitBonus = -Math.min(45, minutesWaiting(request));
 
+  const etaFloors = estimateFloorsToReachPickup(cur, elevator.direction, boardedActive, fromSort);
+
   return (
-    distance * 10 +
+    etaFloors * 14 +
     detourPenalty +
     queuePenalty +
     capacityPenalty +
@@ -128,6 +132,6 @@ export function assignRequestToBestElevator({
   return {
     elevatorId: winner.elevator.id,
     score: winner.score,
-    reason: `Assigne a ${winner.elevator.name} selon trajectoire, charge et file active.`,
+    reason: `Assigne a ${winner.elevator.name} (proximite apres deposes et charge, comme un hall collectif).`,
   };
 }
