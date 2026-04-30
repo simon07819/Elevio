@@ -6,17 +6,27 @@ import { TabletSmartphone } from "lucide-react";
 import { adminDeactivateOperatorTablet } from "@/lib/actions";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { elevatorHasOperatorTabletBinding, elevatorOperatorSessionAppearsLive } from "@/lib/operatorTablet";
+import { formatStoredTabletLabel } from "@/lib/deviceLabel";
 import type { Elevator } from "@/types/hoist";
 
-/** Même logique que la barre opérateur : libellé navigateur à jour pour cette tablette, sinon valeur stockée. */
+/** Nom comme dans la barre operateur : profil sur cette tablette, sinon valeur en base si presente. */
+function tabletOperatorName(elevator: Elevator, sessionId: string | null | undefined, profileOperatorName: string): string {
+  const isThisTablet = Boolean(sessionId && elevator.operator_session_id === sessionId);
+  const profile = profileOperatorName.trim();
+  const stored = elevator.operator_display_name?.trim() ?? "";
+  if (isThisTablet && profile) {
+    return profile;
+  }
+  return stored;
+}
+
+/** Meme logique que la barre operateur : libelle navigateur a jour pour cette tablette, sinon valeur stockee. */
 function tabletDeviceDisplayLine(elevator: Elevator, sessionId: string | null | undefined, liveDeviceLabel: string): string {
   const stored = elevator.operator_tablet_label?.trim() ?? "";
   const live = liveDeviceLabel.trim();
   const isThisTablet = Boolean(sessionId && elevator.operator_session_id === sessionId);
-  if (isThisTablet) {
-    return live || stored;
-  }
-  return stored;
+  const raw = isThisTablet ? live || stored : stored;
+  return raw ? formatStoredTabletLabel(raw) : "";
 }
 
 export function OperatorTabletSessionsPanel({
@@ -24,13 +34,13 @@ export function OperatorTabletSessionsPanel({
   elevators,
   sessionId,
   deviceLabel = "",
+  operatorDisplayName = "",
 }: {
   projectId: string;
   elevators: Elevator[];
-  /** Session navigateur courante : permet d’afficher le même libellé appareil que dans la barre opérateur. */
   sessionId?: string | null;
-  /** Résultat de `getOperatorDeviceLabel()` sur cet appareil. */
   deviceLabel?: string;
+  operatorDisplayName?: string;
 }) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -72,6 +82,7 @@ export function OperatorTabletSessionsPanel({
         {bound.map((elevator) => {
           const live = elevatorOperatorSessionAppearsLive(elevator);
           const displayLine = tabletDeviceDisplayLine(elevator, sessionId, deviceLabel);
+          const operatorLine = tabletOperatorName(elevator, sessionId, operatorDisplayName);
           return (
             <li
               key={elevator.id}
@@ -79,7 +90,10 @@ export function OperatorTabletSessionsPanel({
             >
               <div className="min-w-0">
                 <p className="font-black text-white">{elevator.name}</p>
-                <p className="mt-1 text-xs font-bold text-slate-400">
+                {operatorLine ? (
+                  <p className="mt-1 truncate text-xs font-bold text-emerald-200/90">{operatorLine}</p>
+                ) : null}
+                <p className="mt-1 truncate text-xs font-bold text-slate-400">
                   {displayLine ? t("operator.tabletSessionsDeviceLine", { device: displayLine }) : t("operator.tabletNoDeviceName")}
                 </p>
                 <p className={`mt-2 inline-block rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ${live ? "bg-emerald-500/15 text-emerald-100" : "bg-amber-500/15 text-amber-100"}`}>

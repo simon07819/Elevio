@@ -1,10 +1,43 @@
 /** Libellé navigateur pour distinguer la tablette (pas le nom Bluetooth / reglages OS — non expose au web). */
-const MAX_LEN = 120;
+const MAX_LEN = 72;
 
 function truncate(label: string): string {
   const t = label.trim();
   if (t.length <= MAX_LEN) return t;
   return `${t.slice(0, MAX_LEN - 1)}…`;
+}
+
+/** Resume le User-Agent brut (ex. Safari macOS) sans la chaine Mozilla/5.0… */
+export function shortLabelFromUserAgent(ua: string): string {
+  const u = ua.trim();
+  if (!u) return "Web";
+
+  const isSafari = /\bSafari\//.test(u) && !/\bChrome\b|Chromium|CriOS/.test(u);
+  if (isSafari) {
+    const ver = u.match(/\bVersion\/([\d.]+)/)?.[1];
+    const platform = /\biPhone\b/.test(u) ? "iPhone" : /\biPad\b/.test(u) ? "iPad" : /\bMac OS X\b/.test(u) ? "macOS" : "";
+    const parts = ["Safari", ver, platform].filter(Boolean);
+    return parts.join(" ");
+  }
+
+  if (/\bFirefox\//.test(u)) {
+    const ver = u.match(/\bFirefox\/([\d.]+)/)?.[1];
+    return ver ? `Firefox ${ver}` : "Firefox";
+  }
+
+  if (/\bEdg\//.test(u)) {
+    const ver = u.match(/\bEdg\/([\d.]+)/)?.[1];
+    return ver ? `Edge ${ver}` : "Edge";
+  }
+
+  if (/\bChrome\//.test(u) && !/\bEdg\b/.test(u)) {
+    const ver = u.match(/\bChrome\/([\d.]+)/)?.[1];
+    return ver ? `Chrome ${ver}` : "Chrome";
+  }
+
+  if (/\bAndroid\b/.test(u)) return "Android";
+
+  return u.length > 52 ? `${u.slice(0, 51)}…` : u;
 }
 
 /** Typage minimal — User-Agent Client Hints absents du lib DOM standard. */
@@ -82,5 +115,20 @@ export async function getOperatorDeviceLabel(): Promise<string> {
 
   const ua = navigator.userAgent?.trim();
   const platform = navigator.platform?.trim();
-  return truncate(ua || platform || "Web client");
+  const shortUa = ua ? shortLabelFromUserAgent(ua) : "";
+  return truncate(shortUa || platform || "Web client");
+}
+
+const STORED_LABEL_MAX = 64;
+
+/** Libelle appareil deja stocke en base (parfois ancien UA complet). */
+export function formatStoredTabletLabel(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "";
+  const looksLikeUa = t.length >= 40 && /\bMozilla\b/.test(t);
+  let out = looksLikeUa ? shortLabelFromUserAgent(t) : t;
+  if (out.length > STORED_LABEL_MAX) {
+    out = `${out.slice(0, STORED_LABEL_MAX - 1)}…`;
+  }
+  return out;
 }

@@ -15,7 +15,7 @@ import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { formatFloorLabel } from "@/lib/utils";
 import { ServiceTimePicker } from "@/components/ServiceTimePicker";
 import { isOperatorTabletSessionStale } from "@/lib/operatorTablet";
-import { getOperatorDeviceLabel } from "@/lib/deviceLabel";
+import { formatStoredTabletLabel, getOperatorDeviceLabel } from "@/lib/deviceLabel";
 import type { ActivePassenger, Elevator, Floor, HoistRequest, Project } from "@/types/hoist";
 import { OperatorDashboard } from "@/components/operator/OperatorDashboard";
 import { OperatorTabletSessionsPanel } from "@/components/operator/OperatorTabletSessionsPanel";
@@ -247,8 +247,11 @@ export function OperatorWorkspace({
     });
   }
 
-  const activeDeviceSubtitle =
-    deviceLabel.trim() || selectedElevator?.operator_tablet_label?.trim() || t("operator.tabletNoDeviceName");
+  const rawDeviceSubtitle =
+    deviceLabel.trim() || selectedElevator?.operator_tablet_label?.trim() || "";
+  const activeDeviceSubtitle = rawDeviceSubtitle
+    ? formatStoredTabletLabel(rawDeviceSubtitle)
+    : t("operator.tabletNoDeviceName");
 
   if (selectedElevator) {
     return (
@@ -293,7 +296,13 @@ export function OperatorWorkspace({
 
   return (
     <>
-      <OperatorTabletSessionsPanel projectId={project.id} elevators={localElevators} sessionId={sessionId} deviceLabel={deviceLabel} />
+      <OperatorTabletSessionsPanel
+        projectId={project.id}
+        elevators={localElevators}
+        sessionId={sessionId}
+        deviceLabel={deviceLabel}
+        operatorDisplayName={operatorDisplayName}
+      />
       <section className="mx-auto grid max-w-7xl gap-4 rounded-3xl border border-white/10 bg-white/8 p-5">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-200">
