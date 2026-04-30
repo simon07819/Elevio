@@ -1,6 +1,6 @@
 # Elevio
 
-Elevio est une PWA mobile-first pour gerer les demandes d'un elevateur exterieur sur chantier. Les travailleurs scannent un QR code a leur etage, choisissent leur destination et l'operateur recoit les demandes en temps reel avec une recommandation de trajectoire.
+Elevio est une PWA mobile-first pour gerer les demandes d'un elevateur exterieur sur chantier. Les travailleurs scannent un code QR a leur etage, choisissent leur destination et l'operateur recoit les demandes en temps reel avec une recommandation de trajectoire.
 
 ## Stack
 
@@ -20,7 +20,7 @@ Elevio est une PWA mobile-first pour gerer les demandes d'un elevateur exterieur
 - `/admin` hub admin
 - `/admin/projects` projets, capacite, elevateurs
 - `/admin/floors` etages et tokens QR
-- `/admin/qrcodes` QR codes imprimables
+- `/admin/qrcodes` codes QR imprimables
 - `/admin/stats` statistiques
 
 ## Installation
@@ -149,6 +149,6 @@ npm run typecheck
 ## Notes produit
 
 - Les gros boutons et cartes sont concus pour un usage avec gants.
-- Les QR codes de `/admin/qrcodes` sont imprimables.
+- Les codes QR de `/admin/qrcodes` sont imprimables.
 - Les demandes prioritaires exigent une raison.
 - Les groupes trop grands restent acceptes et visibles avec recommandation de plusieurs passages.

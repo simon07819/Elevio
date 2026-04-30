@@ -56,7 +56,7 @@ export function AdminProjectDetail({ data }: { data: AdminProjectData }) {
               <QrCode />
             </span>
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-200">QR codes</p>
+              <p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-200"><T k="setup.signsQrEyebrow" /></p>
               <h2 className="text-2xl font-black text-white"><T k="setup.projectSigns" /></h2>
             </div>
           </div>
