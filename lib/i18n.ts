@@ -93,10 +93,11 @@ export const translations = {
     "request.dispatchOperatorOnlineStatus": "est en ligne.",
     "request.dispatchOutsideScheduleExplainer":
       "L’heure actuelle sort des heures habituellement prévues pour cette cabine — vous pouvez quand même envoyer votre demande.",
+    "request.resumeLoading": "Ouverture de votre demande…",
     "eta.label": "Arrivee estimee dans environ {min} a {max} min",
     "operator.title": "Operateur",
     "operator.realtime": "Temps reel",
-    "operator.floor": "Etage",
+    "operator.floor": "Étage",
     "operator.direction": "Direction",
     "operator.requests": "Demandes",
     "operator.priority": "priorite",
@@ -522,6 +523,7 @@ export const translations = {
     "request.dispatchOperatorOnlineStatus": "is online.",
     "request.dispatchOutsideScheduleExplainer":
       "It’s outside the usual scheduled window for this hoist — you can still send your request.",
+    "request.resumeLoading": "Loading your request…",
     "eta.label": "Estimated arrival in about {min} to {max} min",
     "operator.title": "Operator",
     "operator.realtime": "Realtime",

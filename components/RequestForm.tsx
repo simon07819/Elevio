@@ -1,14 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { CheckCircle2, Clock, Send, ShieldAlert, Users, XCircle } from "lucide-react";
-import { createPassengerRequest, updateRequestStatus } from "@/lib/actions";
+import { CheckCircle2, Clock, Loader2, Send, ShieldAlert, Users, XCircle } from "lucide-react";
+import { createPassengerRequest, resumePassengerRequest, updateRequestStatus } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeToTable, unsubscribe } from "@/lib/realtime";
 import { estimateArrivalWindow, formatFloorLabel, formatPostgresTimeToAmPm } from "@/lib/utils";
-import { demoElevator } from "@/lib/demoData";
+import { demoElevator, demoProject } from "@/lib/demoData";
 import type { Floor, HoistRequest, Project, RequestStatus } from "@/types/hoist";
 import type { PassengerDispatchState } from "@/lib/operatorDispatchAvailability";
+import {
+  clearPassengerPendingRequest,
+  parsePassengerPendingSnapshot,
+  passengerPendingRequestStorageKey,
+  savePassengerPendingRequest,
+} from "@/lib/passengerRequestPersistence";
 import { FloorSelector } from "@/components/FloorSelector";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
@@ -20,6 +26,10 @@ type SubmittedRequest = {
   toFloorId: string;
   passengerCount: number;
 };
+
+function isTerminalPassengerRequestStatus(status: RequestStatus): boolean {
+  return status === "completed" || status === "cancelled";
+}
 
 export function RequestForm({
   project,
@@ -42,6 +52,7 @@ export function RequestForm({
   const [showSpecialNeed, setShowSpecialNeed] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [submittedRequest, setSubmittedRequest] = useState<SubmittedRequest | null>(null);
+  const [passengerResumeReady, setPassengerResumeReady] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { t } = useLanguage();
   const prioritiesEnabled = project.priorities_enabled !== false;
@@ -69,6 +80,81 @@ export function RequestForm({
   }, [prioritiesEnabled]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function verifyStoredRequest() {
+      const raw =
+        typeof window !== "undefined"
+          ? localStorage.getItem(passengerPendingRequestStorageKey(project.id, currentFloor.qr_token))
+          : null;
+
+      if (!raw) {
+        setPassengerResumeReady(true);
+        return;
+      }
+
+      const parsed = parsePassengerPendingSnapshot(raw);
+      if (!parsed) {
+        clearPassengerPendingRequest(project.id, currentFloor.qr_token);
+        setPassengerResumeReady(true);
+        return;
+      }
+
+      if (parsed.requestId === "demo-local-request") {
+        if (project.id !== demoProject.id) {
+          clearPassengerPendingRequest(project.id, currentFloor.qr_token);
+        } else if (!cancelled) {
+          setSubmittedRequest({
+            requestId: parsed.requestId,
+            status: "pending",
+            waitStartedAt: parsed.waitStartedAt,
+            fromFloorId: parsed.fromFloorId,
+            toFloorId: parsed.toFloorId,
+            passengerCount: parsed.passengerCount,
+          });
+          setDestinationId(parsed.toFloorId);
+        }
+        if (!cancelled) setPassengerResumeReady(true);
+        return;
+      }
+
+      const res = await resumePassengerRequest(project.id, currentFloor.qr_token, parsed.requestId);
+      if (cancelled) return;
+
+      if (!res.ok || !res.snapshot) {
+        clearPassengerPendingRequest(project.id, currentFloor.qr_token);
+        setPassengerResumeReady(true);
+        return;
+      }
+
+      if (isTerminalPassengerRequestStatus(res.snapshot.status)) {
+        clearPassengerPendingRequest(project.id, currentFloor.qr_token);
+        setPassengerResumeReady(true);
+        return;
+      }
+
+      if (!cancelled) {
+        setSubmittedRequest({
+          requestId: res.snapshot.requestId,
+          status: res.snapshot.status,
+          waitStartedAt: res.snapshot.waitStartedAt,
+          fromFloorId: res.snapshot.fromFloorId,
+          toFloorId: res.snapshot.toFloorId,
+          passengerCount: res.snapshot.passengerCount,
+        });
+        setDestinationId(res.snapshot.toFloorId);
+      }
+      if (!cancelled) setPassengerResumeReady(true);
+    }
+
+    void verifyStoredRequest();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id, currentFloor.qr_token]);
+
+  useEffect(() => {
     if (!submittedRequest || submittedRequest.requestId === "demo-local-request") {
       return;
     }
@@ -80,21 +166,67 @@ export function RequestForm({
       filter: `id=eq.${submittedRequest.requestId}`,
       onChange: (payload) => {
         if (payload.new?.status) {
-          setSubmittedRequest((current) => current && { ...current, status: payload.new.status });
+          const next = payload.new.status as RequestStatus;
+          if (isTerminalPassengerRequestStatus(next)) {
+            clearPassengerPendingRequest(project.id, currentFloor.qr_token);
+          }
+          setSubmittedRequest((current) => current && { ...current, status: next });
         }
       },
     });
 
     return () => unsubscribe(client, channel);
-  }, [submittedRequest]);
+  }, [submittedRequest, project.id, currentFloor.qr_token]);
+
+  useEffect(() => {
+    if (!submittedRequest || submittedRequest.requestId === "demo-local-request") {
+      return;
+    }
+
+    const requestId = submittedRequest.requestId;
+
+    async function pollOnce() {
+      const res = await resumePassengerRequest(project.id, currentFloor.qr_token, requestId);
+      if (!res.ok || !res.snapshot) return;
+      if (isTerminalPassengerRequestStatus(res.snapshot.status)) {
+        clearPassengerPendingRequest(project.id, currentFloor.qr_token);
+      }
+      const snap = res.snapshot;
+      setSubmittedRequest((prev) =>
+        prev?.requestId === snap.requestId
+          ? {
+              ...prev,
+              status: snap.status,
+              passengerCount: snap.passengerCount,
+              waitStartedAt: snap.waitStartedAt,
+            }
+          : prev,
+      );
+    }
+
+    const intervalId = window.setInterval(() => void pollOnce(), 15_000);
+    void pollOnce();
+    return () => window.clearInterval(intervalId);
+  }, [submittedRequest?.requestId, project.id, currentFloor.qr_token]);
+
+  if (!passengerResumeReady) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-[1.75rem] bg-white p-8 text-center text-slate-950 shadow-sm">
+        <Loader2 className="size-10 animate-spin text-slate-400" aria-hidden />
+        <p className="text-sm font-bold text-slate-600">{t("request.resumeLoading")}</p>
+      </div>
+    );
+  }
 
   if (submittedRequest) {
+    const tripToFloor = floors.find((floor) => floor.id === submittedRequest.toFloorId);
     const canCancel = submittedRequest.status !== "boarded" && submittedRequest.status !== "completed";
     const submittedRequestId = submittedRequest.requestId;
 
     async function cancelAndReset() {
       const result = await updateRequestStatus(submittedRequestId, "cancelled", "Annule par le passager.");
       if (result.ok) {
+        clearPassengerPendingRequest(project.id, currentFloor.qr_token);
         setSubmittedRequest(null);
         setMessage(t("request.cancelled"));
         setPassengerCount(1);
@@ -119,7 +251,7 @@ export function RequestForm({
           <div className="rounded-[1.5rem] border-2 border-slate-100 bg-slate-50 p-4">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">{t("request.trip")}</p>
             <p className="mt-2 text-4xl font-black">
-              {formatFloorLabel(currentFloor)} {"->"} {formatFloorLabel(destinationFloor)}
+              {formatFloorLabel(currentFloor)} {"->"} {formatFloorLabel(tripToFloor)}
             </p>
             <p className="mt-2 text-sm font-bold text-slate-600">
               {submittedRequest.passengerCount} {t("common.passengers").toLowerCase()}
@@ -157,6 +289,7 @@ export function RequestForm({
           <button
             type="button"
             onClick={() => {
+              clearPassengerPendingRequest(project.id, currentFloor.qr_token);
               setSubmittedRequest(null);
               setMessage(null);
             }}
@@ -224,6 +357,13 @@ export function RequestForm({
             const result = await createPassengerRequest(formData);
             setMessage(result.message);
             if (result.ok && result.requestId) {
+              savePassengerPendingRequest(project.id, currentFloor.qr_token, {
+                requestId: result.requestId,
+                waitStartedAt: result.waitStartedAt ?? new Date().toISOString(),
+                fromFloorId: result.fromFloorId ?? currentFloor.id,
+                toFloorId: result.toFloorId ?? destinationId,
+                passengerCount: result.passengerCount ?? passengerCount,
+              });
               setSubmittedRequest({
                 requestId: result.requestId,
                 status: result.status ?? "pending",

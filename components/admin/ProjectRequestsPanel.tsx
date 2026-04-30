@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { CheckCircle, Clock, XCircle } from "lucide-react";
 import { assignRequestElevator, updateRequestStatus } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
-import { mergeRealtimeRequest, subscribeToTable, unsubscribe, type RequestRealtimePayload } from "@/lib/realtime";
+import { bindRealtimeWithAuthSession, mergeRealtimeRequest, subscribeToTable, type RequestRealtimePayload } from "@/lib/realtime";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { formatFloorLabel, formatWaitTime } from "@/lib/utils";
 import type { TranslationKey } from "@/lib/i18n";
@@ -47,16 +47,16 @@ export function ProjectRequestsPanel({
 
   useEffect(() => {
     const client = createClient();
-    const channel = subscribeToTable<RequestRealtimePayload>({
-      client,
-      table: "requests",
-      filter: `project_id=eq.${projectId}`,
-      onChange: (payload) => {
-        setLocalRequests((current) => mergeRealtimeRequest(current, payload));
-      },
-    });
-
-    return () => unsubscribe(client, channel);
+    return bindRealtimeWithAuthSession(client, () =>
+      subscribeToTable<RequestRealtimePayload>({
+        client,
+        table: "requests",
+        filter: `project_id=eq.${projectId}`,
+        onChange: (payload) => {
+          setLocalRequests((current) => mergeRealtimeRequest(current, payload));
+        },
+      }),
+    );
   }, [projectId]);
 
   function changeStatus(requestId: string, status: RequestStatus) {

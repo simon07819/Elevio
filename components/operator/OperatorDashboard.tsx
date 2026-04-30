@@ -10,9 +10,9 @@ import {
 } from "@/lib/demoData";
 import { createClient } from "@/lib/supabase/client";
 import {
+  bindRealtimeWithAuthSession,
   mergeRealtimeRequest,
   subscribeToTable,
-  unsubscribe,
   type RequestRealtimePayload,
 } from "@/lib/realtime";
 import type { TranslationKey } from "@/lib/i18n";
@@ -62,16 +62,16 @@ export function OperatorDashboard({
 
   useEffect(() => {
     const client = createClient();
-    const channel = subscribeToTable<RequestRealtimePayload>({
-      client,
-      table: "requests",
-      filter: `project_id=eq.${projectId}`,
-      onChange: (payload) => {
-        setLiveRequests((current) => mergeRealtimeRequest(current, payload));
-      },
-    });
-
-    return () => unsubscribe(client, channel);
+    return bindRealtimeWithAuthSession(client, () =>
+      subscribeToTable<RequestRealtimePayload>({
+        client,
+        table: "requests",
+        filter: `project_id=eq.${projectId}`,
+        onChange: (payload) => {
+          setLiveRequests((current) => mergeRealtimeRequest(current, payload));
+        },
+      }),
+    );
   }, [projectId]);
 
   const elevatorRequests = useMemo(
@@ -166,9 +166,11 @@ export function OperatorDashboard({
     <div className="mx-auto grid max-w-7xl gap-4">
       <section className="grid gap-3 lg:grid-cols-[1fr_340px]">
         <div className="grid gap-3 sm:grid-cols-4">
-          <div className="rounded-3xl border border-white/10 bg-white/8 p-4">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400"><T k="operator.floor" /></p>
-            <p className="mt-1 text-4xl font-black text-white">{formatFloorLabel(displayFloor)}</p>
+          <div className="relative rounded-3xl border-2 border-emerald-400/70 bg-emerald-500/[0.12] p-4 shadow-[0_0_32px_rgba(52,211,153,0.28)] ring-2 ring-emerald-400/45 ring-offset-2 ring-offset-slate-950">
+            <p className="text-xs font-black tracking-wide text-emerald-200/95"><T k="operator.floor" /></p>
+            <p className="mt-1 text-4xl font-black tabular-nums tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.35)]">
+              {formatFloorLabel(displayFloor)}
+            </p>
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/8 p-4">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400"><T k="operator.direction" /></p>

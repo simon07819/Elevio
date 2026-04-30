@@ -53,7 +53,7 @@ Sans variables Supabase, l'app fonctionne en mode demo avec les donnees locales 
 
 ### Bases deja creees (migration incrementale)
 
-Si l application ou Supabase renvoie une erreur du type **column elevators.operator_tablet_label does not exist**, ouvrir **SQL Editor** et executer le fichier **`supabase/elevator-operator-tablet-label.sql`** (une ligne `alter table ...`, idempotent). Meme chose pour **column projects.priorities_enabled does not exist** avec **`supabase/project-priorities-enabled.sql`**. Pour les autres scripts `supabase/*.sql` hors `schema.sql` / `seed.sql`, executer le fichier correspondant aux fonctionnalites ajoutees apres la creation du projet.
+Si l application ou Supabase renvoie une erreur du type **column elevators.operator_tablet_label does not exist**, ouvrir **SQL Editor** et executer le fichier **`supabase/elevator-operator-tablet-label.sql`** (une ligne `alter table ...`, idempotent). Meme chose pour **column projects.priorities_enabled does not exist** avec **`supabase/project-priorities-enabled.sql`**. Pour que les passagers retrouvent leur demande apres fermeture de l app (QR / lien), executer **`supabase/passenger-resume-request-rpc.sql`** (fonction RPC `resume_passenger_request`). Pour les autres scripts `supabase/*.sql` hors `schema.sql` / `seed.sql`, executer le fichier correspondant aux fonctionnalites ajoutees apres la creation du projet.
 
 ### Auth admin
 

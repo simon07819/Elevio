@@ -10,7 +10,7 @@ import {
   releaseOperatorElevator,
 } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
-import { subscribeToTable, unsubscribe, type ElevatorRealtimePayload } from "@/lib/realtime";
+import { bindRealtimeWithAuthSession, subscribeToTable, type ElevatorRealtimePayload } from "@/lib/realtime";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { formatFloorLabel } from "@/lib/utils";
 import { ServiceTimePicker } from "@/components/ServiceTimePicker";
@@ -134,32 +134,50 @@ export function OperatorWorkspace({
     }
 
     const client = createClient();
-    const channel = subscribeToTable<ElevatorRealtimePayload>({
-      client,
-      table: "elevators",
-      filter: `id=eq.${selectedElevatorId}`,
-      onChange: (payload) => {
-        if (payload.eventType !== "UPDATE" || !payload.new?.id) {
-          return;
-        }
+    return bindRealtimeWithAuthSession(client, () =>
+      subscribeToTable<ElevatorRealtimePayload>({
+        client,
+        table: "elevators",
+        filter: `id=eq.${selectedElevatorId}`,
+        onChange: (payload) => {
+          if (payload.eventType !== "UPDATE" || !payload.new?.id) {
+            return;
+          }
 
-        setLocalElevators((current) =>
-          current.map((item) => (item.id === payload.new.id ? { ...item, ...payload.new } : item)),
-        );
-      },
-    });
-
-    return () => unsubscribe(client, channel);
+          setLocalElevators((current) =>
+            current.map((item) => (item.id === payload.new.id ? { ...item, ...payload.new } : item)),
+          );
+        },
+      }),
+    );
   }, [selectedElevatorId]);
 
   useEffect(() => {
+    const bump = () => router.refresh();
+
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        router.refresh();
+        bump();
       }
     };
+
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        bump();
+      }
+    };
+
+    const onOnline = () => bump();
+
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onOnline);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onOnline);
+    };
   }, [router]);
 
   const selectedElevator = useMemo(
