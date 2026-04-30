@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { DoorOpen, TriangleAlert, UserCheck } from "lucide-react";
+import { DoorOpen, Pause, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatDispatchRecommendationReason } from "@/lib/recommendationReason";
@@ -43,6 +43,11 @@ export function RecommendedNextStop({
     recommendation.reason,
   );
 
+  const idleBlockedMessage =
+    recommendation.reasonDetail?.kind === "idle_blocked"
+      ? formatDispatchRecommendationReason(recommendation.reasonDetail, locale, recommendation.reason)
+      : "";
+
   const dropFloorId =
     recommendation.nextFloor?.id ?? recommendation.requestsToDropoff[0]?.to_floor_id ?? "";
 
@@ -66,6 +71,8 @@ export function RecommendedNextStop({
 
   const showDropoff = pendingDropoffs.length > 0 && dropFloorId !== "";
   const showPickup = !showDropoff && actionRequest !== null;
+  const showPrimaryAction = showDropoff || showPickup;
+
   const actionButton = showDropoff ? (
     <button
       type="button"
@@ -90,10 +97,24 @@ export function RecommendedNextStop({
         {t("operator.pickup")}
       </span>
     </button>
+  ) : recommendation.reasonDetail?.kind === "idle_blocked" ? (
+    <button
+      type="button"
+      disabled
+      className="touch-target flex min-h-36 w-full cursor-not-allowed flex-col items-center justify-center gap-3 rounded-3xl border border-amber-400/35 bg-amber-950/45 px-5 py-6 text-center text-amber-50 shadow-inner ring-2 ring-amber-400/15"
+    >
+      <TriangleAlert size={34} strokeWidth={2.6} className="shrink-0 text-amber-200" aria-hidden />
+      <span className="max-w-md text-sm font-bold leading-snug">{idleBlockedMessage}</span>
+    </button>
   ) : (
-    <div className="flex min-h-28 w-full items-center justify-center rounded-3xl border border-white/10 bg-slate-950/80 px-5 py-5 text-center text-xl font-black text-slate-200">
-      {t("operator.noAction")}
-    </div>
+    <button
+      type="button"
+      disabled
+      className="touch-target flex min-h-36 w-full cursor-not-allowed flex-col items-center justify-center gap-3 rounded-3xl border border-white/12 bg-slate-800/50 px-6 py-7 text-slate-300 shadow-inner ring-2 ring-white/[0.06]"
+    >
+      <Pause size={38} strokeWidth={2.6} className="shrink-0 opacity-90" aria-hidden />
+      <span className="text-3xl font-black uppercase tracking-wide">{t("operator.pause")}</span>
+    </button>
   );
 
   function pickup() {
@@ -160,9 +181,11 @@ export function RecommendedNextStop({
 
   return (
     <section className="w-full">
-      <p className="mb-3 rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-center text-base font-bold leading-snug text-slate-100">
-        {reasonLine}
-      </p>
+      {showPrimaryAction && reasonLine.trim() ? (
+        <p className="mb-3 rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-center text-base font-bold leading-snug text-slate-100">
+          {reasonLine}
+        </p>
+      ) : null}
       {actionButton}
       {recommendation.capacityWarnings.length > 0 && (
         <div className="mt-3 rounded-2xl bg-slate-950/90 p-3 text-yellow-100">

@@ -14,7 +14,7 @@ export function formatDispatchRecommendationReason(
 
   switch (detail.kind) {
     case "idle_empty":
-      return fr ? "Aucune demande pour le moment." : "No requests right now.";
+      return "";
     case "idle_blocked":
       return fr
         ? "Cabine pleine ou groupe trop grand : déposer d'abord, ou attendre une autre cabine disponible."
