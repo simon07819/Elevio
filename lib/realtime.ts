@@ -32,6 +32,25 @@ export function mergeRealtimeRequest(current: HoistRequest[], payload: RequestRe
   return current.map((request) => (request.id === nextRequest.id ? nextRequest : request));
 }
 
+/**
+ * Fusionne le snapshot SSR avec l’état realtime : évite qu’un `router.refresh()` avec données
+ * légèrement en retard écrase des lignes déjà reçues sur le canal.
+ */
+export function mergeServerRequestsWithLive(previous: HoistRequest[], server: HoistRequest[]): HoistRequest[] {
+  const merged = new Map<string, HoistRequest>();
+  for (const row of server) {
+    merged.set(row.id, row);
+  }
+  for (const row of previous) {
+    if (!merged.has(row.id)) {
+      merged.set(row.id, row);
+    }
+  }
+  return [...merged.values()].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+}
+
 export function subscribeToTable<T>({
   client,
   table,

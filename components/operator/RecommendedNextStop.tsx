@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Navigation, TriangleAlert, UserCheck } from "lucide-react";
+import { DoorOpen, Navigation, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
 import { formatFloorLabel } from "@/lib/utils";
 import type { DispatchRecommendation, EnrichedRequest } from "@/types/hoist";
@@ -13,16 +13,27 @@ export function RecommendedNextStop({
   actionRequests,
   operatorElevatorId,
   onPickupSuccess,
+  onDropoffSuccess,
 }: {
   recommendation: DispatchRecommendation;
   actionRequests: EnrichedRequest[];
   operatorElevatorId: string;
   onPickupSuccess?: (request: EnrichedRequest) => void;
+  /** Apres depot confirme : ids termines et palier cabine (destination des sorties). */
+  onDropoffSuccess?: (payload: { requestIds: string[]; dropFloorId: string }) => void;
 }) {
   const [handledIds, setHandledIds] = useState<Set<string>>(() => new Set());
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const { t } = useLanguage();
+
+  const dropFloorId =
+    recommendation.nextFloor?.id ?? recommendation.requestsToDropoff[0]?.to_floor_id ?? "";
+
+  const pendingDropoffs = useMemo(() => {
+    return recommendation.requestsToDropoff.filter((p) => !handledIds.has(p.requestId));
+  }, [recommendation.requestsToDropoff, handledIds]);
+
   const actionRequest = useMemo(() => {
     const candidates = actionRequests.filter(
       (request) =>
@@ -30,14 +41,15 @@ export function RecommendedNextStop({
         (request.status === "pending" || request.status === "assigned" || request.status === "arriving"),
     );
     const primaryId = recommendation.primaryPickupRequestId;
-    if (primaryId) {
-      const primary = candidates.find((request) => request.id === primaryId);
-      if (primary) {
-        return primary;
-      }
+    if (!primaryId) {
+      return null;
     }
-    return candidates[0];
+    const primary = candidates.find((request) => request.id === primaryId);
+    return primary ?? null;
   }, [actionRequests, handledIds, recommendation.primaryPickupRequestId]);
+
+  const showDropoff = pendingDropoffs.length > 0 && dropFloorId !== "";
+  const showPickup = !showDropoff && actionRequest !== null;
 
   function pickup() {
     if (!actionRequest) {
@@ -57,9 +69,29 @@ export function RecommendedNextStop({
     });
   }
 
+  function dropoff() {
+    const ids = [...new Set(pendingDropoffs.map((p) => p.requestId))];
+    if (ids.length === 0 || !dropFloorId) {
+      return;
+    }
+
+    startTransition(async () => {
+      const results = await Promise.all(ids.map((requestId) => advanceRequestStatus(requestId, "completed")));
+      if (results.every((r) => r.ok)) {
+        setHandledIds((current) => {
+          const next = new Set(current);
+          for (const id of ids) next.add(id);
+          return next;
+        });
+        onDropoffSuccess?.({ requestIds: ids, dropFloorId });
+        router.refresh();
+      }
+    });
+  }
+
   return (
     <section className="grid gap-4 rounded-3xl border border-yellow-400/55 bg-yellow-300 p-4 text-slate-950 shadow-[0_14px_42px_rgba(15,23,42,0.28)] lg:grid-cols-[1fr_360px] lg:items-center">
-      <div className="flex items-center gap-4">
+      <div className="flex gap-4">
         <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-slate-950 text-yellow-300">
           <Navigation size={28} />
         </span>
@@ -73,7 +105,17 @@ export function RecommendedNextStop({
           <p className="mt-1 line-clamp-2 text-sm font-bold leading-5">{recommendation.reason}</p>
         </div>
       </div>
-      {actionRequest ? (
+      {showDropoff ? (
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={dropoff}
+          className="touch-target flex min-h-28 w-full items-center justify-center gap-3 rounded-[1.5rem] bg-slate-950 px-5 py-5 text-4xl font-black uppercase tracking-wide text-yellow-300 shadow-xl transition active:scale-[0.98] disabled:opacity-60"
+        >
+          <DoorOpen size={30} />
+          {t("operator.dropoff")}
+        </button>
+      ) : showPickup ? (
         <button
           type="button"
           disabled={isPending}

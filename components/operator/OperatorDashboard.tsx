@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   bindRealtimeWithAuthSession,
   mergeRealtimeRequest,
+  mergeServerRequestsWithLive,
   subscribeToTable,
   type RequestRealtimePayload,
 } from "@/lib/realtime";
@@ -58,7 +59,7 @@ export function OperatorDashboard({
   const projectId = elevator.project_id;
 
   useEffect(() => {
-    setLiveRequests(requests);
+    setLiveRequests((prev) => mergeServerRequestsWithLive(prev, requests));
   }, [requests]);
 
   useEffect(() => {
@@ -142,8 +143,8 @@ export function OperatorDashboard({
     ...activeQueue.filter((request) => !recommendedIds.has(request.id)),
   ];
 
-  const displayFloor =
-    recommendation.nextFloor ?? actionRequests[0]?.from_floor ?? currentFloor;
+  /** Pas de palier « inventé » depuis la file si capacité bloque — suit uniquement la reco dispatch. */
+  const displayFloor = recommendation.nextFloor ?? currentFloor;
 
   /** Toujours dériver de la géométrie étages : évite direction passager / état ascenseur périmé (« monter » vers P1 alors qu’il faut descendre). */
   const targetSort = Number(displayFloor.sort_order);
@@ -225,6 +226,30 @@ export function OperatorDashboard({
             onElevatorPatch?.(elevator.id, {
               current_floor_id: req.from_floor_id,
               direction: req.direction,
+              current_load: boardedLoad,
+            });
+            return next;
+          });
+        }}
+        onDropoffSuccess={({ requestIds, dropFloorId }) => {
+          const now = new Date().toISOString();
+          setLiveRequests((prev) => {
+            const next = prev.map((r) =>
+              requestIds.includes(r.id)
+                ? {
+                    ...r,
+                    status: "completed" as const,
+                    completed_at: now,
+                    updated_at: now,
+                  }
+                : r,
+            );
+            const boardedLoad = next
+              .filter((r) => r.elevator_id === elevator.id && r.status === "boarded")
+              .reduce((sum, r) => sum + r.passenger_count, 0);
+            onElevatorPatch?.(elevator.id, {
+              current_floor_id: dropFloorId,
+              direction: boardedLoad === 0 ? "idle" : elevator.direction,
               current_load: boardedLoad,
             });
             return next;

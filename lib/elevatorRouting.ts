@@ -96,6 +96,41 @@ export function directionToward(fromSort: number, toSort: number): Direction {
   return "idle";
 }
 
+/**
+ * Cabine au repos sans obligation de dépose : inférer un sens de desserte vers les haltes d’appel
+ * pour que `targetForDirection` / scoring SCAN ne restent pas coincés sur « idle » (borne = étage courant).
+ */
+export function inferPickupPhaseDirection(
+  currentSortOrder: number,
+  elevatorDirection: Direction,
+  openRequests: { from_sort_order: number }[],
+): Direction {
+  if (elevatorDirection !== "idle") {
+    return elevatorDirection;
+  }
+  if (openRequests.length === 0) {
+    return "idle";
+  }
+  const cur = Number(currentSortOrder);
+  let nearestSo = Number(openRequests[0].from_sort_order);
+  let nearestDist = Math.abs(nearestSo - cur);
+  for (let i = 1; i < openRequests.length; i++) {
+    const s = Number(openRequests[i].from_sort_order);
+    const d = Math.abs(s - cur);
+    if (d < nearestDist || (d === nearestDist && s < nearestSo)) {
+      nearestSo = s;
+      nearestDist = d;
+    }
+  }
+  if (nearestSo > cur) {
+    return "up";
+  }
+  if (nearestSo < cur) {
+    return "down";
+  }
+  return "idle";
+}
+
 export function pickupFromSortOnSegmentToDropoff(
   fromSort: number,
   currentSortOrder: number,

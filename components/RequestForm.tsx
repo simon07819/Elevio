@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Clock, Loader2, Send, ShieldAlert, Users, XCircle } from "lucide-react";
 import { createPassengerRequest, resumePassengerRequest, updateRequestStatus } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
@@ -11,7 +12,7 @@ import type { Floor, HoistRequest, Project, RequestStatus } from "@/types/hoist"
 import type { PassengerDispatchState } from "@/lib/operatorDispatchAvailability";
 import {
   clearPassengerPendingRequest,
-  parsePassengerPendingSnapshot,
+  loadPassengerPendingSnapshot,
   passengerPendingRequestStorageKey,
   savePassengerPendingRequest,
 } from "@/lib/passengerRequestPersistence";
@@ -29,6 +30,15 @@ type SubmittedRequest = {
 
 function isTerminalPassengerRequestStatus(status: RequestStatus): boolean {
   return status === "completed" || status === "cancelled";
+}
+
+/** Après ramassage opérateur : plus de suivi passager — retour scan QR requis. */
+function clearsPassengerPendingStorage(status: RequestStatus): boolean {
+  return isTerminalPassengerRequestStatus(status) || status === "boarded";
+}
+
+function shouldRestoreSubmittedFromSnapshot(status: RequestStatus): boolean {
+  return !clearsPassengerPendingStorage(status);
 }
 
 export function RequestForm({
@@ -54,6 +64,7 @@ export function RequestForm({
   const [submittedRequest, setSubmittedRequest] = useState<SubmittedRequest | null>(null);
   const [passengerResumeReady, setPassengerResumeReady] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
   const { t } = useLanguage();
   const prioritiesEnabled = project.priorities_enabled !== false;
   const destinationFloor = floors.find((floor) => floor.id === destinationId);
@@ -85,7 +96,7 @@ export function RequestForm({
     async function verifyStoredRequest() {
       const raw =
         typeof window !== "undefined"
-          ? localStorage.getItem(passengerPendingRequestStorageKey(project.id, currentFloor.qr_token))
+          ? window.localStorage.getItem(passengerPendingRequestStorageKey(project.id, currentFloor.qr_token))
           : null;
 
       if (!raw) {
@@ -93,57 +104,68 @@ export function RequestForm({
         return;
       }
 
-      const parsed = parsePassengerPendingSnapshot(raw);
-      if (!parsed) {
+      const localSnap = loadPassengerPendingSnapshot(raw);
+      if (!localSnap) {
         clearPassengerPendingRequest(project.id, currentFloor.qr_token);
         setPassengerResumeReady(true);
         return;
       }
 
-      if (parsed.requestId === "demo-local-request") {
+      if (localSnap.requestId === "demo-local-request") {
         if (project.id !== demoProject.id) {
-          clearPassengerPendingRequest(project.id, currentFloor.qr_token);
+          clearPassengerPendingRequest(project.id, currentFloor.qr_token, "demo-local-request");
         } else if (!cancelled) {
           setSubmittedRequest({
-            requestId: parsed.requestId,
-            status: "pending",
-            waitStartedAt: parsed.waitStartedAt,
-            fromFloorId: parsed.fromFloorId,
-            toFloorId: parsed.toFloorId,
-            passengerCount: parsed.passengerCount,
+            requestId: localSnap.requestId,
+            status: localSnap.status ?? "pending",
+            waitStartedAt: localSnap.waitStartedAt,
+            fromFloorId: localSnap.fromFloorId,
+            toFloorId: localSnap.toFloorId,
+            passengerCount: localSnap.passengerCount,
           });
-          setDestinationId(parsed.toFloorId);
+          setDestinationId(localSnap.toFloorId);
         }
         if (!cancelled) setPassengerResumeReady(true);
         return;
       }
 
-      const res = await resumePassengerRequest(project.id, currentFloor.qr_token, parsed.requestId);
+      const res = await resumePassengerRequest(project.id, currentFloor.qr_token, localSnap.requestId);
       if (cancelled) return;
 
       if (!res.ok || !res.snapshot) {
         clearPassengerPendingRequest(project.id, currentFloor.qr_token);
-        setPassengerResumeReady(true);
+        if (!cancelled) setPassengerResumeReady(true);
         return;
       }
 
-      if (isTerminalPassengerRequestStatus(res.snapshot.status)) {
+      if (!shouldRestoreSubmittedFromSnapshot(res.snapshot.status)) {
         clearPassengerPendingRequest(project.id, currentFloor.qr_token);
-        setPassengerResumeReady(true);
+        if (!cancelled) setPassengerResumeReady(true);
         return;
       }
+
+      const normalized: typeof res.snapshot = res.snapshot;
+      savePassengerPendingRequest(project.id, currentFloor.qr_token, {
+        requestId: normalized.requestId,
+        waitStartedAt: normalized.waitStartedAt,
+        fromFloorId: normalized.fromFloorId,
+        toFloorId: normalized.toFloorId,
+        passengerCount: normalized.passengerCount,
+        status: normalized.status,
+      });
 
       if (!cancelled) {
         setSubmittedRequest({
-          requestId: res.snapshot.requestId,
-          status: res.snapshot.status,
-          waitStartedAt: res.snapshot.waitStartedAt,
-          fromFloorId: res.snapshot.fromFloorId,
-          toFloorId: res.snapshot.toFloorId,
-          passengerCount: res.snapshot.passengerCount,
+          requestId: normalized.requestId,
+          status: normalized.status ?? "pending",
+          waitStartedAt: normalized.waitStartedAt,
+          fromFloorId: normalized.fromFloorId,
+          toFloorId: normalized.toFloorId,
+          passengerCount: normalized.passengerCount,
         });
-        setDestinationId(res.snapshot.toFloorId);
+        setDestinationId(normalized.toFloorId);
       }
+
       if (!cancelled) setPassengerResumeReady(true);
     }
 
@@ -159,16 +181,24 @@ export function RequestForm({
       return;
     }
 
+    const requestIdTracked = submittedRequest.requestId;
+
     const client = createClient();
     const channel = subscribeToTable<{ new: HoistRequest }>({
       client,
       table: "requests",
-      filter: `id=eq.${submittedRequest.requestId}`,
+      filter: `id=eq.${requestIdTracked}`,
       onChange: (payload) => {
         if (payload.new?.status) {
           const next = payload.new.status as RequestStatus;
-          if (isTerminalPassengerRequestStatus(next)) {
-            clearPassengerPendingRequest(project.id, currentFloor.qr_token);
+          if (next === "boarded") {
+            clearPassengerPendingRequest(project.id, currentFloor.qr_token, requestIdTracked);
+            setSubmittedRequest(null);
+            router.replace("/");
+            return;
+          }
+          if (clearsPassengerPendingStorage(next)) {
+            clearPassengerPendingRequest(project.id, currentFloor.qr_token, requestIdTracked);
           }
           setSubmittedRequest((current) => current && { ...current, status: next });
         }
@@ -188,10 +218,16 @@ export function RequestForm({
     async function pollOnce() {
       const res = await resumePassengerRequest(project.id, currentFloor.qr_token, requestId);
       if (!res.ok || !res.snapshot) return;
-      if (isTerminalPassengerRequestStatus(res.snapshot.status)) {
-        clearPassengerPendingRequest(project.id, currentFloor.qr_token);
-      }
       const snap = res.snapshot;
+      if (snap.status === "boarded") {
+        clearPassengerPendingRequest(project.id, currentFloor.qr_token, requestId);
+        setSubmittedRequest(null);
+        router.replace("/");
+        return;
+      }
+      if (clearsPassengerPendingStorage(snap.status)) {
+        clearPassengerPendingRequest(project.id, currentFloor.qr_token, requestId);
+      }
       setSubmittedRequest((prev) =>
         prev?.requestId === snap.requestId
           ? {
@@ -226,7 +262,7 @@ export function RequestForm({
     async function cancelAndReset() {
       const result = await updateRequestStatus(submittedRequestId, "cancelled", "Annule par le passager.");
       if (result.ok) {
-        clearPassengerPendingRequest(project.id, currentFloor.qr_token);
+        clearPassengerPendingRequest(project.id, currentFloor.qr_token, submittedRequestId);
         setSubmittedRequest(null);
         setMessage(t("request.cancelled"));
         setPassengerCount(1);
@@ -289,7 +325,7 @@ export function RequestForm({
           <button
             type="button"
             onClick={() => {
-              clearPassengerPendingRequest(project.id, currentFloor.qr_token);
+              clearPassengerPendingRequest(project.id, currentFloor.qr_token, submittedRequest.requestId);
               setSubmittedRequest(null);
               setMessage(null);
             }}
@@ -363,6 +399,7 @@ export function RequestForm({
                 fromFloorId: result.fromFloorId ?? currentFloor.id,
                 toFloorId: result.toFloorId ?? destinationId,
                 passengerCount: result.passengerCount ?? passengerCount,
+                status: result.status ?? "pending",
               });
               setSubmittedRequest({
                 requestId: result.requestId,

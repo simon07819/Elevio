@@ -1,6 +1,7 @@
 import {
   directionToward,
   effectiveServiceDirection,
+  inferPickupPhaseDirection,
   isBetween,
   nextBoardedDropoffSortOrder,
   pickupFromSortOnSegmentToDropoff,
@@ -99,6 +100,10 @@ function scoreRequest({
   score += request.passenger_count > capacity || request.split_required ? -500 : 0;
   score -= detour * 100;
   score -= newerSkippingOld ? 250 : 0;
+  /** Les derniers appels paliers ne doublonnent pas la priorité des attentes déjà en file (ordre naturel ascenseur). */
+  const seqLag =
+    oldestSequence === Number.MAX_SAFE_INTEGER ? 0 : Math.max(0, request.sequence_number - oldestSequence);
+  score -= Math.min(130, seqLag * 13);
 
   return {
     request,
@@ -180,6 +185,17 @@ function buildReason(
   }
 
   return `Arrete a ${pickupLabel} avant ${destLabel}, car ${peoplePhrase} vers ${destLabel}.${priorityText}`;
+}
+
+/** Hall calls en attente mais aucune place pour les prendre maintenant (cab pleine ou groupes trop gros). */
+function buildDeferredHallCallReason(remainingCapacity: number, openHallCallCount: number): string {
+  if (openHallCallCount <= 0) {
+    return "Aucune demande maintenant.";
+  }
+  if (remainingCapacity === 0) {
+    return "Cabine pleine : deposer d'abord aux etages prevus. Les appels aux paliers attendent un passage suivant — comme un ascenseur reel, ils ne sont pas prioritaires sur la sequence en cours ; une autre cabine peut les prendre si elle a la place.";
+  }
+  return "Pas assez de place pour les groupes en attente aux paliers. Poursuivez les depots ou des passages partiels ; ils seront repris ensuite sans priorite artificielle sur les derniers appels.";
 }
 
 export function getRecommendedNextStop({
@@ -264,13 +280,14 @@ export function getRecommendedNextStop({
     };
   }
 
-  const routeLimit = targetForDirection(currentSortOrder, direction, openRequests, activePassengers);
+  const pickupPhaseDirection = inferPickupPhaseDirection(currentSortOrder, direction, openRequests);
+  const routeLimit = targetForDirection(currentSortOrder, pickupPhaseDirection, openRequests, activePassengers);
 
   const scored = openRequests.map((request) =>
     scoreRequest({
       request,
       currentSortOrder,
-      direction,
+      direction: pickupPhaseDirection,
       capacity,
       remainingCapacity,
       oldestSequence,
@@ -280,10 +297,10 @@ export function getRecommendedNextStop({
   );
 
   const capacityWarnings = scored.flatMap((item) => item.warnings);
-  const viable = scored
-    .filter((item) => item.isCapacityValid)
-    .sort((a, b) => b.score - a.score || a.request.sequence_number - b.request.sequence_number);
-
+  const scoredSorted = [...scored].sort(
+    (a, b) => b.score - a.score || a.request.sequence_number - b.request.sequence_number,
+  );
+  const viable = scoredSorted.filter((item) => item.isCapacityValid);
   const winner = viable[0] ?? null;
 
   if (!winner) {
@@ -291,7 +308,10 @@ export function getRecommendedNextStop({
       nextFloor: null,
       nextFloorSortOrder: null,
       primaryPickupRequestId: null,
-      reason: buildReason(currentFloor, null, [], prioritiesEnabled, floors),
+      reason:
+        openRequests.length === 0
+          ? buildReason(currentFloor, null, [], prioritiesEnabled, floors)
+          : buildDeferredHallCallReason(remainingCapacity, openRequests.length),
       requestsToPickup: [],
       requestsToDropoff: [],
       suggestedDirection: "idle",
@@ -302,9 +322,7 @@ export function getRecommendedNextStop({
   const nextSortOrder = winner.request.from_sort_order;
   const suggestedDirection =
     nextSortOrder > currentSortOrder ? "up" : nextSortOrder < currentSortOrder ? "down" : "idle";
-  const pickupAtSameStop = viable
-    .filter((item) => item.request.from_sort_order === nextSortOrder)
-    .map((item) => item.request);
+  const pickupAtSameStop = viable.filter((item) => item.request.from_sort_order === nextSortOrder).map((item) => item.request);
 
   return {
     nextFloor: resolveFloorEntity(floors, nextSortOrder),

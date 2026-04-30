@@ -66,8 +66,15 @@ function scoreElevator(
 
   const remainingCapacity = Math.max(0, elevator.capacity - elevator.current_load);
   const queuePenalty = elevator.queue.length * 4;
-  const capacityPenalty =
-    request.passenger_count > elevator.capacity ? 1000 : request.passenger_count > remainingCapacity ? 90 : 0;
+  /** Pleins ou quasi pleins : fortement privilegier une autre cabine avec place (aller-retour plus tard). */
+  let capacityPenalty = 0;
+  if (request.passenger_count > elevator.capacity) {
+    capacityPenalty = 1000;
+  } else if (remainingCapacity === 0) {
+    capacityPenalty = 440;
+  } else if (request.passenger_count > remainingCapacity) {
+    capacityPenalty = 160 + (request.passenger_count - remainingCapacity) * 42;
+  }
   const tightStopPenalty =
     onRoute && sameDirection && Math.abs(fromSort - cur) <= 1 && elevator.queue.length > 0 ? 160 : 0;
   const detourPenalty = onRoute ? 0 : Math.abs(fromSort - cur) * 18;
