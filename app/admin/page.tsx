@@ -8,7 +8,7 @@ import { getProjects } from "@/lib/projects";
 export default async function AdminPage() {
   await requireUser();
   const profile = await getCurrentProfile();
-  const projects = await getProjects();
+  const { projects, loadError, qrReadyProjectIds } = await getProjects();
 
   return (
     <AppShell
@@ -24,7 +24,7 @@ export default async function AdminPage() {
         </div>
       )}
       <div className="grid gap-5">
-        <AdminProjectManager projects={projects} />
+        <AdminProjectManager projects={projects} projectsLoadError={loadError} qrReadyProjectIds={qrReadyProjectIds} />
       </div>
     </AppShell>
   );

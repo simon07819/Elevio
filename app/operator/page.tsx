@@ -2,17 +2,19 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { AppNavigation } from "@/components/AppNavigation";
 import { T } from "@/components/i18n/LanguageProvider";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
-import { OperatorKeepAwake } from "@/components/operator/OperatorKeepAwake";
-import { OperatorTabletSessionsPanel } from "@/components/operator/OperatorTabletSessionsPanel";
 import { OperatorWorkspace } from "@/components/operator/OperatorWorkspace";
-import { requireUser } from "@/lib/auth";
+import { getCurrentProfile, requireUser } from "@/lib/auth";
 import { getAdminProjectData } from "@/lib/adminProject";
 import { getProjects } from "@/lib/projects";
 import type { ActivePassenger } from "@/types/hoist";
 
 export default async function OperatorPage() {
-  await requireUser();
-  const projects = await getProjects();
+  const user = await requireUser();
+  const profile = await getCurrentProfile();
+  const operatorDisplayName =
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() || profile?.email || user.email || "";
+
+  const { projects } = await getProjects();
   const project = projects.find((item) => item.active) ?? projects[0];
   const data = project ? await getAdminProjectData(project.id) : null;
   const activePassengers: ActivePassenger[] =
@@ -43,20 +45,17 @@ export default async function OperatorPage() {
         <div className="flex flex-wrap items-center justify-end gap-2">
           <AppNavigation compact />
           <LanguageSwitcher />
-          <OperatorKeepAwake />
         </div>
       </header>
       {data && project && data.elevators.length > 0 ? (
-        <>
-          <OperatorTabletSessionsPanel projectId={project.id} elevators={data.elevators} />
-          <OperatorWorkspace
-            project={project}
-            floors={data.floors}
-            elevators={data.elevators}
-            requests={data.requests}
-            activePassengers={activePassengers}
-          />
-        </>
+        <OperatorWorkspace
+          project={project}
+          floors={data.floors}
+          elevators={data.elevators}
+          requests={data.requests}
+          activePassengers={activePassengers}
+          operatorDisplayName={operatorDisplayName}
+        />
       ) : (
         <div className="mx-auto max-w-7xl rounded-3xl border border-white/10 bg-white/8 p-5 text-white">
           <T k="operator.noElevator" />

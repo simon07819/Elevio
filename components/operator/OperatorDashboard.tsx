@@ -23,11 +23,13 @@ export function OperatorDashboard({
   requests = demoRequests,
   elevator = demoElevator,
   activePassengers = demoActivePassengers,
+  prioritiesEnabled = true,
 }: {
   floors?: Floor[];
   requests?: HoistRequest[];
   elevator?: Elevator;
   activePassengers?: ActivePassenger[];
+  prioritiesEnabled?: boolean;
 }) {
   const [liveRequests, setLiveRequests] = useState(requests);
   const projectId = elevator.project_id;
@@ -85,6 +87,8 @@ export function OperatorDashboard({
     capacity: elevator.capacity,
     currentLoad: elevator.current_load,
     activePassengers: liveActivePassengers.length > 0 ? liveActivePassengers : activePassengers,
+    floors,
+    prioritiesEnabled,
   });
   const recommendedIds = new Set(recommendation.requestsToPickup.map((request) => request.id));
   const liveQueue = [...enriched].sort((a, b) => {
@@ -98,12 +102,12 @@ export function OperatorDashboard({
     return (
       aTerminal - bTerminal ||
       bRecommended - aRecommended ||
-      Number(b.priority) - Number(a.priority) ||
+      (prioritiesEnabled ? Number(b.priority) - Number(a.priority) : 0) ||
       bCapacityValid - aCapacityValid ||
       new Date(a.wait_started_at).getTime() - new Date(b.wait_started_at).getTime()
     );
   });
-  const priorityCount = enriched.filter((request) => request.priority).length;
+  const priorityCount = prioritiesEnabled ? enriched.filter((request) => request.priority).length : 0;
   const capacityBlockedCount = enriched.filter((request) => request.passenger_count > remaining).length;
   const activeQueue = liveQueue.filter((request) => request.status !== "completed" && request.status !== "cancelled");
   const actionRequests = [
@@ -126,7 +130,11 @@ export function OperatorDashboard({
           <div className="rounded-3xl border border-white/10 bg-white/8 p-4">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400"><T k="operator.requests" /></p>
             <p className="mt-2 text-2xl font-black text-white">{activeQueue.length}</p>
-            <p className="text-xs font-bold text-orange-200">{priorityCount} <T k="operator.priority" /></p>
+            {prioritiesEnabled ? (
+              <p className="text-xs font-bold text-orange-200">
+                {priorityCount} <T k="operator.priority" />
+              </p>
+            ) : null}
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/8 p-4">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400"><T k="operator.capacity" /></p>

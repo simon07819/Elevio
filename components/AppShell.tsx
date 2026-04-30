@@ -16,7 +16,7 @@ export function AppShell({
   subtitle?: ReactNode;
 }) {
   return (
-    <main className="relative z-10 mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 py-5 pb-16 sm:px-6 lg:px-8">
+    <main className="relative z-10 mx-auto flex min-h-dvh w-full max-w-7xl min-w-0 flex-col overflow-x-clip px-4 py-5 pb-16 sm:px-6 lg:px-8">
       <header className="no-print mb-6 flex items-center justify-between gap-4">
         <Link href="/" className="flex items-center gap-3">
           <BrandLogo size="md" priority />

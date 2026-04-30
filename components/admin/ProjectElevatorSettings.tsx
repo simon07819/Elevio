@@ -6,7 +6,6 @@ import { Gauge, Plus, Save, Trash2 } from "lucide-react";
 import { createElevator, deleteElevator, updateElevatorSettings } from "@/lib/actions";
 import { elevatorDuplicateMessage } from "@/lib/elevatorMessages";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
-import { ServiceTimePicker } from "@/components/ServiceTimePicker";
 import type { Elevator } from "@/types/hoist";
 
 type MutationResult = { ok: boolean; message: string; elevator?: Elevator };
@@ -139,8 +138,8 @@ function ElevatorFields({ elevator }: { elevator?: Elevator }) {
         placeholder={t("elevator.namePlaceholder")}
         className="min-h-11 w-full min-w-0 rounded-2xl bg-white px-4 py-3 font-bold text-slate-950 outline-none"
       />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:items-start lg:justify-items-start">
-        <div className="flex w-full max-w-full flex-col items-start gap-1.5 sm:max-w-[12rem]">
+      <div className="flex w-full max-w-full flex-col gap-4 sm:max-w-[12rem]">
+        <div className="flex w-full flex-col items-start gap-1.5">
           <label htmlFor={elevator ? `elev-cap-${elevator.id}` : "elev-cap-create"} className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
             {t("elevator.capacityLabel")}
           </label>
@@ -154,32 +153,6 @@ function ElevatorFields({ elevator }: { elevator?: Elevator }) {
             className="min-h-11 w-full max-w-[6.5rem] rounded-2xl bg-white px-3 py-3 text-center text-base font-black tabular-nums text-slate-950 outline-none"
           />
         </div>
-        {elevator ? (
-          <>
-            <div className="flex w-full max-w-full flex-col items-start gap-1.5">
-              <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
-                {t("elevator.serviceStartLabel")}
-              </span>
-              <ServiceTimePicker
-                key={`${elevator.id}-serviceStart-${elevator.service_start_time ?? ""}`}
-                name="serviceStart"
-                defaultTime={elevator.service_start_time ?? "07:00:00"}
-                ariaLabel={t("elevator.serviceStartLabel")}
-              />
-            </div>
-            <div className="flex w-full max-w-full flex-col items-start gap-1.5">
-              <span className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
-                {t("elevator.serviceEndLabel")}
-              </span>
-              <ServiceTimePicker
-                key={`${elevator.id}-serviceEnd-${elevator.service_end_time ?? ""}`}
-                name="serviceEnd"
-                defaultTime={elevator.service_end_time ?? "15:00:00"}
-                ariaLabel={t("elevator.serviceEndLabel")}
-              />
-            </div>
-          </>
-        ) : null}
       </div>
     </div>
   );

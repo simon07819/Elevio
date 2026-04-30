@@ -104,14 +104,9 @@ textarea {
   print-color-adjust: exact;
 }
 
-/* Rangée logos pied de page QR : une seule ligne (carte + impression). */
+/* Rangée logos pied de page QR : une seule ligne à l’impression. */
 .qr-brand-footer-row {
   flex-wrap: nowrap;
-}
-
-/* Full-sheet QR layout is only for printing (preview cards live in .no-print). */
-.qr-pages {
-  display: none;
 }
 
 @media print {
@@ -139,16 +134,17 @@ textarea {
     color: #020617 !important;
   }
 
-  .qr-pages {
+  .qr-poster-grid {
     display: block !important;
+    width: 100%;
   }
 
   .qr-brand-footer-row {
     flex-wrap: nowrap !important;
   }
 
-  /* Pied logos QR : groupe centré sur la largeur utile (letter). */
-  .qr-sheet-print .qr-sheet-brand-footer {
+  /* Pied logos QR : centré sur la largeur utile */
+  .qr-floor-poster .qr-sheet-brand-footer {
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
@@ -156,71 +152,42 @@ textarea {
     width: 100%;
   }
 
-  .qr-sheet-print .qr-sheet-brand-footer .qr-brand-footer-row {
+  .qr-floor-poster .qr-sheet-brand-footer .qr-brand-footer-row {
     margin-inline: auto;
     justify-content: center !important;
   }
 
-  /* Mode noir et blanc (option admin) : uniquement pour la zone imprimée */
-  .qr-print-sheet[data-print-bw="true"] .qr-pages {
+  .qr-print-sheet[data-print-bw="true"] .qr-poster-grid {
     filter: grayscale(100%);
   }
 
-  .qr-page {
-    min-height: calc(11in - 24mm);
+  /* Une affiche = une page ; tout le bloc évite la coupure au milieu */
+  .qr-floor-poster {
+    break-inside: avoid;
+    page-break-inside: avoid;
     page-break-after: always;
     break-after: page;
-    page-break-inside: avoid;
-    break-inside: avoid;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: 0;
+    max-width: 100%;
   }
 
-  /* Affiche QR : une page Letter sans étirer le contenu sur toute la hauteur */
-  .qr-sheet-print.qr-page {
-    min-height: auto;
-    justify-content: flex-start;
-    gap: 0.35rem;
-  }
-
-  .qr-sheet-print .qr-page-instructions .grid {
-    gap: 0.35rem !important;
-    margin-top: 0.35rem !important;
-  }
-
-  .qr-sheet-print .qr-page-instructions li {
-    font-size: 8pt;
-    line-height: 1.2;
-  }
-
-  .qr-page:last-child {
+  .qr-floor-poster:last-child {
     page-break-after: auto;
     break-after: auto;
   }
 
-  .qr-print-sheet[data-print-floor-id] .qr-page {
-    display: none;
+  .qr-print-sheet[data-print-floor-id] .qr-floor-poster {
+    display: none !important;
   }
 
-  .qr-print-sheet[data-print-floor-id] .qr-page[data-print-selected="true"] {
-    display: flex;
+  .qr-print-sheet[data-print-floor-id] .qr-floor-poster[data-print-selected="true"] {
+    display: block !important;
     page-break-after: auto;
     break-after: auto;
   }
 
-  .qr-page-header,
-  .qr-page-body,
-  .qr-page-instructions,
-  .qr-page-footer {
+  /* Instructions FR/EN : éviter une coupure orpheline si possible */
+  .qr-poster-instructions {
     page-break-inside: avoid;
     break-inside: avoid;
-  }
-
-  .qr-floor-card {
-    page-break-inside: avoid;
-    break-inside: avoid;
-    box-shadow: none !important;
   }
 }

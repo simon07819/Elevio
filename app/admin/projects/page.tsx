@@ -6,11 +6,11 @@ import { getProjects } from "@/lib/projects";
 
 export default async function AdminProjectsPage() {
   await requireUser();
-  const projects = await getProjects();
+  const { projects, loadError, qrReadyProjectIds } = await getProjects();
 
   return (
     <AppShell eyebrow={<T k="admin.eyebrow" />} title={<T k="admin.projectsTitle" />} subtitle={<T k="admin.projectsSubtitle" />}>
-      <AdminProjectManager projects={projects} />
+      <AdminProjectManager projects={projects} projectsLoadError={loadError} qrReadyProjectIds={qrReadyProjectIds} />
     </AppShell>
   );
 }

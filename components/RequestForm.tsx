@@ -44,6 +44,7 @@ export function RequestForm({
   const [submittedRequest, setSubmittedRequest] = useState<SubmittedRequest | null>(null);
   const [isPending, startTransition] = useTransition();
   const { t } = useLanguage();
+  const prioritiesEnabled = project.priorities_enabled !== false;
   const destinationFloor = floors.find((floor) => floor.id === destinationId);
   const currentElevatorFloor = floors.find((floor) => floor.id === demoElevator.current_floor_id);
   const estimatedArrival = estimateArrivalWindow({
@@ -59,6 +60,13 @@ export function RequestForm({
           .map((r) => `${formatPostgresTimeToAmPm(r.start)}–${formatPostgresTimeToAmPm(r.end)}`)
           .join(", ")
       : `${formatPostgresTimeToAmPm("07:00")}–${formatPostgresTimeToAmPm("15:00")}`;
+
+  useEffect(() => {
+    if (!prioritiesEnabled) {
+      setPriority(false);
+      setShowSpecialNeed(false);
+    }
+  }, [prioritiesEnabled]);
 
   useEffect(() => {
     if (!submittedRequest || submittedRequest.requestId === "demo-local-request") {
@@ -247,36 +255,40 @@ export function RequestForm({
           </div>
         </label>
 
-        <button
-          type="button"
-          onClick={() => setShowSpecialNeed((value) => !value)}
-          className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 active:scale-[0.99]"
-        >
-          <ShieldAlert size={16} />
-          {t("request.special")}
-        </button>
+        {prioritiesEnabled ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setShowSpecialNeed((value) => !value)}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700 active:scale-[0.99]"
+            >
+              <ShieldAlert size={16} />
+              {t("request.special")}
+            </button>
 
-        {showSpecialNeed && (
-          <div className="mt-2 rounded-2xl border border-orange-200 bg-orange-50 p-3">
-            <label className="flex cursor-pointer items-center justify-between gap-4">
-              <span className="text-sm font-black text-slate-950">{t("request.urgent")}</span>
-              <input
-                name="priority"
-                type="checkbox"
-                checked={priority}
-                onChange={(event) => setPriority(event.target.checked)}
-                className="size-8 accent-yellow-300"
-              />
-            </label>
-            <textarea
-              name="priorityReason"
-              required={priority}
-              rows={1}
-              className="mt-2 w-full rounded-2xl border border-orange-200 bg-white p-3 text-sm text-slate-950 outline-none focus:border-yellow-300"
-              placeholder={t("request.urgentPlaceholder")}
-            />
-          </div>
-        )}
+            {showSpecialNeed ? (
+              <div className="mt-2 rounded-2xl border border-orange-200 bg-orange-50 p-3">
+                <label className="flex cursor-pointer items-center justify-between gap-4">
+                  <span className="text-sm font-black text-slate-950">{t("request.urgent")}</span>
+                  <input
+                    name="priority"
+                    type="checkbox"
+                    checked={priority}
+                    onChange={(event) => setPriority(event.target.checked)}
+                    className="size-8 accent-yellow-300"
+                  />
+                </label>
+                <textarea
+                  name="priorityReason"
+                  required={priority}
+                  rows={1}
+                  className="mt-2 w-full rounded-2xl border border-orange-200 bg-white p-3 text-sm text-slate-950 outline-none focus:border-yellow-300"
+                  placeholder={t("request.urgentPlaceholder")}
+                />
+              </div>
+            ) : null}
+          </>
+        ) : null}
 
         <button
           type="submit"

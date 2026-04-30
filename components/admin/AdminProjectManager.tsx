@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
-import { Archive, Building2, Power, Settings, Trash2 } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { Archive, Building2, Power, QrCode, Settings, Trash2 } from "lucide-react";
 import {
   activateProject,
   archiveProject,
@@ -18,17 +18,32 @@ type ProjectActionResult = {
   project?: Project;
 };
 
+const PRIORITIES_ENABLED_MIGRATION_SQL =
+  "alter table projects add column if not exists priorities_enabled boolean not null default true;";
+
 function statusClass(project: Project) {
   if (project.active) return "bg-emerald-400 text-slate-950";
   if (project.archived_at) return "bg-slate-700 text-slate-100";
   return "bg-yellow-300 text-slate-950";
 }
 
-export function AdminProjectManager({ projects }: { projects: Project[] }) {
+export function AdminProjectManager({
+  projects,
+  projectsLoadError,
+  qrReadyProjectIds = [],
+}: {
+  projects: Project[];
+  projectsLoadError?: string | null;
+  qrReadyProjectIds?: string[];
+}) {
   const [localProjects, setLocalProjects] = useState(projects);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const { t } = useLanguage();
+
+  useEffect(() => {
+    setLocalProjects(projects);
+  }, [projects]);
 
   function projectStatusLabel(project: Project) {
     if (project.active) return t("common.active");
@@ -48,27 +63,37 @@ export function AdminProjectManager({ projects }: { projects: Project[] }) {
 
   return (
     <section className="grid gap-5">
-      <div className="glass-panel rounded-[2rem] p-5">
-        <div className="flex flex-wrap items-start gap-4">
-          <div className="flex items-center gap-3">
-            <span className="grid size-12 place-items-center rounded-2xl bg-yellow-300/15 text-yellow-200">
-              <Building2 />
+      {projectsLoadError ? (
+        <div className="rounded-[2rem] border border-red-400/35 bg-red-500/10 px-5 py-4 sm:px-6">
+          <p className="text-sm font-black text-red-100">{t("admin.projectsLoadErrorTitle")}</p>
+          <p className="mt-2 font-mono text-xs leading-relaxed text-red-200/85">{projectsLoadError}</p>
+          {projectsLoadError.includes("priorities_enabled") ? (
+            <div className="mt-4 rounded-xl border border-emerald-400/35 bg-emerald-950/50 p-4">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">{t("admin.projectsLoadErrorPrioritiesTitle")}</p>
+              <p className="mt-2 text-sm font-bold text-emerald-100/95">{t("admin.projectsLoadErrorPrioritiesSteps")}</p>
+              <pre className="mt-3 overflow-x-auto rounded-lg border border-white/10 bg-slate-950/80 p-3 text-left text-xs leading-snug text-emerald-50">
+                <code>{PRIORITIES_ENABLED_MIGRATION_SQL}</code>
+              </pre>
+              <p className="mt-2 text-xs font-semibold text-emerald-200/80">{t("admin.projectsLoadErrorPrioritiesFileHint")}</p>
+            </div>
+          ) : null}
+          <p className="mt-3 text-xs font-bold text-red-200/70">{t("admin.projectsLoadErrorHint")}</p>
+        </div>
+      ) : null}
+
+      <div className="glass-panel overflow-hidden rounded-[2rem]">
+        <div className="border-b border-white/10 bg-gradient-to-br from-white/[0.06] to-transparent px-5 py-6 sm:px-8 sm:py-7">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+            <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-yellow-300/15 text-yellow-200 ring-1 ring-inset ring-yellow-300/25">
+              <Building2 aria-hidden className="size-7" strokeWidth={2} />
             </span>
-            <div>
+            <div className="min-w-0 flex-1 space-y-2">
               <p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-200">{t("project.createSite")}</p>
-              <h2 className="text-2xl font-black text-white">{t("project.newElevioProject")}</h2>
-              <p className="text-sm font-bold text-slate-400">
-                {t("project.createBody")}
-              </p>
+              <h2 className="text-2xl font-black tracking-tight text-white sm:text-[1.65rem]">{t("project.newElevioProject")}</h2>
+              <p className="max-w-2xl text-sm font-bold leading-relaxed text-slate-400">{t("project.createBody")}</p>
             </div>
           </div>
         </div>
-
-        {message && (
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/10 p-3 text-sm font-bold text-slate-100">
-            {message}
-          </div>
-        )}
 
         <form
           action={(formData) => {
@@ -84,6 +109,7 @@ export function AdminProjectManager({ projects }: { projects: Project[] }) {
                   name,
                   address,
                   active,
+                  priorities_enabled: true,
                   created_at: now,
                   updated_at: now,
                   archived_at: null,
@@ -95,29 +121,57 @@ export function AdminProjectManager({ projects }: { projects: Project[] }) {
               ]);
             });
           }}
-          className="mt-5 grid gap-3 rounded-3xl border border-white/10 bg-slate-950/50 p-4 lg:grid-cols-[1fr_1fr_auto_auto]"
+          className="grid gap-6 px-5 py-6 sm:px-8 sm:py-8"
         >
-          <input
-            name="name"
-            required
-            placeholder={t("project.siteNamePlaceholder")}
-            className="rounded-2xl border border-white/10 bg-white px-4 py-4 font-bold text-slate-950 outline-none"
-          />
-          <input
-            name="address"
-            placeholder={t("project.addressPlaceholder")}
-            className="rounded-2xl border border-white/10 bg-white px-4 py-4 font-bold text-slate-950 outline-none"
-          />
-          <label className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-black text-white">
-            <input name="active" type="checkbox" defaultChecked className="size-5 accent-yellow-300" />
-            {t("project.activateNow")}
-          </label>
-          <button
-            disabled={isPending}
-            className="touch-target rounded-2xl bg-yellow-300 px-5 py-3 font-black text-slate-950 disabled:opacity-60"
-          >
-            {t("project.createButton")}
-          </button>
+          {message ? (
+            <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-bold text-slate-100">
+              {message}
+            </div>
+          ) : null}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="grid gap-2 text-sm font-black text-slate-200">
+              {t("project.siteNamePlaceholder")}
+              <input
+                name="name"
+                required
+                autoComplete="organization"
+                className="rounded-2xl border border-white/10 bg-white px-4 py-3.5 font-bold text-slate-950 outline-none ring-yellow-300/0 transition-shadow focus-visible:ring-2 focus-visible:ring-yellow-300/50"
+              />
+            </label>
+            <label className="grid gap-2 text-sm font-black text-slate-200">
+              {t("project.addressPlaceholder")}
+              <input
+                name="address"
+                autoComplete="street-address"
+                className="rounded-2xl border border-white/10 bg-white px-4 py-3.5 font-bold text-slate-950 outline-none ring-yellow-300/0 transition-shadow focus-visible:ring-2 focus-visible:ring-yellow-300/50"
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-col gap-4 border-t border-white/10 pt-5 lg:flex-row lg:flex-nowrap lg:items-center lg:justify-between lg:gap-6">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-black text-white lg:shrink-0">
+              <input
+                name="prioritiesEnabled"
+                type="checkbox"
+                value="on"
+                defaultChecked
+                className="size-5 shrink-0 accent-yellow-300"
+              />
+              {t("project.prioritiesEnabledLabel")}
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-black text-white lg:shrink-0">
+              <input name="active" type="checkbox" defaultChecked className="size-5 shrink-0 accent-yellow-300" />
+              {t("project.activateNow")}
+            </label>
+            <button
+              type="submit"
+              disabled={isPending}
+              className="touch-target rounded-2xl bg-yellow-300 px-6 py-3.5 text-base font-black text-slate-950 shadow-lg shadow-yellow-950/20 transition hover:bg-yellow-200 disabled:opacity-60 lg:ml-4 lg:min-w-[14rem]"
+            >
+              {t("project.createButton")}
+            </button>
+          </div>
         </form>
       </div>
 
@@ -151,6 +205,15 @@ export function AdminProjectManager({ projects }: { projects: Project[] }) {
                     <Settings className="mr-1 inline" size={14} />
                     {t("project.configureFloors")}
                   </Link>
+                  {qrReadyProjectIds.includes(project.id) ? (
+                    <Link
+                      href={`/admin/qrcodes?projectId=${project.id}`}
+                      className="rounded-xl border border-cyan-400/35 bg-cyan-500/15 px-4 py-3 text-sm font-black text-cyan-50 hover:bg-cyan-500/25"
+                    >
+                      <QrCode className="mr-1 inline" size={14} />
+                      {t("project.listPrintQr")}
+                    </Link>
+                  ) : null}
                   {!project.active && (
                     <button
                       type="button"

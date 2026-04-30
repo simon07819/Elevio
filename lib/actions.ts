@@ -6,7 +6,7 @@ import { demoFloors } from "@/lib/demoData";
 import { floorLabelForSortOrder, getDirection, isUuid } from "@/lib/utils";
 import { assignRequestToBestElevator } from "@/services/multiElevatorDispatch";
 import { elevatorDuplicateMessage } from "@/lib/elevatorMessages";
-import type { Elevator, Floor, HoistRequest, Project, RequestEventType, RequestStatus } from "@/types/hoist";
+import type { Direction, Elevator, Floor, HoistRequest, Project, RequestEventType, RequestStatus } from "@/types/hoist";
 
 import { elevatorHasOperatorTabletBinding, isOperatorTabletSessionStale } from "@/lib/operatorTablet";
 import {
@@ -28,10 +28,6 @@ function normalizedDbTimeFromInput(raw: string): string | null {
   if (/^\d{2}:\d{2}$/.test(t)) return `${t}:00`;
   if (/^\d{2}:\d{2}:\d{2}$/.test(t)) return t;
   return null;
-}
-
-function elevatorServiceTimesFromForm(formData: FormData): { ok: true; start: string; end: string } | { ok: false; message: string } {
-  return parseElevatorServiceTimes(String(formData.get("serviceStart") ?? ""), String(formData.get("serviceEnd") ?? ""));
 }
 
 function parseElevatorServiceTimes(
@@ -81,6 +77,7 @@ function projectPayload(formData: FormData) {
     name: String(formData.get("name") ?? "").trim(),
     address: String(formData.get("address") ?? "").trim(),
     service_timezone,
+    priorities_enabled: formData.get("prioritiesEnabled") === "on",
   };
 }
 
@@ -127,7 +124,7 @@ export async function createProject(formData: FormData) {
       active: makeActive,
       archived_at: null,
     })
-    .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone")
+    .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled")
     .single();
 
   if (error) {
@@ -169,6 +166,8 @@ export async function updateProject(projectId: string, formData: FormData) {
 
   revalidatePath("/admin");
   revalidatePath("/admin/projects");
+  revalidatePath("/operator");
+  revalidatePath("/request");
   return { ok: true, message: "Projet modifie." };
 }
 
@@ -560,11 +559,6 @@ export async function updateElevatorSettings(elevatorId: string, projectId: stri
     return { ok: false, message: "Nom et capacite sont obligatoires." };
   }
 
-  const serviceTimes = elevatorServiceTimesFromForm(formData);
-  if (!serviceTimes.ok) {
-    return { ok: false, message: serviceTimes.message };
-  }
-
   if (!supabase) {
     return { ok: true, message: "Mode demo: capacite modifiee localement." };
   }
@@ -582,8 +576,6 @@ export async function updateElevatorSettings(elevatorId: string, projectId: stri
     .update({
       name,
       capacity,
-      service_start_time: serviceTimes.start,
-      service_end_time: serviceTimes.end,
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId);
@@ -607,11 +599,17 @@ export async function activateOperatorElevator(
   tabletLabel?: string | null,
   serviceStart?: string | null,
   serviceEnd?: string | null,
+  capacityRaw?: string | number | null,
 ) {
   const supabase = await createClient();
 
   if (!sessionId) {
     return { ok: false, message: "Session tablette invalide." };
+  }
+
+  const capacity = Number.parseInt(String(capacityRaw ?? "").trim(), 10);
+  if (!Number.isFinite(capacity) || capacity < 1) {
+    return { ok: false, message: "Capacite invalide (minimum 1 passager)." };
   }
 
   const serviceTimes = parseElevatorServiceTimes(String(serviceStart ?? ""), String(serviceEnd ?? ""));
@@ -697,6 +695,7 @@ export async function activateOperatorElevator(
       current_floor_id: currentFloorId || null,
       direction: "idle",
       current_load: 0,
+      capacity,
       service_start_time: serviceTimes.start,
       service_end_time: serviceTimes.end,
     })
@@ -820,13 +819,11 @@ export async function createPassengerRequest(formData: FormData) {
   const fromFloorId = String(formData.get("fromFloorId") ?? "");
   const toFloorId = String(formData.get("toFloorId") ?? "");
   const passengerCount = Number(formData.get("passengerCount") ?? 1);
-  const priority = formData.get("priority") === "on";
-  const priorityReason = normalizeText(formData.get("priorityReason"));
+  const priorityRequested = formData.get("priority") === "on";
+  const priorityReasonRaw = normalizeText(formData.get("priorityReason"));
   const note = normalizeText(formData.get("note"));
 
-  if (priority && !priorityReason) {
-    return { ok: false, message: "La raison est obligatoire pour une priorite." };
-  }
+  let prioritiesAllowed = true;
 
   let fromFloor = demoFloors.find((floor) => floor.id === fromFloorId);
   let toFloor = demoFloors.find((floor) => floor.id === toFloorId);
@@ -848,7 +845,7 @@ export async function createPassengerRequest(formData: FormData) {
         .eq("project_id", projectId),
       supabase
         .from("projects")
-        .select("service_timezone")
+        .select("service_timezone,priorities_enabled")
         .eq("id", projectId)
         .eq("active", true)
         .is("archived_at", null)
@@ -870,8 +867,16 @@ export async function createPassengerRequest(formData: FormData) {
     }
 
     serviceTz = projectRow.service_timezone ?? DEFAULT_PROJECT_TIMEZONE;
+    prioritiesAllowed = projectRow.priorities_enabled !== false;
     elevators = (dbElevators ?? []) as Elevator[];
     activeRequests = (dbRequests ?? []) as HoistRequest[];
+  }
+
+  const priority = prioritiesAllowed && priorityRequested;
+  const priorityReason = priority ? priorityReasonRaw : null;
+
+  if (priority && !priorityReason) {
+    return { ok: false, message: "La raison est obligatoire pour une priorite." };
   }
 
   if (!fromFloor || !toFloor || fromFloor.id === toFloor.id) {
@@ -935,6 +940,7 @@ export async function createPassengerRequest(formData: FormData) {
       elevators,
       floors: projectFloors,
       requests: activeRequests,
+      prioritiesEnabled: prioritiesAllowed,
     });
     const assignedElevator = elevators.find((elevator) => elevator.id === assignment.elevatorId);
     const chunkSize = assignedElevator ? Math.min(remainingPassengers, assignedElevator.capacity) : remainingPassengers;
@@ -998,6 +1004,85 @@ export async function createPassengerRequest(formData: FormData) {
   };
 }
 
+const statusEventMap: Record<RequestStatus, RequestEventType> = {
+  pending: "deferred",
+  assigned: "assigned",
+  arriving: "arriving",
+  boarded: "boarded",
+  completed: "completed",
+  cancelled: "cancelled",
+};
+
+async function syncElevatorWithRequestStatus(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  requestId: string,
+  status: RequestStatus,
+) {
+  const { data: req } = await supabase
+    .from("requests")
+    .select("elevator_id, from_floor_id, to_floor_id, direction, project_id")
+    .eq("id", requestId)
+    .single();
+
+  if (!req?.elevator_id) {
+    return;
+  }
+
+  const elevatorId = req.elevator_id as string;
+  const projectId = req.project_id as string;
+
+  const { data: elevator } = await supabase.from("elevators").select("id, current_floor_id").eq("id", elevatorId).single();
+
+  if (!elevator) {
+    return;
+  }
+
+  const floorIds = [elevator.current_floor_id, req.from_floor_id, req.to_floor_id].filter(Boolean) as string[];
+
+  const { data: floorRows } = await supabase.from("floors").select("id, sort_order").in("id", floorIds);
+
+  const sortById = new Map((floorRows ?? []).map((row) => [row.id as string, row.sort_order as number]));
+
+  const currentSort =
+    elevator.current_floor_id != null ? sortById.get(elevator.current_floor_id as string) : undefined;
+  const fromSort = sortById.get(req.from_floor_id as string);
+  const reqDirection = req.direction as Exclude<Direction, "idle">;
+
+  let direction: Direction = "idle";
+  let current_floor_id: string | undefined;
+
+  if (status === "completed") {
+    direction = "idle";
+    current_floor_id = req.to_floor_id as string;
+  } else if (status === "cancelled" || status === "pending") {
+    direction = "idle";
+  } else if (status === "boarded") {
+    direction = reqDirection;
+    current_floor_id = req.from_floor_id as string;
+  } else if (status === "assigned" || status === "arriving") {
+    if (currentSort !== undefined && fromSort !== undefined) {
+      if (currentSort < fromSort) direction = "up";
+      else if (currentSort > fromSort) direction = "down";
+      else direction = "idle";
+    } else {
+      direction = "idle";
+    }
+  } else {
+    return;
+  }
+
+  const patch: Record<string, unknown> = { direction };
+  if (current_floor_id !== undefined) {
+    patch.current_floor_id = current_floor_id;
+  }
+
+  const { error } = await supabase.from("elevators").update(patch).eq("id", elevatorId).eq("project_id", projectId);
+
+  if (!error) {
+    revalidateAdminProject(projectId);
+  }
+}
+
 export async function updateRequestStatus(requestId: string, status: RequestStatus, message?: string) {
   const supabase = await createClient();
 
@@ -1024,6 +1109,8 @@ export async function updateRequestStatus(requestId: string, status: RequestStat
     return { ok: false, message: error.message };
   }
 
+  await syncElevatorWithRequestStatus(supabase, requestId, status);
+
   if (message) {
     const eventType = statusEventMap[status];
     await supabase.from("request_events").insert({
@@ -1034,6 +1121,7 @@ export async function updateRequestStatus(requestId: string, status: RequestStat
   }
 
   revalidatePath("/operator");
+  revalidatePath("/admin");
   return { ok: true, message: "Statut mis a jour." };
 }
 
@@ -1061,15 +1149,6 @@ export async function assignRequestElevator(requestId: string, elevatorId: strin
   revalidatePath("/admin");
   return { ok: true, message: elevatorId ? "Demande reassignee." : "Demande remise non assignee." };
 }
-
-const statusEventMap: Record<RequestStatus, RequestEventType> = {
-  pending: "deferred",
-  assigned: "assigned",
-  arriving: "arriving",
-  boarded: "boarded",
-  completed: "completed",
-  cancelled: "cancelled",
-};
 
 export async function advanceRequestStatus(requestId: string, status: RequestStatus) {
   const messages: Record<RequestStatus, string> = {

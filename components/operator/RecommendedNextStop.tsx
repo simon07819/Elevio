@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Navigation, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
 import { formatFloorLabel } from "@/lib/utils";
@@ -16,6 +17,7 @@ export function RecommendedNextStop({
 }) {
   const [handledIds, setHandledIds] = useState<Set<string>>(() => new Set());
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
   const { t } = useLanguage();
   const actionRequest = actionRequests.find(
     (request) =>
@@ -33,6 +35,7 @@ export function RecommendedNextStop({
       const result = await advanceRequestStatus(requestId, "boarded");
       if (result.ok) {
         setHandledIds((current) => new Set(current).add(requestId));
+        router.refresh();
       }
     });
   }

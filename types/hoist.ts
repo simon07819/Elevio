@@ -34,6 +34,8 @@ export type Project = {
   service_timezone?: string | null;
   /** Per-site logo on QR posters; falls back to profile `project_logo_url` when null. */
   logo_url?: string | null;
+  /** When false, passenger/operator hide priority UI and dispatch ignores priority scoring. */
+  priorities_enabled?: boolean;
 };
 
 export type Floor = {
@@ -59,7 +61,7 @@ export type Elevator = {
   operator_session_started_at: string | null;
   operator_session_heartbeat_at: string | null;
   operator_user_id: string | null;
-  /** Nom affiche pour distinguer la tablette ; saisi a l'activation, efface a la liberation. */
+  /** Etiquette auto-navigateur ou ancienne saisie ; affichee pour distinguer la tablette. */
   operator_tablet_label?: string | null;
   /** Local wall-clock service window (project.service_timezone). Postgres `time`. */
   service_start_time?: string | null;
@@ -140,6 +142,10 @@ export type DispatchInput = {
   capacity: number;
   currentLoad: number;
   activePassengers: ActivePassenger[];
+  /** Étages du projet pour libellés (RDC, etc.) dans les messages de dispatch. */
+  floors?: Floor[];
+  /** Default true. When false, priority flags do not affect recommendation scoring or messaging. */
+  prioritiesEnabled?: boolean;
 };
 
 export type DispatchRecommendation = {

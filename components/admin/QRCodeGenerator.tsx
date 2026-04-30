@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { Link as LinkIcon, Mail, Printer, Share2 } from "lucide-react";
@@ -26,40 +27,14 @@ function tr(locale: Locale, key: TranslationKey, values?: Record<string, string 
   return interpolate(translations[locale][key] ?? translations.fr[key] ?? key, values);
 }
 
-function QrSheetHeader({
-  variant,
-  requestTitle,
-  projectName,
-  address,
-}: {
-  variant: "card" | "print";
-  requestTitle: string;
-  projectName: string;
-  address: string;
-}) {
-  const isCard = variant === "card";
-
-  const titleClass = isCard ? "text-xl font-black leading-snug tracking-tight text-slate-950" : "text-2xl font-black leading-tight tracking-tight text-slate-950";
-  const projectClass = isCard ? "text-lg font-black leading-snug text-slate-900" : "text-xl font-black leading-snug text-slate-900";
-  const addressClass = isCard ? "text-sm font-semibold leading-snug text-slate-600" : "text-sm font-semibold leading-snug text-slate-600";
-
+function QrSheetHeader({ requestTitle, projectName, address }: { requestTitle: string; projectName: string; address: string }) {
   return (
-    <header
-      className={
-        isCard
-          ? "overflow-hidden border-b border-slate-200 bg-white"
-          : "qr-page-header border-b border-slate-900 pb-4"
-      }
-    >
-      <div className={isCard ? "p-5 pb-4" : ""}>
-        <div className="space-y-1.5 text-center text-balance">
-          {isCard ? (
-            <h3 className={titleClass}>{requestTitle}</h3>
-          ) : (
-            <h1 className={titleClass}>{requestTitle}</h1>
-          )}
-          <p className={projectClass}>{projectName}</p>
-          <p className={addressClass}>{address.trim() || "—"}</p>
+    <header className="overflow-hidden border-b border-slate-200 bg-white print:border-slate-300">
+      <div className="p-4 pb-3 sm:p-5 sm:pb-4 print:p-3 print:pb-2">
+        <div className="space-y-1 text-balance break-words px-1 text-center sm:space-y-1.5 sm:px-0 print:space-y-0.5">
+          <h3 className="text-xl font-black leading-snug tracking-tight text-slate-950 print:text-lg print:leading-tight">{requestTitle}</h3>
+          <p className="text-lg font-black leading-snug text-slate-900 print:text-base">{projectName}</p>
+          <p className="text-sm font-semibold leading-snug text-slate-600 print:text-xs">{address.trim() || "—"}</p>
         </div>
       </div>
     </header>
@@ -69,36 +44,29 @@ function QrSheetHeader({
 function QrSheetFooterBranding({
   companyLogoUrl,
   projectLogoUrl,
-  variant,
 }: {
   companyLogoUrl?: string | null;
   projectLogoUrl?: string | null;
-  variant: "card" | "print";
 }) {
   const hasClientLogos = Boolean(companyLogoUrl || projectLogoUrl);
 
-  const isPrint = variant === "print";
+  const outerClass =
+    "qr-sheet-brand-footer mt-2 flex w-full flex-col items-center border-t border-slate-200 px-2 pt-2 sm:mt-3 sm:px-3 sm:pt-3 print:mt-1 print:px-2 print:pt-2";
 
-  /** Bloc centré sur la page : rangée en inline-flex + slots largeur fixe (pas en % de toute la ligne). */
-  const outerClass = "mt-3 flex w-full flex-col items-center border-t border-slate-200 px-3 pt-3";
+  const rowClass =
+    "qr-brand-footer-row inline-flex max-w-full flex-nowrap items-center justify-center gap-3 sm:gap-6 print:gap-4";
 
-  const rowClass = isPrint
-    ? "qr-brand-footer-row qr-brand-footer-row--print inline-flex max-w-full flex-nowrap items-center justify-center gap-5 print:gap-7"
-    : "qr-brand-footer-row inline-flex max-w-full flex-nowrap items-center justify-center gap-4 sm:gap-6";
-
-  const slotClass = isPrint
-    ? "flex h-[3.25rem] w-[7rem] shrink-0 items-center justify-center sm:w-[7.5rem] print:h-[3.5rem] print:w-[7.5rem]"
-    : "flex h-11 w-[6.5rem] shrink-0 items-center justify-center sm:w-28";
+  const slotClass =
+    "flex h-9 w-20 shrink-0 items-center justify-center sm:h-11 sm:w-[6.5rem] md:w-28 print:h-9 print:w-[5.25rem]";
 
   const imgInSlot = "qr-brand-logo-img max-h-full max-w-full object-contain";
 
-  const elevioSoloClass = isPrint
-    ? "h-10 max-h-11 w-auto max-w-[min(88%,260px)] print:h-11"
-    : "h-8 max-h-9 w-auto max-w-[min(85%,220px)] print:h-9";
+  const elevioSoloClass =
+    "h-8 max-h-9 w-auto max-w-[min(85%,220px)] print:h-8 print:max-h-[2rem] print:max-w-[min(75%,200px)]";
 
   if (!hasClientLogos) {
     return (
-      <div className={`qr-sheet-brand-footer ${outerClass}`}>
+      <div className={outerClass}>
         <div className="flex justify-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-print.svg" alt="" className={elevioSoloClass} />
@@ -108,7 +76,7 @@ function QrSheetFooterBranding({
   }
 
   return (
-    <div className={`qr-sheet-brand-footer ${outerClass}`}>
+    <div className={outerClass}>
       <div className={rowClass}>
         <div className={slotClass}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -130,6 +98,98 @@ function QrSheetFooterBranding({
     </div>
   );
 }
+
+function QrFloorPoster({
+  floor,
+  project,
+  qrDataUrl,
+  requestTitle,
+  youAreAtText,
+  floorHeadingText,
+  withoutCameraHeading,
+  instructions,
+  companyLogoUrl,
+  projectLogoUrl,
+  printFloorId,
+  onPrintFloor,
+  onePageLabel,
+  printOneLabel,
+}: {
+  floor: Floor;
+  project: Project;
+  qrDataUrl?: string;
+  requestTitle: string;
+  youAreAtText: string;
+  floorHeadingText: string;
+  withoutCameraHeading: string;
+  instructions: ReactNode;
+  companyLogoUrl?: string | null;
+  projectLogoUrl?: string | null;
+  printFloorId: string | null;
+  onPrintFloor: (floorId: string) => void;
+  onePageLabel: string;
+  printOneLabel: string;
+}) {
+  return (
+    <article
+      data-floor-id={floor.id}
+      data-print-selected={printFloorId === floor.id ? "true" : undefined}
+      className="qr-floor-poster min-w-0 max-w-full overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-lg print:rounded-none print:shadow-none"
+    >
+      <QrSheetHeader requestTitle={requestTitle} projectName={project.name} address={project.address ?? ""} />
+
+      <div className="grid min-w-0 place-items-center bg-slate-50 p-3 text-center sm:p-5 print:p-2 print:pb-2">
+        <p className="break-words px-1 text-xs font-black uppercase tracking-[0.22em] text-slate-500 sm:text-sm print:text-[10px] print:leading-tight">
+          {youAreAtText}
+        </p>
+        <p className="mt-1 max-w-full break-words px-1 text-3xl font-black leading-none sm:mt-2 sm:text-5xl print:mt-1 print:text-4xl">
+          {floorHeadingText}
+        </p>
+        <div className="my-3 box-border max-w-full rounded-2xl border-4 border-slate-950 bg-white p-2 sm:my-4 sm:p-3 print:my-2 print:border-[3px] print:p-1.5">
+          {qrDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={qrDataUrl}
+              alt={`QR ${formatFloorLabel(floor)}`}
+              className="mx-auto aspect-square w-[min(100%,10rem)] max-w-full sm:w-40 print:w-[9rem]"
+            />
+          ) : (
+            <div className="mx-auto aspect-square w-[min(100%,10rem)] max-w-full animate-pulse rounded-2xl bg-slate-200 sm:w-40 print:w-[9rem]" />
+          )}
+        </div>
+        <div className="w-full max-w-full min-w-0 rounded-2xl bg-slate-950 p-2 text-white sm:p-3 print:p-2">
+          <p className="break-words text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300 sm:text-xs print:text-[9px]">
+            {withoutCameraHeading}
+          </p>
+          <p className="mt-1 break-all rounded-xl bg-white px-2 py-2 font-mono text-xl font-black tracking-[0.08em] text-slate-950 sm:mt-2 sm:px-3 sm:text-3xl sm:tracking-[0.12em] print:mt-1 print:py-1.5 print:text-2xl print:tracking-[0.1em]">
+            {floor.access_code}
+          </p>
+        </div>
+        <div className="mt-2 w-full max-w-full min-w-0 rounded-2xl bg-yellow-100 p-2 sm:mt-3 sm:p-3 print:mt-2 print:p-2">
+          <div className="qr-poster-instructions print:text-[10px] print:leading-snug [&_li]:print:text-[10px] [&_ol]:print:gap-1 [&_p]:print:text-[9px]">
+            {instructions}
+          </div>
+        </div>
+        <QrSheetFooterBranding companyLogoUrl={companyLogoUrl} projectLogoUrl={projectLogoUrl} />
+      </div>
+
+      <div className="bg-yellow-100 p-3 text-sm font-black text-slate-950 sm:p-4 print:p-2 print:text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span>{onePageLabel}</span>
+          <button
+            type="button"
+            onClick={() => onPrintFloor(floor.id)}
+            className="no-print rounded-xl bg-slate-950 px-4 py-3 text-xs font-black text-yellow-300"
+          >
+            <Printer className="mr-1 inline" size={14} />
+            {printOneLabel}
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export function QRCodeGenerator({
   project,
   floors,
@@ -163,9 +223,15 @@ export function QRCodeGenerator({
   function SheetInstructions({ compact = false }: { compact?: boolean }) {
     if (sheetLanguage === "both") {
       return (
-        <div className={compact ? "mt-3 grid gap-3 text-left text-xs font-bold sm:grid-cols-2" : "mt-4 grid gap-4 text-left text-base font-bold md:grid-cols-2"}>
+        <div
+          className={
+            compact
+              ? "mt-3 grid min-w-0 gap-3 text-left text-xs font-bold sm:grid-cols-2 print:mt-2 print:grid-cols-1 print:gap-2 print:[&>div]:p-2"
+              : "mt-4 grid gap-4 text-left text-base font-bold md:grid-cols-2"
+          }
+        >
           {(["fr", "en"] as const).map((locale) => (
-            <div key={locale} className="rounded-2xl bg-white px-4 py-3">
+            <div key={locale} className="min-w-0 overflow-hidden rounded-2xl bg-white px-3 py-3 sm:px-4">
               <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-slate-500">
                 {locale === "fr" ? "Français" : "English"}
               </p>
@@ -190,7 +256,13 @@ export function QRCodeGenerator({
             <li key={key}>{sheetText(key)}</li>
           ))}
         </ol>
-        <p className={compact ? "mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-black" : "mt-4 rounded-2xl bg-white px-4 py-3 text-base font-black"}>
+        <p
+          className={
+            compact
+              ? "mt-3 rounded-2xl bg-white px-3 py-2 text-xs font-black"
+              : "mt-4 rounded-2xl bg-white px-4 py-3 text-base font-black"
+          }
+        >
           {sheetText("qr.noCameraHelp")}
         </p>
       </>
@@ -260,7 +332,7 @@ export function QRCodeGenerator({
 
   return (
     <section
-      className="qr-print-sheet rounded-[2rem] bg-white p-5 text-slate-950 shadow-2xl print:rounded-none print:p-0 print:shadow-none"
+      className="qr-print-sheet w-full max-w-full min-w-0 rounded-[2rem] bg-white px-3 py-4 text-slate-950 shadow-2xl sm:p-5 print:rounded-none print:p-0 print:shadow-none"
       data-print-floor-id={printFloorId ?? undefined}
       data-print-bw={printBlackWhite ? "true" : undefined}
     >
@@ -268,12 +340,11 @@ export function QRCodeGenerator({
         <div>
           <p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-200">Administration QR</p>
           <h2 className="text-2xl font-black">{t("qr.title")}</h2>
-          <p className="mt-1 text-sm text-slate-300">
-            {t("qr.subtitle")}
-          </p>
+          <p className="mt-1 text-sm text-slate-300">{t("qr.subtitle")}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
+            type="button"
             onClick={() => window.print()}
             className="touch-target rounded-2xl bg-yellow-300 px-5 py-4 text-lg font-black text-slate-950"
           >
@@ -302,7 +373,9 @@ export function QRCodeGenerator({
           </button>
         </div>
       </div>
-      {message && <div className="no-print mb-5 rounded-2xl bg-emerald-100 p-3 text-sm font-black text-emerald-900">{message}</div>}
+      {message ? (
+        <div className="no-print mb-5 rounded-2xl bg-emerald-100 p-3 text-sm font-black text-emerald-900">{message}</div>
+      ) : null}
 
       <div className="no-print mb-5 rounded-3xl border border-slate-200 bg-slate-50 p-4">
         <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">{t("qr.sheetLanguage")}</p>
@@ -346,114 +419,29 @@ export function QRCodeGenerator({
           <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">{t("qr.previewTitle")}</p>
           <p className="mt-1 text-sm font-bold text-slate-600">{t("qr.previewBody")}</p>
         </div>
-        <div
-          className={`grid gap-4 md:grid-cols-2 xl:grid-cols-3 transition-[filter] duration-300 ease-out ${printBlackWhite ? "grayscale" : ""}`}
-        >
-          {floors.map((floor) => (
-            <article key={floor.id} className="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-lg">
-              <QrSheetHeader
-                variant="card"
-                requestTitle={sheetText("qr.requestTitle")}
-                projectName={project.name}
-                address={project.address ?? ""}
-              />
-
-              <div className="grid place-items-center bg-slate-50 p-5 text-center">
-                <p className="text-sm font-black uppercase tracking-[0.22em] text-slate-500">{sheetText("qr.youAreAt")}</p>
-                <p className="mt-2 text-5xl font-black leading-none">
-                  {sheetText("qr.floor", { floor: formatFloorLabel(floor) })}
-                </p>
-                <div className="my-5 rounded-2xl border-4 border-slate-950 bg-white p-3">
-                  {codes[floor.id] ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={codes[floor.id]} alt={`QR ${formatFloorLabel(floor)}`} className="size-40" />
-                  ) : (
-                    <div className="size-40 animate-pulse rounded-2xl bg-slate-200" />
-                  )}
-                </div>
-                <div className="w-full rounded-2xl bg-slate-950 p-3 text-white">
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-300">{sheetText("qr.withoutCamera")}</p>
-                  <p className="mt-2 rounded-xl bg-white px-3 py-2 font-mono text-3xl font-black tracking-[0.12em] text-slate-950">
-                    {floor.access_code}
-                  </p>
-                </div>
-                <div className="mt-4 w-full rounded-2xl bg-yellow-100 p-3">
-                  <SheetInstructions compact />
-                </div>
-                <QrSheetFooterBranding variant="card" companyLogoUrl={companyLogoUrl} projectLogoUrl={projectLogoUrl} />
-              </div>
-
-              <div className="bg-yellow-100 p-4 text-sm font-black text-slate-950">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span>{t("qr.onePage")}</span>
-                  <button
-                    type="button"
-                    onClick={() => printFloor(floor.id)}
-                    className="rounded-xl bg-slate-950 px-4 py-3 text-xs font-black text-yellow-300"
-                  >
-                    <Printer className="mr-1 inline" size={14} />
-                    {t("qr.printOne")}
-                  </button>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
       </div>
 
-      <div className="qr-pages">
+      <div
+        className={`qr-poster-grid grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3 transition-[filter] duration-300 ease-out ${printBlackWhite ? "grayscale" : ""}`}
+      >
         {floors.map((floor) => (
-          <article
+          <QrFloorPoster
             key={floor.id}
-            data-floor-id={floor.id}
-            data-print-selected={printFloorId === floor.id ? "true" : undefined}
-            className="qr-sheet-print qr-page bg-white text-slate-950"
-          >
-            <QrSheetHeader
-              variant="print"
-              requestTitle={sheetText("qr.requestTitle")}
-              projectName={project.name}
-              address={project.address ?? ""}
-            />
-
-            <main className="qr-page-body grid place-items-center py-3 text-center">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">{sheetText("qr.youAreAt")}</p>
-              <h2 className="mt-1 text-6xl font-black leading-none">{sheetText("qr.floor", { floor: formatFloorLabel(floor) })}</h2>
-              <div className="my-3 rounded-2xl border-4 border-slate-950 bg-white p-3">
-                {codes[floor.id] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={codes[floor.id]} alt={`QR ${formatFloorLabel(floor)}`} className="mx-auto size-48" />
-                ) : (
-                  <div className="mx-auto size-48 animate-pulse rounded-2xl bg-slate-200" />
-                )}
-              </div>
-              <div className="mt-2 w-full max-w-xl rounded-2xl border-4 border-slate-950 bg-slate-950 px-4 py-3 text-white">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
-                  {sheetText("qr.withoutCamera")}
-                </p>
-                <p className="mt-1 text-xs font-black leading-snug">
-                  {sheetText("qr.withoutCameraBody")}
-                </p>
-                <p className="mt-2 rounded-xl bg-white px-4 py-2 font-mono text-4xl font-black tracking-[0.12em] text-slate-950">
-                  {floor.access_code}
-                </p>
-              </div>
-            </main>
-
-            <section className="qr-page-instructions mt-2 rounded-xl bg-yellow-100 px-3 py-3">
-              <h3 className="text-lg font-black leading-tight text-slate-950">{sheetText("qr.howTitle")}</h3>
-              <SheetInstructions compact />
-            </section>
-
-            <footer className="qr-page-footer mt-3 rounded-xl bg-slate-950 px-4 py-3 text-center text-white">
-              <p className="text-base font-black leading-tight">{sheetText("qr.important")}</p>
-              <p className="mt-1 text-xs font-bold leading-snug">
-                {sheetText("qr.importantBody")}
-              </p>
-            </footer>
-
-            <QrSheetFooterBranding variant="print" companyLogoUrl={companyLogoUrl} projectLogoUrl={projectLogoUrl} />
-          </article>
+            floor={floor}
+            project={project}
+            qrDataUrl={codes[floor.id]}
+            requestTitle={sheetText("qr.requestTitle")}
+            youAreAtText={sheetText("qr.youAreAt")}
+            floorHeadingText={sheetText("qr.floor", { floor: formatFloorLabel(floor) })}
+            withoutCameraHeading={sheetText("qr.withoutCamera")}
+            instructions={<SheetInstructions compact />}
+            companyLogoUrl={companyLogoUrl}
+            projectLogoUrl={projectLogoUrl}
+            printFloorId={printFloorId}
+            onPrintFloor={printFloor}
+            onePageLabel={t("qr.onePage")}
+            printOneLabel={t("qr.printOne")}
+          />
         ))}
       </div>
     </section>

@@ -21,6 +21,7 @@ export const demoProject: Project = {
   archived_at: null,
   logo_url: null,
   service_timezone: "America/Toronto",
+  priorities_enabled: true,
 };
 
 export const demoProjects: Project[] = [
@@ -35,6 +36,7 @@ export const demoProjects: Project[] = [
     archived_at: null,
     logo_url: null,
     service_timezone: "America/Toronto",
+    priorities_enabled: true,
   },
   {
     id: "project-demo-archive",
@@ -46,6 +48,7 @@ export const demoProjects: Project[] = [
     archived_at: minutesAgo(3600),
     logo_url: null,
     service_timezone: "America/Toronto",
+    priorities_enabled: true,
   },
 ];
 

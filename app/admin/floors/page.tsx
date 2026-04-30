@@ -8,7 +8,7 @@ import { getProjects } from "@/lib/projects";
 
 export default async function AdminFloorsPage() {
   await requireUser();
-  const projects = await getProjects();
+  const { projects } = await getProjects();
   const project = projects.find((item) => item.active) ?? projects[0];
   const data = project ? await getAdminProjectData(project.id) : null;
 

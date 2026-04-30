@@ -52,7 +52,12 @@ function routeLimit(elevator: DispatchElevator, floors: Floor[]) {
   return elevator.current_sort_order;
 }
 
-function scoreElevator(elevator: DispatchElevator, request: DispatchableRequest, floors: Floor[]) {
+function scoreElevator(
+  elevator: DispatchElevator,
+  request: DispatchableRequest,
+  floors: Floor[],
+  prioritiesEnabled: boolean,
+) {
   const fromSort = floorSortOrder(floors, request.from_floor_id);
   const distance = Math.abs(fromSort - elevator.current_sort_order);
   const sameDirection = elevator.direction !== "idle" && elevator.direction === request.direction;
@@ -65,7 +70,7 @@ function scoreElevator(elevator: DispatchElevator, request: DispatchableRequest,
   const tightStopPenalty = onRoute && sameDirection && distance <= 1 && elevator.queue.length > 0 ? 160 : 0;
   const detourPenalty = onRoute ? 0 : distance * 18;
   const directionBonus = sameDirection ? -20 : elevator.direction === "idle" ? -8 : 24;
-  const priorityBonus = request.priority ? -60 : 0;
+  const priorityBonus = prioritiesEnabled && request.priority ? -60 : 0;
   const waitBonus = -Math.min(45, minutesWaiting(request));
 
   return (
@@ -85,11 +90,13 @@ export function assignRequestToBestElevator({
   elevators,
   floors,
   requests,
+  prioritiesEnabled = true,
 }: {
   request: DispatchableRequest;
   elevators: Elevator[];
   floors: Floor[];
   requests: HoistRequest[];
+  prioritiesEnabled?: boolean;
 }): ElevatorAssignment {
   const candidates: DispatchElevator[] = elevators
     .filter(
@@ -112,7 +119,7 @@ export function assignRequestToBestElevator({
   const scored = candidates
     .map((elevator) => ({
       elevator,
-      score: scoreElevator(elevator, request, floors),
+      score: scoreElevator(elevator, request, floors, prioritiesEnabled),
     }))
     .sort((a, b) => a.score - b.score || a.elevator.queue.length - b.elevator.queue.length);
 

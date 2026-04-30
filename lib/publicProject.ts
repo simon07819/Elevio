@@ -40,7 +40,7 @@ export async function getPublicRequestContext({
   const [{ data: project }, { data: floors }, { data: elevators }] = await Promise.all([
     supabase
       .from("projects")
-      .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,service_timezone")
+      .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,service_timezone,priorities_enabled")
       .eq("id", projectId)
       .eq("active", true)
       .is("archived_at", null)

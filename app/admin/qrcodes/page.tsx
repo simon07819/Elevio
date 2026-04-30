@@ -12,7 +12,7 @@ export default async function AdminQRCodesPage({
 }) {
   await requireUser();
   const { projectId } = await searchParams;
-  const projects = await getProjects();
+  const { projects } = await getProjects();
   const selectedProject = projects.find((project) => project.id === projectId) ?? projects.find((project) => project.active) ?? projects[0];
   const data = selectedProject ? await getAdminProjectData(selectedProject.id) : null;
 
@@ -23,12 +23,14 @@ export default async function AdminQRCodesPage({
       subtitle={<T k="qr.pageSubtitle" />}
     >
       {data ? (
-        <QRCodeGenerator
-          project={data.project}
-          floors={data.floors.filter((floor) => floor.active)}
-          companyLogoUrl={data.branding.company_logo_url}
-          projectLogoUrl={data.project.logo_url ?? data.branding.project_logo_url}
-        />
+        <div className="w-full min-w-0 max-w-full overflow-x-clip">
+          <QRCodeGenerator
+            project={data.project}
+            floors={data.floors.filter((floor) => floor.active)}
+            companyLogoUrl={data.branding.company_logo_url}
+            projectLogoUrl={data.project.logo_url ?? data.branding.project_logo_url}
+          />
+        </div>
       ) : (
         <div className="glass-panel rounded-[2rem] p-5 text-white"><T k="admin.createProjectFirst" /></div>
       )}

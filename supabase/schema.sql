@@ -446,6 +446,7 @@ alter table profiles add column if not exists company_logo_url text;
 alter table profiles add column if not exists project_logo_url text;
 alter table projects add column if not exists logo_url text;
 alter table projects add column if not exists service_timezone text not null default 'America/Toronto';
+alter table projects add column if not exists priorities_enabled boolean not null default true;
 
 -- Storage: public bucket so poster URLs work without signed URLs; paths are scoped by auth.uid() prefix.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

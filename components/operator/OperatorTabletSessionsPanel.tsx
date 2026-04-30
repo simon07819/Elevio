@@ -63,7 +63,7 @@ export function OperatorTabletSessionsPanel({
               <div className="min-w-0">
                 <p className="font-black text-white">{elevator.name}</p>
                 <p className="mt-1 text-xs font-bold text-slate-400">
-                  {label ? `${label}` : t("operator.tabletNoDeviceName")}
+                  {label ? t("operator.tabletSessionsDeviceLine", { device: label }) : t("operator.tabletNoDeviceName")}
                 </p>
                 <p className={`mt-2 inline-block rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ${live ? "bg-emerald-500/15 text-emerald-100" : "bg-amber-500/15 text-amber-100"}`}>
                   {live ? t("operator.tabletStatusConnected") : t("operator.tabletStatusQuiet")}

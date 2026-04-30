@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, MessageSquare, PauseCircle, UserCheck, XCircle } from "lucide-react";
 import { advanceRequestStatus, createRequestEvent } from "@/lib/actions";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
@@ -85,6 +86,7 @@ export function RequestCard({
 }) {
   const [currentStatus, setCurrentStatus] = useState<RequestStatus>(request.status);
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
   const { t } = useLanguage();
   const DirectionIcon = request.direction === "up" ? ArrowUp : ArrowDown;
   const meta = flowMeta[currentStatus];
@@ -96,6 +98,7 @@ export function RequestCard({
       const result = await advanceRequestStatus(request.id, status);
       if (result.ok) {
         setCurrentStatus(status);
+        router.refresh();
       }
     });
   }
