@@ -21,7 +21,7 @@ export function RecommendedNextStop({
   /** Apres depot confirme : ids termines et palier cabine (destination des sorties). */
   onDropoffSuccess?: (payload: { requestIds: string[]; dropFloorId: string }) => void;
 }) {
-  const [handledIds, setHandledIds] = useState<Set<string>>(() => new Set());
+  const [completedDropoffIds, setCompletedDropoffIds] = useState<Set<string>>(() => new Set());
   const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
   const { t } = useLanguage();
 
@@ -29,13 +29,13 @@ export function RecommendedNextStop({
     recommendation.nextFloor?.id ?? recommendation.requestsToDropoff[0]?.to_floor_id ?? "";
 
   const pendingDropoffs = useMemo(() => {
-    return recommendation.requestsToDropoff.filter((p) => !handledIds.has(p.requestId));
-  }, [recommendation.requestsToDropoff, handledIds]);
+    return recommendation.requestsToDropoff.filter((p) => !completedDropoffIds.has(p.requestId));
+  }, [recommendation.requestsToDropoff, completedDropoffIds]);
 
   const actionRequest = useMemo(() => {
     const candidates = actionRequests.filter(
       (request) =>
-        !handledIds.has(request.id) &&
+        !pendingIds.has(request.id) &&
         (request.status === "pending" || request.status === "assigned" || request.status === "arriving"),
     );
     const primaryId = recommendation.primaryPickupRequestId;
@@ -44,7 +44,7 @@ export function RecommendedNextStop({
     }
     const primary = candidates.find((request) => request.id === primaryId);
     return primary ?? null;
-  }, [actionRequests, handledIds, recommendation.primaryPickupRequestId]);
+  }, [actionRequests, pendingIds, recommendation.primaryPickupRequestId]);
 
   const showDropoff = pendingDropoffs.length > 0 && dropFloorId !== "";
   const showPickup = !showDropoff && actionRequest !== null;
@@ -58,7 +58,6 @@ export function RecommendedNextStop({
     if (pendingIds.has(requestId)) return;
 
     setPendingIds((current) => new Set(current).add(requestId));
-    setHandledIds((current) => new Set(current).add(requestId));
     onPickupSuccess?.(actionRequest);
 
     void advanceRequestStatus(requestId, "boarded", {
@@ -70,11 +69,7 @@ export function RecommendedNextStop({
         return next;
       });
       if (!result.ok) {
-        setHandledIds((current) => {
-          const next = new Set(current);
-          next.delete(requestId);
-          return next;
-        });
+        return;
       }
     });
   }
@@ -93,7 +88,7 @@ export function RecommendedNextStop({
       for (const id of ids) next.add(id);
       return next;
     });
-    setHandledIds((current) => {
+    setCompletedDropoffIds((current) => {
       const next = new Set(current);
       for (const id of ids) next.add(id);
       return next;
@@ -107,7 +102,7 @@ export function RecommendedNextStop({
         return next;
       });
       if (!results.every((r) => r.ok)) {
-        setHandledIds((current) => {
+        setCompletedDropoffIds((current) => {
           const next = new Set(current);
           for (const id of ids) next.delete(id);
           return next;
