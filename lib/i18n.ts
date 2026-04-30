@@ -313,8 +313,8 @@ export const translations = {
     "elevator.deleteConfirm":
       "Supprimer cet elevateur ? Les demandes en cours resteront sans elevateur assigne.",
     "direction.idle": "Arret",
-    "direction.up": "Montee",
-    "direction.down": "Descente",
+    "direction.up": "Monter",
+    "direction.down": "Descendre",
     "qr.title": "Code QR",
     "qr.subtitle": "L'impression génère une affiche complète par étage.",
     "qr.pageSubtitle": "L'impression genere une feuille complete par etage avec en-tete, instructions, QR code et footer de securite.",

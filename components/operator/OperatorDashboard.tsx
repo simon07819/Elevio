@@ -10,13 +10,28 @@ import {
 } from "@/lib/demoData";
 import { createClient } from "@/lib/supabase/client";
 import { mergeRealtimeRequest, subscribeToTable, unsubscribe, type RequestRealtimePayload } from "@/lib/realtime";
+import type { TranslationKey } from "@/lib/i18n";
 import { formatFloorLabel } from "@/lib/utils";
 import { getRecommendedNextStop } from "@/services/dispatchEngine";
-import type { ActivePassenger, DispatchRequest, Elevator, Floor, HoistRequest } from "@/types/hoist";
+import {
+  type ActivePassenger,
+  type Direction,
+  type DispatchRequest,
+  type Elevator,
+  type Floor,
+  type HoistRequest,
+  isOperatorMovementQueueStatus,
+} from "@/types/hoist";
 import { CapacityPanel } from "@/components/operator/CapacityPanel";
 import { T } from "@/components/i18n/LanguageProvider";
 import { MovementBoard } from "@/components/operator/MovementBoard";
 import { RecommendedNextStop } from "@/components/operator/RecommendedNextStop";
+
+const directionKeys = {
+  idle: "direction.idle",
+  up: "direction.up",
+  down: "direction.down",
+} satisfies Record<Direction, TranslationKey>;
 
 export function OperatorDashboard({
   floors = demoFloors,
@@ -90,6 +105,12 @@ export function OperatorDashboard({
     floors,
     prioritiesEnabled,
   });
+  const displayDirection: Direction =
+    elevator.direction !== "idle"
+      ? elevator.direction
+      : recommendation.suggestedDirection !== "idle"
+        ? recommendation.suggestedDirection
+        : "idle";
   const recommendedIds = new Set(recommendation.requestsToPickup.map((request) => request.id));
   const liveQueue = [...enriched].sort((a, b) => {
     const aTerminal = a.status === "completed" || a.status === "cancelled" ? 1 : 0;
@@ -109,7 +130,7 @@ export function OperatorDashboard({
   });
   const priorityCount = prioritiesEnabled ? enriched.filter((request) => request.priority).length : 0;
   const capacityBlockedCount = enriched.filter((request) => request.passenger_count > remaining).length;
-  const activeQueue = liveQueue.filter((request) => request.status !== "completed" && request.status !== "cancelled");
+  const activeQueue = liveQueue.filter((request) => isOperatorMovementQueueStatus(request.status));
   const actionRequests = [
     ...activeQueue.filter((request) => recommendedIds.has(request.id)),
     ...activeQueue.filter((request) => !recommendedIds.has(request.id)),
@@ -125,7 +146,17 @@ export function OperatorDashboard({
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/8 p-4">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400"><T k="operator.direction" /></p>
-            <p className="mt-2 text-2xl font-black text-yellow-200">{elevator.direction.toUpperCase()}</p>
+            <p
+              className={
+                displayDirection === "up"
+                  ? "mt-2 text-2xl font-black text-emerald-200"
+                  : displayDirection === "down"
+                    ? "mt-2 text-2xl font-black text-red-300"
+                    : "mt-2 text-2xl font-black text-yellow-200"
+              }
+            >
+              <T k={directionKeys[displayDirection]} />
+            </p>
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/8 p-4">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400"><T k="operator.requests" /></p>

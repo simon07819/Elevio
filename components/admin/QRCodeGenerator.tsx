@@ -173,7 +173,7 @@ function QrFloorPoster({
         <QrSheetFooterBranding companyLogoUrl={companyLogoUrl} projectLogoUrl={projectLogoUrl} />
       </div>
 
-      <div className="border-t border-yellow-200/80 bg-yellow-100 p-3 text-sm font-black text-slate-950 sm:p-4 print:border-t print:border-amber-300 print:p-2 print:text-xs qr-poster-foot-strip">
+      <div className="no-print border-t border-yellow-200/80 bg-yellow-100 p-3 text-sm font-black text-slate-950 sm:p-4 qr-poster-foot-strip">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span>{onePageLabel}</span>
           <button

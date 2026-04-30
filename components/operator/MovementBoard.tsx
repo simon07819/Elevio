@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, Users } from "lucide-react";
 import { formatFloorLabel, formatWaitTime } from "@/lib/utils";
-import type { EnrichedRequest } from "@/types/hoist";
+import { type EnrichedRequest, isOperatorMovementQueueStatus } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
 function MovementTable({
@@ -80,7 +80,7 @@ export function MovementBoard({
   recommendedIds: Set<string>;
 }) {
   const { t } = useLanguage();
-  const visibleRequests = requests.filter((request) => request.status !== "completed" && request.status !== "cancelled");
+  const visibleRequests = requests.filter((request) => isOperatorMovementQueueStatus(request.status));
   const up = visibleRequests.filter((request) => request.direction === "up");
   const down = visibleRequests.filter((request) => request.direction === "down");
 

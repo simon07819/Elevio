@@ -120,12 +120,15 @@ textarea {
     color: black;
   }
 
-  /* Page Codes QR : pas de marge chrome du layout sur la feuille */
+  /* Page Codes QR : pas de chrome layout ; éviter 2e page vide (min-height viewport). */
   main:has(.qr-print-sheet) {
     padding-left: 0 !important;
     padding-right: 0 !important;
     padding-top: 0 !important;
+    padding-bottom: 0 !important;
     max-width: none !important;
+    min-height: 0 !important;
+    height: auto !important;
   }
 
   .industrial-bg::before {
@@ -136,8 +139,18 @@ textarea {
     display: none !important;
   }
 
+  body:has(.qr-print-sheet) {
+    min-height: 0 !important;
+  }
+
+  html:has(.qr-print-sheet) {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
   .qr-print-sheet {
     width: 100%;
+    min-height: 0 !important;
     background: white !important;
     color: #020617 !important;
   }

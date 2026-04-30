@@ -54,11 +54,14 @@ export function parsePostgresTimeToMinutes(value: string | null | undefined): nu
 export function isElevatorWithinServiceHours(elevator: Elevator, timeZone: string, now: Date = new Date()): boolean {
   const start = parsePostgresTimeToMinutes(elevator.service_start_time ?? "07:00:00");
   const end = parsePostgresTimeToMinutes(elevator.service_end_time ?? "15:00:00");
-  if (start === null || end === null || start >= end) {
+  if (start === null || end === null || start === end) {
     return false;
   }
   const nowM = minutesSinceMidnightInTimeZone(now, timeZone);
-  return nowM >= start && nowM <= end;
+  if (start < end) {
+    return nowM >= start && nowM <= end;
+  }
+  return nowM >= start || nowM <= end;
 }
 
 export function isElevatorDispatchableNow(elevator: Elevator, timeZone: string, now?: Date): boolean {

@@ -6,8 +6,10 @@ alter table projects add column if not exists service_timezone text not null def
 alter table elevators add column if not exists service_start_time time not null default time '07:00';
 alter table elevators add column if not exists service_end_time time not null default time '15:00';
 
+-- Plages qui traversent minuit possibles (ex. 22:00–06:00) : seules les heures identiques sont interdites.
 alter table elevators drop constraint if exists elevators_service_hours_order_chk;
-alter table elevators add constraint elevators_service_hours_order_chk check (service_start_time < service_end_time);
+alter table elevators drop constraint if exists elevators_service_hours_distinct_chk;
+alter table elevators add constraint elevators_service_hours_distinct_chk check (service_start_time <> service_end_time);
 
 drop policy if exists "public read active elevators for qr dispatch" on elevators;
 

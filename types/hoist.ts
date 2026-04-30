@@ -10,6 +10,13 @@ export type RequestStatus =
   | "completed"
   | "cancelled";
 
+/** Statuts encore affiches dans la file « mouvements » operateur (en attente de prise en charge a l'etage). */
+export const OPERATOR_MOVEMENT_QUEUE_STATUSES = ["pending", "assigned", "arriving"] as const;
+
+export function isOperatorMovementQueueStatus(status: RequestStatus): boolean {
+  return OPERATOR_MOVEMENT_QUEUE_STATUSES.includes(status as (typeof OPERATOR_MOVEMENT_QUEUE_STATUSES)[number]);
+}
+
 export type RequestEventType =
   | "created"
   | "assigned"
