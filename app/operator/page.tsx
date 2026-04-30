@@ -6,7 +6,7 @@ import { OperatorWorkspace } from "@/components/operator/OperatorWorkspace";
 import { getCurrentProfile, requireUser } from "@/lib/auth";
 import { getAdminProjectData } from "@/lib/adminProject";
 import { getProjects } from "@/lib/projects";
-import type { ActivePassenger, Project } from "@/types/hoist";
+import type { Project } from "@/types/hoist";
 
 function pickOperatorProject(projects: Project[]): Project | undefined {
   if (projects.length === 0) {
@@ -28,23 +28,6 @@ export default async function OperatorPage() {
   const { projects, loadError } = await getProjects();
   const project = pickOperatorProject(projects);
   const data = project ? await getAdminProjectData(project.id) : null;
-  const activePassengers: ActivePassenger[] =
-    data?.requests
-      .filter((request) => request.status === "boarded")
-      .map((request) => {
-        const from = data.floors.find((floor) => floor.id === request.from_floor_id);
-        const to = data.floors.find((floor) => floor.id === request.to_floor_id);
-
-        return {
-          requestId: request.id,
-          from_floor_id: request.from_floor_id,
-          to_floor_id: request.to_floor_id,
-          from_sort_order: from?.sort_order ?? 0,
-          to_sort_order: to?.sort_order ?? 0,
-          passenger_count: request.passenger_count,
-          boarded_at: request.updated_at,
-        };
-      }) ?? [];
 
   return (
     <main className="relative z-10 min-h-dvh bg-slate-950 px-4 py-4 pb-20 text-white sm:px-6 lg:px-8">
@@ -72,9 +55,8 @@ export default async function OperatorPage() {
           floors={data.floors}
           elevators={data.elevators}
           requests={data.requests}
-          activePassengers={activePassengers}
           operatorDisplayName={operatorDisplayName}
-          hydrationNowMs={Date.now()}
+          hydrationNowMs={0}
         />
       ) : (
         <div className="mx-auto max-w-7xl rounded-3xl border border-white/10 bg-white/8 p-5 text-white">

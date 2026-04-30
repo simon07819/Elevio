@@ -111,13 +111,14 @@ export function passengerDispatchOperatorSummaries(
 }
 
 /** Ascenseur peut recevoir une demande passager : session tablette vivante (sans garde-heures). */
-export function isElevatorDispatchableNow(elevator: Elevator, _timeZone?: string, now?: Date): boolean {
+export function isElevatorDispatchableNow(elevator: Elevator, timeZone?: string, now?: Date): boolean {
+  void timeZone;
   return elevatorOperatorSessionAppearsLive(elevator, now?.getTime());
 }
 
 export function analyzePassengerDispatch({
   elevators,
-  timeZone: _timeZone,
+  timeZone,
   now = new Date(),
 }: {
   elevators: Elevator[];
@@ -129,6 +130,7 @@ export function analyzePassengerDispatch({
   blockReason: DispatchBlockReason | null;
   dispatchableElevators: Elevator[];
 } {
+  void timeZone;
   const activeElevators = elevators.filter((e) => e.active !== false);
   const nowMs = now.getTime();
   const dispatchableElevators = activeElevators.filter((e) => elevatorOperatorSessionAppearsLive(e, nowMs));

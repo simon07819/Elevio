@@ -4,6 +4,8 @@ import { processLock } from "@supabase/auth-js";
 import { createBrowserClient } from "@supabase/ssr";
 import { getSupabasePublicEnv } from "@/lib/supabase/publicEnv";
 
+let browserClient: ReturnType<typeof createBrowserClient> | null = null;
+
 export function createClient() {
   const env = getSupabasePublicEnv();
 
@@ -13,7 +15,7 @@ export function createClient() {
 
   const { url, anonKey } = env;
 
-  return createBrowserClient(url, anonKey, {
+  browserClient ??= createBrowserClient(url, anonKey, {
     auth: {
       /**
        * Évite `navigator.locks` (Web Locks API). Sinon erreurs du type
@@ -24,4 +26,6 @@ export function createClient() {
       lock: processLock,
     },
   });
+
+  return browserClient;
 }

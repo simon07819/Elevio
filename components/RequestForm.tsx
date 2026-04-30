@@ -67,7 +67,6 @@ export function RequestForm({
   const router = useRouter();
   const { t } = useLanguage();
   const prioritiesEnabled = project.priorities_enabled !== false;
-  const destinationFloor = floors.find((floor) => floor.id === destinationId);
   const currentElevatorFloor = floors.find((floor) => floor.id === demoElevator.current_floor_id);
   const estimatedArrival = estimateArrivalWindow({
     currentElevatorSortOrder: currentElevatorFloor?.sort_order ?? currentFloor.sort_order,
@@ -85,8 +84,11 @@ export function RequestForm({
 
   useEffect(() => {
     if (!prioritiesEnabled) {
-      setPriority(false);
-      setShowSpecialNeed(false);
+      const id = window.setTimeout(() => {
+        setPriority(false);
+        setShowSpecialNeed(false);
+      }, 0);
+      return () => window.clearTimeout(id);
     }
   }, [prioritiesEnabled]);
 
@@ -206,27 +208,27 @@ export function RequestForm({
     });
 
     return () => unsubscribe(client, channel);
-  }, [submittedRequest, project.id, currentFloor.qr_token]);
+  }, [submittedRequest, project.id, currentFloor.qr_token, router]);
 
   useEffect(() => {
-    if (!submittedRequest || submittedRequest.requestId === "demo-local-request") {
+    const requestId = submittedRequest?.requestId;
+    if (!requestId || requestId === "demo-local-request") {
       return;
     }
-
-    const requestId = submittedRequest.requestId;
+    const trackedRequestId = requestId;
 
     async function pollOnce() {
-      const res = await resumePassengerRequest(project.id, currentFloor.qr_token, requestId);
+      const res = await resumePassengerRequest(project.id, currentFloor.qr_token, trackedRequestId);
       if (!res.ok || !res.snapshot) return;
       const snap = res.snapshot;
       if (snap.status === "boarded") {
-        clearPassengerPendingRequest(project.id, currentFloor.qr_token, requestId);
+        clearPassengerPendingRequest(project.id, currentFloor.qr_token, trackedRequestId);
         setSubmittedRequest(null);
         router.replace("/");
         return;
       }
       if (clearsPassengerPendingStorage(snap.status)) {
-        clearPassengerPendingRequest(project.id, currentFloor.qr_token, requestId);
+        clearPassengerPendingRequest(project.id, currentFloor.qr_token, trackedRequestId);
       }
       setSubmittedRequest((prev) =>
         prev?.requestId === snap.requestId
@@ -243,7 +245,7 @@ export function RequestForm({
     const intervalId = window.setInterval(() => void pollOnce(), 15_000);
     void pollOnce();
     return () => window.clearInterval(intervalId);
-  }, [submittedRequest?.requestId, project.id, currentFloor.qr_token]);
+  }, [submittedRequest?.requestId, project.id, currentFloor.qr_token, router]);
 
   if (!passengerResumeReady) {
     return (

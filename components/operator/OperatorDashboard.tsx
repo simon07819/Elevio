@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { MapPin } from "lucide-react";
 import {
-  demoActivePassengers,
   demoElevator,
   demoFloors,
   demoRequests,
@@ -21,7 +20,6 @@ import type { TranslationKey } from "@/lib/i18n";
 import { formatFloorLabel } from "@/lib/utils";
 import { getRecommendedNextStop } from "@/services/dispatchEngine";
 import {
-  type ActivePassenger,
   type Direction,
   type DispatchRequest,
   type Elevator,
@@ -44,14 +42,12 @@ export function OperatorDashboard({
   floors = demoFloors,
   requests = demoRequests,
   elevator = demoElevator,
-  activePassengers = demoActivePassengers,
   prioritiesEnabled = true,
   onElevatorPatch,
 }: {
   floors?: Floor[];
   requests?: HoistRequest[];
   elevator?: Elevator;
-  activePassengers?: ActivePassenger[];
   prioritiesEnabled?: boolean;
   onElevatorPatch?: (elevatorId: string, patch: Partial<Elevator>) => void;
 }) {
@@ -59,7 +55,10 @@ export function OperatorDashboard({
   const projectId = elevator.project_id;
 
   useEffect(() => {
-    setLiveRequests((prev) => mergeServerRequestsWithLive(prev, requests));
+    const id = window.setTimeout(() => {
+      setLiveRequests((prev) => mergeServerRequestsWithLive(prev, requests));
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [requests]);
 
   useEffect(() => {
@@ -76,25 +75,29 @@ export function OperatorDashboard({
     );
   }, [projectId]);
 
+  const floorById = useMemo(() => new Map(floors.map((floor) => [floor.id, floor])), [floors]);
   const elevatorRequests = useMemo(
     () => liveRequests.filter((request) => request.elevator_id === elevator.id),
     [elevator.id, liveRequests],
   );
-  const currentFloor = floors.find((floor) => floor.id === elevator.current_floor_id) ?? floors[0] ?? demoFloors[2];
-  const enriched = enrichRequests(elevatorRequests, floors);
-  const remaining = Math.max(0, elevator.capacity - elevator.current_load);
-  const dispatchRequests: DispatchRequest[] = elevatorRequests.map((request) => ({
-    ...request,
-    from_sort_order: floors.find((floor) => floor.id === request.from_floor_id)?.sort_order ?? 0,
-    to_sort_order: floors.find((floor) => floor.id === request.to_floor_id)?.sort_order ?? 0,
-  }));
+  const currentFloor = floorById.get(elevator.current_floor_id ?? "") ?? floors[0] ?? demoFloors[2];
+  const enriched = useMemo(() => enrichRequests(elevatorRequests, floors), [elevatorRequests, floors]);
+  const dispatchRequests: DispatchRequest[] = useMemo(
+    () =>
+      elevatorRequests.map((request) => ({
+        ...request,
+        from_sort_order: floorById.get(request.from_floor_id)?.sort_order ?? 0,
+        to_sort_order: floorById.get(request.to_floor_id)?.sort_order ?? 0,
+      })),
+    [elevatorRequests, floorById],
+  );
   const liveActivePassengers = useMemo(
     () =>
       elevatorRequests
         .filter((request) => request.status === "boarded")
         .map((request) => {
-          const from = floors.find((floor) => floor.id === request.from_floor_id);
-          const to = floors.find((floor) => floor.id === request.to_floor_id);
+          const from = floorById.get(request.from_floor_id);
+          const to = floorById.get(request.to_floor_id);
 
           return {
             requestId: request.id,
@@ -106,15 +109,18 @@ export function OperatorDashboard({
             boarded_at: request.updated_at,
           };
         }),
-    [floors, elevatorRequests],
+    [floorById, elevatorRequests],
   );
+  const realCurrentLoad = liveActivePassengers.reduce((sum, passenger) => sum + passenger.passenger_count, 0);
+  const effectiveElevator = { ...elevator, current_load: realCurrentLoad };
+  const remaining = Math.max(0, effectiveElevator.capacity - effectiveElevator.current_load);
   const recommendation = getRecommendedNextStop({
     currentFloor,
-    direction: elevator.direction,
+    direction: effectiveElevator.direction,
     requests: dispatchRequests,
-    capacity: elevator.capacity,
-    currentLoad: elevator.current_load,
-    activePassengers: liveActivePassengers.length > 0 ? liveActivePassengers : activePassengers,
+    capacity: effectiveElevator.capacity,
+    currentLoad: effectiveElevator.current_load,
+    activePassengers: liveActivePassengers,
     floors,
     prioritiesEnabled,
   });
@@ -201,7 +207,7 @@ export function OperatorDashboard({
             <p className="text-xs font-bold text-yellow-200">{capacityBlockedCount} <T k="operator.nextPass" /></p>
           </div>
         </div>
-        <CapacityPanel elevator={elevator} />
+        <CapacityPanel elevator={effectiveElevator} />
       </section>
 
       <RecommendedNextStop

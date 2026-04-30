@@ -12,7 +12,7 @@ export async function proxy(request: NextRequest) {
 
   const { url, anonKey } = env;
 
-  let response = NextResponse.next({
+  const response = NextResponse.next({
     request: {
       headers: request.headers,
     },

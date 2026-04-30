@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": ".test-build",
+    "noEmit": false,
+    "module": "Node16",
+    "moduleResolution": "node16",
+    "target": "ES2022",
+    "types": ["node"],
+    "incremental": false
+  },
+  "include": [
+    "tests/**/*.ts",
+    "services/elevatorBrain.ts",
+    "lib/elevatorRouting.ts",
+    "types/**/*.ts"
+  ]
+}

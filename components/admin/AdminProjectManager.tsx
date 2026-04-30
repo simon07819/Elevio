@@ -42,7 +42,8 @@ export function AdminProjectManager({
   const { t } = useLanguage();
 
   useEffect(() => {
-    setLocalProjects(projects);
+    const id = window.setTimeout(() => setLocalProjects(projects), 0);
+    return () => window.clearTimeout(id);
   }, [projects]);
 
   function projectStatusLabel(project: Project) {

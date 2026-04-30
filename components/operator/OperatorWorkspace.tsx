@@ -16,7 +16,7 @@ import { formatFloorLabel } from "@/lib/utils";
 import { ServiceTimePicker } from "@/components/ServiceTimePicker";
 import { elevatorHasOperatorTabletBinding, isOperatorTabletSessionStale } from "@/lib/operatorTablet";
 import { formatStoredTabletLabel, getOperatorDeviceLabel } from "@/lib/deviceLabel";
-import type { ActivePassenger, Elevator, Floor, HoistRequest, Project } from "@/types/hoist";
+import type { Elevator, Floor, HoistRequest, Project } from "@/types/hoist";
 import { OperatorDashboard } from "@/components/operator/OperatorDashboard";
 import { OperatorTabletSessionsPanel } from "@/components/operator/OperatorTabletSessionsPanel";
 
@@ -83,7 +83,6 @@ export function OperatorWorkspace({
   floors,
   elevators,
   requests,
-  activePassengers,
   operatorDisplayName,
   hydrationNowMs,
 }: {
@@ -91,7 +90,6 @@ export function OperatorWorkspace({
   floors: Floor[];
   elevators: Elevator[];
   requests: HoistRequest[];
-  activePassengers: ActivePassenger[];
   operatorDisplayName: string;
   /** Horloge figée côté serveur pour le 1er rendu ; évite mismatch hydration Activer/Reprendre. */
   hydrationNowMs: number;
@@ -104,12 +102,11 @@ export function OperatorWorkspace({
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [deviceLabel, setDeviceLabel] = useState("");
-  const [operatorClockMs, setOperatorClockMs] = useState<number | null>(null);
+  const [operatorClockMs, setOperatorClockMs] = useState(() => Date.now());
 
-  const effectiveNowMs = operatorClockMs ?? hydrationNowMs;
+  const effectiveNowMs = operatorClockMs || hydrationNowMs;
 
   useEffect(() => {
-    setOperatorClockMs(Date.now());
     const id = window.setInterval(() => setOperatorClockMs(Date.now()), 15_000);
     return () => window.clearInterval(id);
   }, []);
@@ -119,7 +116,8 @@ export function OperatorWorkspace({
   }, []);
 
   useEffect(() => {
-    setLocalElevators(elevators);
+    const id = window.setTimeout(() => setLocalElevators(elevators), 0);
+    return () => window.clearTimeout(id);
   }, [elevators]);
 
   const patchElevator = useCallback((elevatorId: string, patch: Partial<Elevator>) => {
@@ -316,9 +314,6 @@ export function OperatorWorkspace({
           elevator={selectedElevator}
           prioritiesEnabled={project.priorities_enabled !== false}
           onElevatorPatch={patchElevator}
-          activePassengers={activePassengers.filter((passenger) =>
-            requests.some((request) => request.id === passenger.requestId && request.elevator_id === selectedElevator.id),
-          )}
         />
       </div>
     );
