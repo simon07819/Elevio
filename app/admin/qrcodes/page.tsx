@@ -21,6 +21,7 @@ export default async function AdminQRCodesPage({
       eyebrow={<T k="admin.eyebrow" />}
       title={<T k="qr.title" />}
       subtitle={<T k="qr.pageSubtitle" />}
+      noPrintTitleSection
     >
       {data ? (
         <div className="w-full min-w-0 max-w-full overflow-x-clip">

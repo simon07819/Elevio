@@ -112,12 +112,20 @@ textarea {
 @media print {
   @page {
     size: letter;
-    margin: 10mm;
+    margin: 8mm;
   }
 
   body {
     background: white;
     color: black;
+  }
+
+  /* Page Codes QR : pas de marge chrome du layout sur la feuille */
+  main:has(.qr-print-sheet) {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-top: 0 !important;
+    max-width: none !important;
   }
 
   .industrial-bg::before {
@@ -132,6 +140,12 @@ textarea {
     width: 100%;
     background: white !important;
     color: #020617 !important;
+  }
+
+  /* Couleurs de fond / texte sur affiches (Safari peut ignorer sans propagation large). */
+  main:has(.qr-print-sheet) * {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 
   .qr-poster-grid {
@@ -161,8 +175,10 @@ textarea {
     filter: grayscale(100%);
   }
 
-  /* Une affiche = une page ; tout le bloc évite la coupure au milieu */
+  /* Une affiche = une page ; couleurs comme à l’écran ; éviter coupure au milieu */
   .qr-floor-poster {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
     break-inside: avoid;
     page-break-inside: avoid;
     page-break-after: always;

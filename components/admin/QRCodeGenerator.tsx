@@ -138,7 +138,7 @@ function QrFloorPoster({
     >
       <QrSheetHeader requestTitle={requestTitle} projectName={project.name} address={project.address ?? ""} />
 
-      <div className="grid min-w-0 place-items-center bg-slate-50 p-3 text-center sm:p-5 print:p-2 print:pb-2">
+      <div className="grid min-w-0 place-items-center bg-slate-50 p-3 text-center sm:p-5 print:p-2 print:pb-2 qr-poster-body">
         <p className="break-words px-1 text-xs font-black uppercase tracking-[0.22em] text-slate-500 sm:text-sm print:text-[10px] print:leading-tight">
           {youAreAtText}
         </p>
@@ -165,7 +165,7 @@ function QrFloorPoster({
             {floor.access_code}
           </p>
         </div>
-        <div className="mt-2 w-full max-w-full min-w-0 rounded-2xl bg-yellow-100 p-2 sm:mt-3 sm:p-3 print:mt-2 print:p-2">
+        <div className="mt-2 w-full max-w-full min-w-0 rounded-2xl border border-yellow-300/40 bg-yellow-100 p-2 sm:mt-3 sm:p-3 print:mt-2 print:border print:border-amber-300 print:p-2 qr-poster-instructions-shell">
           <div className="qr-poster-instructions print:text-[10px] print:leading-snug [&_li]:print:text-[10px] [&_ol]:print:gap-1 [&_p]:print:text-[9px]">
             {instructions}
           </div>
@@ -173,7 +173,7 @@ function QrFloorPoster({
         <QrSheetFooterBranding companyLogoUrl={companyLogoUrl} projectLogoUrl={projectLogoUrl} />
       </div>
 
-      <div className="bg-yellow-100 p-3 text-sm font-black text-slate-950 sm:p-4 print:p-2 print:text-xs">
+      <div className="border-t border-yellow-200/80 bg-yellow-100 p-3 text-sm font-black text-slate-950 sm:p-4 print:border-t print:border-amber-300 print:p-2 print:text-xs qr-poster-foot-strip">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span>{onePageLabel}</span>
           <button
