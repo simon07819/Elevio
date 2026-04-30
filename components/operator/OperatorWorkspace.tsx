@@ -16,7 +16,6 @@ import { isOperatorTabletSessionStale } from "@/lib/operatorTablet";
 import { getOperatorDeviceLabel } from "@/lib/deviceLabel";
 import type { ActivePassenger, Elevator, Floor, HoistRequest, Project } from "@/types/hoist";
 import { OperatorDashboard } from "@/components/operator/OperatorDashboard";
-import { OperatorKeepAwake } from "@/components/operator/OperatorKeepAwake";
 import { OperatorTabletSessionsPanel } from "@/components/operator/OperatorTabletSessionsPanel";
 
 function sessionStorageKey(projectId: string) {
@@ -157,7 +156,7 @@ export function OperatorWorkspace({
         serviceEnd,
         capacityRaw != null ? String(capacityRaw) : "",
       );
-      setMessage(result.message);
+      setMessage(result.ok ? null : result.message);
 
       if (result.ok) {
         window.localStorage.setItem(elevatorStorageKey(project.id), elevator.id);
@@ -235,7 +234,6 @@ export function OperatorWorkspace({
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <OperatorKeepAwake />
             <button
               type="button"
               disabled={isPending}
