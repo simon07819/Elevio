@@ -46,6 +46,10 @@ function shouldRestoreSubmittedFromSnapshot(status: RequestStatus): boolean {
   return !clearsPassengerPendingStorage(status);
 }
 
+function requestInvalidatedMessage(status: RequestStatus, t: ReturnType<typeof useLanguage>["t"]) {
+  return status === "cancelled" ? t("request.cancelled") : null;
+}
+
 export function RequestForm({
   project,
   floors,
@@ -189,6 +193,7 @@ export function RequestForm({
 
       if (!shouldRestoreSubmittedFromSnapshot(res.snapshot.status)) {
         clearPassengerPendingRequest(project.id, currentFloor.qr_token);
+        setMessage(requestInvalidatedMessage(res.snapshot.status, t));
         if (!cancelled) setPassengerResumeReady(true);
         return;
       }
@@ -223,7 +228,7 @@ export function RequestForm({
     return () => {
       cancelled = true;
     };
-  }, [project.id, currentFloor.qr_token]);
+  }, [project.id, currentFloor.qr_token, t]);
 
   useEffect(() => {
     if (!submittedRequest || submittedRequest.requestId === "demo-local-request") {
@@ -248,6 +253,9 @@ export function RequestForm({
           }
           if (clearsPassengerPendingStorage(next)) {
             clearPassengerPendingRequest(project.id, currentFloor.qr_token, requestIdTracked);
+            setSubmittedRequest(null);
+            setMessage(requestInvalidatedMessage(next, t));
+            return;
           }
           setSubmittedRequest((current) => current && { ...current, status: next });
         }
@@ -255,7 +263,7 @@ export function RequestForm({
     });
 
     return () => unsubscribe(client, channel);
-  }, [submittedRequest, project.id, currentFloor.qr_token, router]);
+  }, [submittedRequest, project.id, currentFloor.qr_token, router, t]);
 
   useEffect(() => {
     const requestId = submittedRequest?.requestId;
@@ -276,6 +284,9 @@ export function RequestForm({
       }
       if (clearsPassengerPendingStorage(snap.status)) {
         clearPassengerPendingRequest(project.id, currentFloor.qr_token, trackedRequestId);
+        setSubmittedRequest(null);
+        setMessage(requestInvalidatedMessage(snap.status, t));
+        return;
       }
       setSubmittedRequest((prev) =>
         prev?.requestId === snap.requestId
@@ -292,7 +303,7 @@ export function RequestForm({
     const intervalId = window.setInterval(() => void pollOnce(), 15_000);
     void pollOnce();
     return () => window.clearInterval(intervalId);
-  }, [submittedRequest?.requestId, project.id, currentFloor.qr_token, router]);
+  }, [submittedRequest?.requestId, project.id, currentFloor.qr_token, router, t]);
 
   if (!passengerResumeReady) {
     return (
