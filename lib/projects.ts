@@ -65,10 +65,10 @@ export async function getProjects(): Promise<ProjectsLoadResult> {
     return { projects: [], loadError: null, qrReadyProjectIds: [] };
   }
 
+  /** Visibilité = policy RLS (propriétaire ou membre), sans filtrer seulement sur owner_id. */
   const { data, error } = await supabase
     .from("projects")
     .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled")
-    .eq("owner_id", user.id)
     .order("active", { ascending: false })
     .order("created_at", { ascending: false });
 

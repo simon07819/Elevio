@@ -68,7 +68,6 @@ export async function getAdminProjectData(projectId: string): Promise<AdminProje
       .from("projects")
       .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled")
       .eq("id", projectId)
-      .eq("owner_id", user.id)
       .single(),
     supabase.from("profiles").select("company_logo_url, project_logo_url").eq("id", user.id).maybeSingle(),
     supabase
