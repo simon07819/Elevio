@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { MapPin } from "lucide-react";
+import { clearElevatorActiveRequests } from "@/lib/actions";
 import {
   demoElevator,
   demoFloors,
@@ -52,6 +53,7 @@ export function OperatorDashboard({
   onElevatorPatch?: (elevatorId: string, patch: Partial<Elevator>) => void;
 }) {
   const [liveRequests, setLiveRequests] = useState(requests);
+  const [isClearing, startClearTransition] = useTransition();
   const projectId = elevator.project_id;
 
   useEffect(() => {
@@ -197,6 +199,29 @@ export function OperatorDashboard({
   const displayDirection: Direction =
     displayFloor == null ? "idle" : targetSort > currentSort ? "up" : targetSort < currentSort ? "down" : "idle";
 
+  function clearVisibleQueue() {
+    if (activeQueue.length === 0 && liveActivePassengers.length === 0) {
+      return;
+    }
+    startClearTransition(async () => {
+      const result = await clearElevatorActiveRequests(projectId, elevator.id);
+      if (!result.ok) return;
+      const now = new Date().toISOString();
+      setLiveRequests((current) =>
+        current.map((request) =>
+          request.elevator_id === elevator.id &&
+          (request.status === "pending" ||
+            request.status === "assigned" ||
+            request.status === "arriving" ||
+            request.status === "boarded")
+            ? { ...request, status: "cancelled" as const, completed_at: now, updated_at: now }
+            : request,
+        ),
+      );
+      onElevatorPatch?.(elevator.id, { current_load: 0, direction: "idle" });
+    });
+  }
+
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
       <section className="grid gap-3 lg:grid-cols-[1fr_340px]">
@@ -303,10 +328,20 @@ export function OperatorDashboard({
       />
 
       <section className="rounded-3xl border border-white/10 bg-white/8 p-4">
-        <div className="mb-3">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300"><T k="operator.tablet" /></p>
-          <h2 className="text-2xl font-black text-white"><T k="operator.movements" /></h2>
-          <p className="mt-1 text-xs font-bold text-emerald-200"><T k="operator.requestsSynced" /></p>
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300"><T k="operator.tablet" /></p>
+            <h2 className="text-2xl font-black text-white"><T k="operator.movements" /></h2>
+            <p className="mt-1 text-xs font-bold text-emerald-200"><T k="operator.requestsSynced" /></p>
+          </div>
+          <button
+            type="button"
+            disabled={isClearing || (activeQueue.length === 0 && liveActivePassengers.length === 0)}
+            onClick={clearVisibleQueue}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-300 transition hover:bg-white/10 disabled:opacity-35"
+          >
+            <T k="operator.clearQueue" />
+          </button>
         </div>
 
         <MovementBoard requests={activeQueue} recommendedIds={visibleRecommendedIds} />

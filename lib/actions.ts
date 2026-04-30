@@ -270,6 +270,52 @@ function revalidateAdminProject(projectId: string) {
   revalidatePath("/operator");
 }
 
+const REQUESTS_OPEN_DURING_SERVICE: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"];
+
+async function cancelActiveProjectRequests(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  projectId: string,
+  message: string,
+) {
+  const now = new Date().toISOString();
+  await supabase
+    .from("requests")
+    .update({
+      status: "cancelled",
+      completed_at: now,
+      updated_at: now,
+      note: message,
+    })
+    .eq("project_id", projectId)
+    .in("status", REQUESTS_OPEN_DURING_SERVICE);
+
+  await supabase
+    .from("elevators")
+    .update({ current_load: 0, direction: "idle" })
+    .eq("project_id", projectId);
+}
+
+async function cancelActiveProjectRequestsIfNoLiveOperators(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  projectId: string,
+) {
+  const { data: elevators } = await supabase
+    .from("elevators")
+    .select(elevatorSelectColumns)
+    .eq("project_id", projectId)
+    .eq("active", true);
+
+  const hasLiveOperator = ((elevators ?? []) as Elevator[]).some(
+    (elevator) =>
+      Boolean(elevator.operator_session_id) &&
+      !isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at),
+  );
+
+  if (!hasLiveOperator) {
+    await cancelActiveProjectRequests(supabase, projectId, "Annule automatiquement: aucun operateur actif.");
+  }
+}
+
 export async function createFloor(projectId: string, formData: FormData) {
   const supabase = await createClient();
   const rawLabel = String(formData.get("label") ?? "").trim();
@@ -810,6 +856,7 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
     return { ok: false, message: error.message };
   }
 
+  await cancelActiveProjectRequestsIfNoLiveOperators(supabase, projectId);
   revalidateAdminProject(projectId);
   return { ok: true, message: "Tablette operateur liberee." };
 }
@@ -852,6 +899,7 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
     return { ok: false, message: error.message };
   }
 
+  await cancelActiveProjectRequestsIfNoLiveOperators(supabase, projectId);
   revalidateAdminProject(projectId);
   return { ok: true, message: "Tablette desactivee. L’operateur devra reactiver depuis son appareil." };
 }
@@ -1341,6 +1389,45 @@ export async function assignRequestElevator(requestId: string, elevatorId: strin
   revalidatePath("/operator");
   revalidatePath("/admin");
   return { ok: true, message: elevatorId ? "Demande reassignee." : "Demande remise non assignee." };
+}
+
+export async function clearElevatorActiveRequests(projectId: string, elevatorId: string) {
+  const supabase = await createClient();
+
+  if (!supabase) {
+    return { ok: true, message: "Mode demo: file videe." };
+  }
+
+  if (!isUuid(projectId) || !isUuid(elevatorId)) {
+    return staleIdsAction();
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("requests")
+    .update({
+      status: "cancelled",
+      completed_at: now,
+      updated_at: now,
+      note: "File videe par l'operateur.",
+    })
+    .eq("project_id", projectId)
+    .eq("elevator_id", elevatorId)
+    .in("status", REQUESTS_OPEN_DURING_SERVICE);
+
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+
+  await supabase
+    .from("elevators")
+    .update({ current_load: 0, direction: "idle" })
+    .eq("id", elevatorId)
+    .eq("project_id", projectId);
+
+  revalidatePath("/operator");
+  revalidatePath("/admin");
+  return { ok: true, message: "File de demandes videe." };
 }
 
 export async function advanceRequestStatus(
