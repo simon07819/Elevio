@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { MapPin } from "lucide-react";
 import {
   demoActivePassengers,
   demoElevator,
@@ -166,9 +167,19 @@ export function OperatorDashboard({
     <div className="mx-auto grid max-w-7xl gap-4">
       <section className="grid gap-3 lg:grid-cols-[1fr_340px]">
         <div className="grid gap-3 sm:grid-cols-4">
-          <div className="relative rounded-3xl border-2 border-emerald-400/70 bg-emerald-500/[0.12] p-4 shadow-[0_0_32px_rgba(52,211,153,0.28)] ring-2 ring-emerald-400/45 ring-offset-2 ring-offset-slate-950">
-            <p className="text-xs font-black tracking-wide text-emerald-200/95"><T k="operator.floor" /></p>
-            <p className="mt-1 text-4xl font-black tabular-nums tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.35)]">
+          <div className="operator-target-floor-card overflow-hidden rounded-3xl border-2 border-emerald-300/60 bg-gradient-to-br from-emerald-950/90 via-teal-950/55 to-emerald-900/70 p-4 md:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-emerald-100 md:text-xs">
+                <T k="operator.goToFloorCue" />
+              </p>
+              <span
+                aria-hidden
+                className="grid size-11 shrink-0 place-items-center rounded-2xl border border-emerald-400/35 bg-emerald-950/50 text-emerald-100 shadow-[inset_0_1px_0_rgba(167,243,208,0.35)]"
+              >
+                <MapPin size={22} strokeWidth={2.25} className="drop-shadow-[0_0_10px_rgba(167,243,208,0.85)]" />
+              </span>
+            </div>
+            <p className="mt-3 text-4xl font-black tabular-nums tracking-tight text-white drop-shadow-[0_2px_18px_rgba(0,0,0,0.5)] md:text-5xl md:leading-none">
               {formatFloorLabel(displayFloor)}
             </p>
           </div>

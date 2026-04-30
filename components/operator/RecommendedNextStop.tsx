@@ -48,7 +48,7 @@ export function RecommendedNextStop({
   }
 
   return (
-    <section className="grid gap-4 rounded-3xl border border-yellow-300/50 bg-yellow-300 p-4 text-slate-950 shadow-glow lg:grid-cols-[1fr_360px] lg:items-center">
+    <section className="grid gap-4 rounded-3xl border border-yellow-400/55 bg-yellow-300 p-4 text-slate-950 shadow-[0_14px_42px_rgba(15,23,42,0.28)] lg:grid-cols-[1fr_360px] lg:items-center">
       <div className="flex items-center gap-4">
         <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-slate-950 text-yellow-300">
           <Navigation size={28} />

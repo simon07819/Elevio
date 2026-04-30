@@ -94,6 +94,104 @@ textarea {
   min-width: 56px;
 }
 
+/* Carte « étage cible » opérateur : halo néon vert (distinct du bloc jaune « prochaine demande »). */
+@keyframes operator-target-floor-pulse {
+  0%,
+  100% {
+    border-color: rgba(110, 231, 183, 0.58);
+    box-shadow:
+      0 0 0 2px rgba(52, 211, 153, 0.45),
+      0 0 28px rgba(52, 211, 153, 0.42),
+      0 0 72px rgba(45, 212, 191, 0.22),
+      inset 0 1px 0 rgba(167, 243, 208, 0.35);
+  }
+  50% {
+    border-color: rgba(236, 253, 245, 0.82);
+    box-shadow:
+      0 0 0 3px rgba(167, 243, 208, 0.72),
+      0 0 48px rgba(52, 211, 153, 0.62),
+      0 0 104px rgba(45, 212, 191, 0.38),
+      inset 0 1px 0 rgba(240, 253, 250, 0.55);
+  }
+}
+
+@keyframes operator-target-floor-shine {
+  0% {
+    transform: translateX(-115%) skewX(-14deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.55;
+  }
+  38% {
+    opacity: 0.55;
+  }
+  52% {
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(115%) skewX(-14deg);
+    opacity: 0;
+  }
+}
+
+.operator-target-floor-card {
+  position: relative;
+  isolation: isolate;
+  animation: operator-target-floor-pulse 2.3s ease-in-out infinite;
+}
+
+.operator-target-floor-card::before {
+  pointer-events: none;
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 105% 95% at 50% -18%, rgba(204, 251, 241, 0.38), transparent 52%),
+    radial-gradient(circle at 90% 95%, rgba(16, 185, 129, 0.22), transparent 45%);
+  opacity: 0.92;
+  z-index: 0;
+}
+
+.operator-target-floor-card::after {
+  pointer-events: none;
+  content: "";
+  position: absolute;
+  inset: -40% -60%;
+  border-radius: inherit;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    rgba(240, 253, 250, 0.14) 47%,
+    rgba(167, 243, 208, 0.35) 50%,
+    rgba(240, 253, 250, 0.14) 53%,
+    transparent 65%
+  );
+  animation: operator-target-floor-shine 4.6s ease-in-out infinite;
+  z-index: 0;
+}
+
+.operator-target-floor-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .operator-target-floor-card {
+    animation: none;
+    box-shadow:
+      0 0 0 2px rgba(52, 211, 153, 0.45),
+      0 0 40px rgba(52, 211, 153, 0.35);
+    border-color: rgba(110, 231, 183, 0.65);
+  }
+
+  .operator-target-floor-card::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 .text-balance {
   text-wrap: balance;
 }
