@@ -179,17 +179,17 @@ export const translations = {
     "profile.onboardingEyebrow": "Premiere etape",
     "profile.onboardingTitle": "Completez vos logos",
     "profile.onboardingBody":
-      "Ajoutez votre logo entreprise pour vos affiches QR. La photo du chantier se gere dans chaque projet (creation ou fiche projet).",
+      "Ajoutez votre logo entreprise pour vos affiches QR. La photo du chantier se gere dans Infos chantier de chaque projet.",
     "profile.logosEyebrow": "Identite visuelle",
     "profile.logosIntro":
-      "Le logo entreprise apparait en bas des affiches QR. Ajoutez une photo par chantier dans la fiche du projet.",
+      "Le logo entreprise apparait en bas des affiches QR. Ajoutez une photo par chantier dans Infos chantier.",
     "brand.companyTitle": "Logo entreprise",
     "brand.companyBody": "",
     "brand.projectTitle": "Logo projet",
     "brand.projectBody": "",
     "brand.siteTitle": "Logo chantier",
     "brand.siteBody":
-      "Optionnel. Photo ou logo en bas des affiches QR pour ce chantier (formats et taille comme ci-dessous).",
+      "Optionnel. Photo ou logo en bas des affiches QR pour ce chantier.",
     "brand.formatsHelp": "PNG, JPEG, WebP ou SVG — max 2 Mo.",
     "brand.chooseFile": "Choisir un fichier",
     "brand.uploading": "Envoi...",
@@ -211,9 +211,6 @@ export const translations = {
     "project.createSite": "Créer un chantier",
     "project.newElevioProject": "Nouveau projet",
     "project.createBody": "Créez le chantier, puis passez directement aux étages et aux affiches QR.",
-    "project.sitePhotoLabel": "Photo du chantier (optionnel)",
-    "project.sitePhotoHint":
-      "Affichee en bas des affiches QR de ce chantier. Si vous choisissez un fichier, il est envoye apres la creation (PNG, JPEG, WebP ou SVG, max 2 Mo).",
     "project.continue": "Continuer {name}",
     "project.siteNamePlaceholder": "Nom du chantier",
     "project.addressPlaceholder": "Adresse du chantier",
@@ -604,17 +601,17 @@ export const translations = {
     "profile.onboardingEyebrow": "First step",
     "profile.onboardingTitle": "Add your logos",
     "profile.onboardingBody":
-      "Upload your company logo for QR posters. Add each site's photo from the project screen when you create or edit it.",
+      "Upload your company logo for QR posters. Add each site's photo under Site info on the project page.",
     "profile.logosEyebrow": "Visual identity",
     "profile.logosIntro":
-      "Your company logo appears at the bottom of QR posters. Add a site photo per project on the project settings page.",
+      "Your company logo appears at the bottom of QR posters. Add a site photo under Site info for each project.",
     "brand.companyTitle": "Company logo",
     "brand.companyBody": "",
     "brand.projectTitle": "Project logo",
     "brand.projectBody": "",
     "brand.siteTitle": "Site logo",
     "brand.siteBody":
-      "Optional. Photo or logo at the bottom of QR posters for this site (same formats and size limits as below).",
+      "Optional. Photo or logo at the bottom of QR posters for this site.",
     "brand.formatsHelp": "PNG, JPEG, WebP or SVG — max 2 MB.",
     "brand.chooseFile": "Choose file",
     "brand.uploading": "Uploading...",
@@ -636,9 +633,6 @@ export const translations = {
     "project.createSite": "Create a site",
     "project.newElevioProject": "New project",
     "project.createBody": "Create the site, then go straight to floors and QR signs.",
-    "project.sitePhotoLabel": "Site photo (optional)",
-    "project.sitePhotoHint":
-      "Shown at the bottom of this site's QR posters. If you pick a file, it uploads after the site is created (PNG, JPEG, WebP or SVG, max 2 MB).",
     "project.continue": "Continue {name}",
     "project.siteNamePlaceholder": "Site name",
     "project.addressPlaceholder": "Site address",
