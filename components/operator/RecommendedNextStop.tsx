@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { DoorOpen, Navigation, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
 import { formatFloorLabel } from "@/lib/utils";
@@ -23,8 +22,7 @@ export function RecommendedNextStop({
   onDropoffSuccess?: (payload: { requestIds: string[]; dropFloorId: string }) => void;
 }) {
   const [handledIds, setHandledIds] = useState<Set<string>>(() => new Set());
-  const [isPending, startTransition] = useTransition();
-  const router = useRouter();
+  const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
   const { t } = useLanguage();
 
   const dropFloorId =
@@ -57,14 +55,26 @@ export function RecommendedNextStop({
     }
 
     const requestId = actionRequest.id;
-    startTransition(async () => {
-      const result = await advanceRequestStatus(requestId, "boarded", {
-        assignElevatorId: operatorElevatorId,
+    if (pendingIds.has(requestId)) return;
+
+    setPendingIds((current) => new Set(current).add(requestId));
+    setHandledIds((current) => new Set(current).add(requestId));
+    onPickupSuccess?.(actionRequest);
+
+    void advanceRequestStatus(requestId, "boarded", {
+      assignElevatorId: operatorElevatorId,
+    }).then((result) => {
+      setPendingIds((current) => {
+        const next = new Set(current);
+        next.delete(requestId);
+        return next;
       });
-      if (result.ok) {
-        setHandledIds((current) => new Set(current).add(requestId));
-        onPickupSuccess?.(actionRequest);
-        router.refresh();
+      if (!result.ok) {
+        setHandledIds((current) => {
+          const next = new Set(current);
+          next.delete(requestId);
+          return next;
+        });
       }
     });
   }
@@ -75,16 +85,33 @@ export function RecommendedNextStop({
       return;
     }
 
-    startTransition(async () => {
-      const results = await Promise.all(ids.map((requestId) => advanceRequestStatus(requestId, "completed")));
-      if (results.every((r) => r.ok)) {
+    const alreadyPending = ids.some((id) => pendingIds.has(id));
+    if (alreadyPending) return;
+
+    setPendingIds((current) => {
+      const next = new Set(current);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+    setHandledIds((current) => {
+      const next = new Set(current);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+    onDropoffSuccess?.({ requestIds: ids, dropFloorId });
+
+    void Promise.all(ids.map((requestId) => advanceRequestStatus(requestId, "completed"))).then((results) => {
+      setPendingIds((current) => {
+        const next = new Set(current);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
+      if (!results.every((r) => r.ok)) {
         setHandledIds((current) => {
           const next = new Set(current);
-          for (const id of ids) next.add(id);
+          for (const id of ids) next.delete(id);
           return next;
         });
-        onDropoffSuccess?.({ requestIds: ids, dropFloorId });
-        router.refresh();
       }
     });
   }
@@ -108,7 +135,6 @@ export function RecommendedNextStop({
       {showDropoff ? (
         <button
           type="button"
-          disabled={isPending}
           onClick={dropoff}
           className="touch-target flex min-h-28 w-full items-center justify-center gap-3 rounded-[1.5rem] bg-slate-950 px-5 py-5 text-4xl font-black uppercase tracking-wide text-yellow-300 shadow-xl transition active:scale-[0.98] disabled:opacity-60"
         >
@@ -118,7 +144,6 @@ export function RecommendedNextStop({
       ) : showPickup ? (
         <button
           type="button"
-          disabled={isPending}
           onClick={pickup}
           className="touch-target flex min-h-28 w-full items-center justify-center gap-3 rounded-[1.5rem] bg-slate-950 px-5 py-5 text-4xl font-black uppercase tracking-wide text-yellow-300 shadow-xl transition active:scale-[0.98] disabled:opacity-60"
         >

@@ -116,7 +116,18 @@ export function OperatorWorkspace({
   }, []);
 
   useEffect(() => {
-    const id = window.setTimeout(() => setLocalElevators(elevators), 0);
+    const id = window.setTimeout(() => {
+      setLocalElevators((current) => {
+        const currentById = new Map(current.map((elevator) => [elevator.id, elevator]));
+        const merged = elevators.map((elevator) => currentById.get(elevator.id) ?? elevator);
+        for (const elevator of current) {
+          if (!elevators.some((item) => item.id === elevator.id)) {
+            merged.push(elevator);
+          }
+        }
+        return merged;
+      });
+    }, 0);
     return () => window.clearTimeout(id);
   }, [elevators]);
 
@@ -127,28 +138,26 @@ export function OperatorWorkspace({
   }, []);
 
   useEffect(() => {
-    if (!selectedElevatorId) {
-      return;
-    }
-
     const client = createClient();
     return bindRealtimeWithAuthSession(client, () =>
       subscribeToTable<ElevatorRealtimePayload>({
         client,
         table: "elevators",
-        filter: `id=eq.${selectedElevatorId}`,
+        filter: `project_id=eq.${project.id}`,
         onChange: (payload) => {
-          if (payload.eventType !== "UPDATE" || !payload.new?.id) {
+          if (!payload.new?.id) {
             return;
           }
 
           setLocalElevators((current) =>
-            current.map((item) => (item.id === payload.new.id ? { ...item, ...payload.new } : item)),
+            current.some((item) => item.id === payload.new.id)
+              ? current.map((item) => (item.id === payload.new.id ? { ...item, ...payload.new } : item))
+              : [...current, payload.new],
           );
         },
       }),
     );
-  }, [selectedElevatorId]);
+  }, [project.id]);
 
   useEffect(() => {
     const bump = () => router.refresh();

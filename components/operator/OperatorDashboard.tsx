@@ -144,19 +144,58 @@ export function OperatorDashboard({
   const priorityCount = prioritiesEnabled ? enriched.filter((request) => request.priority).length : 0;
   const capacityBlockedCount = enriched.filter((request) => request.passenger_count > remaining).length;
   const activeQueue = liveQueue.filter((request) => isOperatorMovementQueueStatus(request.status));
+  const hasBoardedPassengers = liveActivePassengers.length > 0;
+  const hasOperatorWork = activeQueue.length > 0 || hasBoardedPassengers;
+  const fallbackPickup = activeQueue[0] ?? null;
+  const fallbackPickupFloor = fallbackPickup ? floorById.get(fallbackPickup.from_floor_id) ?? null : null;
+  const fallbackPickupRequests = fallbackPickup
+    ? dispatchRequests.filter((request) => request.from_floor_id === fallbackPickup.from_floor_id)
+    : [];
+  const fallbackSuggestedDirection: Direction =
+    fallbackPickupFloor && Number(fallbackPickupFloor.sort_order) > Number(currentFloor.sort_order)
+      ? "up"
+      : fallbackPickupFloor && Number(fallbackPickupFloor.sort_order) < Number(currentFloor.sort_order)
+        ? "down"
+        : "idle";
+  const visibleRecommendation = hasOperatorWork
+    ? recommendation.nextFloor || recommendation.requestsToDropoff.length > 0 || !fallbackPickup || !fallbackPickupFloor
+      ? recommendation
+      : {
+          ...recommendation,
+          nextFloor: fallbackPickupFloor,
+          nextFloorSortOrder: Number(fallbackPickupFloor.sort_order),
+          primaryPickupRequestId: fallbackPickup.id,
+          reason: `Ramasser ${fallbackPickup.passenger_count} personne(s).`,
+          requestsToPickup: fallbackPickupRequests,
+          requestsToDropoff: [],
+          suggestedDirection: fallbackSuggestedDirection,
+          capacityWarnings: recommendation.capacityWarnings,
+        }
+    : {
+        ...recommendation,
+        nextFloor: null,
+        nextFloorSortOrder: null,
+        primaryPickupRequestId: null,
+        reason: "Aucune demande maintenant.",
+        requestsToPickup: [],
+        requestsToDropoff: [],
+        suggestedDirection: "idle" as const,
+        capacityWarnings: [],
+      };
+  const visibleRecommendedIds = new Set(visibleRecommendation.requestsToPickup.map((request) => request.id));
   const actionRequests = [
-    ...activeQueue.filter((request) => recommendedIds.has(request.id)),
-    ...activeQueue.filter((request) => !recommendedIds.has(request.id)),
+    ...activeQueue.filter((request) => visibleRecommendedIds.has(request.id)),
+    ...activeQueue.filter((request) => !visibleRecommendedIds.has(request.id)),
   ];
 
-  /** Pas de palier « inventé » depuis la file si capacité bloque — suit uniquement la reco dispatch. */
-  const displayFloor = recommendation.nextFloor ?? currentFloor;
+  /** Pas de palier invente quand le cerveau dit pause. */
+  const displayFloor = visibleRecommendation.nextFloor;
 
   /** Toujours dériver de la géométrie étages : évite direction passager / état ascenseur périmé (« monter » vers P1 alors qu’il faut descendre). */
-  const targetSort = Number(displayFloor.sort_order);
+  const targetSort = Number(displayFloor?.sort_order ?? currentFloor.sort_order);
   const currentSort = Number(currentFloor.sort_order);
   const displayDirection: Direction =
-    targetSort > currentSort ? "up" : targetSort < currentSort ? "down" : "idle";
+    displayFloor == null ? "idle" : targetSort > currentSort ? "up" : targetSort < currentSort ? "down" : "idle";
 
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
@@ -175,7 +214,7 @@ export function OperatorDashboard({
               </span>
             </div>
             <p className="mt-3 text-4xl font-black tabular-nums tracking-tight text-white drop-shadow-[0_2px_18px_rgba(0,0,0,0.5)] md:text-5xl md:leading-none">
-              {formatFloorLabel(displayFloor)}
+              {displayFloor ? formatFloorLabel(displayFloor) : <T k="operator.pause" />}
             </p>
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/8 p-4">
@@ -211,7 +250,7 @@ export function OperatorDashboard({
       </section>
 
       <RecommendedNextStop
-        recommendation={recommendation}
+        recommendation={visibleRecommendation}
         actionRequests={actionRequests}
         operatorElevatorId={elevator.id}
         onPickupSuccess={(req) => {
@@ -270,7 +309,7 @@ export function OperatorDashboard({
           <p className="mt-1 text-xs font-bold text-emerald-200"><T k="operator.requestsSynced" /></p>
         </div>
 
-        <MovementBoard requests={activeQueue} recommendedIds={recommendedIds} />
+        <MovementBoard requests={activeQueue} recommendedIds={visibleRecommendedIds} />
       </section>
     </div>
   );
