@@ -8,12 +8,29 @@ import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { elevatorHasOperatorTabletBinding, elevatorOperatorSessionAppearsLive } from "@/lib/operatorTablet";
 import type { Elevator } from "@/types/hoist";
 
+/** Même logique que la barre opérateur : libellé navigateur à jour pour cette tablette, sinon valeur stockée. */
+function tabletDeviceDisplayLine(elevator: Elevator, sessionId: string | null | undefined, liveDeviceLabel: string): string {
+  const stored = elevator.operator_tablet_label?.trim() ?? "";
+  const live = liveDeviceLabel.trim();
+  const isThisTablet = Boolean(sessionId && elevator.operator_session_id === sessionId);
+  if (isThisTablet) {
+    return live || stored;
+  }
+  return stored;
+}
+
 export function OperatorTabletSessionsPanel({
   projectId,
   elevators,
+  sessionId,
+  deviceLabel = "",
 }: {
   projectId: string;
   elevators: Elevator[];
+  /** Session navigateur courante : permet d’afficher le même libellé appareil que dans la barre opérateur. */
+  sessionId?: string | null;
+  /** Résultat de `getOperatorDeviceLabel()` sur cet appareil. */
+  deviceLabel?: string;
 }) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -54,7 +71,7 @@ export function OperatorTabletSessionsPanel({
       <ul className="mt-4 grid gap-3">
         {bound.map((elevator) => {
           const live = elevatorOperatorSessionAppearsLive(elevator);
-          const label = elevator.operator_tablet_label?.trim();
+          const displayLine = tabletDeviceDisplayLine(elevator, sessionId, deviceLabel);
           return (
             <li
               key={elevator.id}
@@ -63,7 +80,7 @@ export function OperatorTabletSessionsPanel({
               <div className="min-w-0">
                 <p className="font-black text-white">{elevator.name}</p>
                 <p className="mt-1 text-xs font-bold text-slate-400">
-                  {label ? t("operator.tabletSessionsDeviceLine", { device: label }) : t("operator.tabletNoDeviceName")}
+                  {displayLine ? t("operator.tabletSessionsDeviceLine", { device: displayLine }) : t("operator.tabletNoDeviceName")}
                 </p>
                 <p className={`mt-2 inline-block rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ${live ? "bg-emerald-500/15 text-emerald-100" : "bg-amber-500/15 text-amber-100"}`}>
                   {live ? t("operator.tabletStatusConnected") : t("operator.tabletStatusQuiet")}

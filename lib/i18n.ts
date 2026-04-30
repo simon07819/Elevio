@@ -88,7 +88,7 @@ export const translations = {
     "request.urgentPlaceholder": "Ex: urgence securite, blessure, livraison importante...",
     "request.submit": "Demander l'elevateur",
     "request.sending": "Envoi...",
-    "request.dispatchAvailableBanner": "Operateurs joignables aujourd'hui entre {hours} (heure du chantier).",
+    "request.dispatchOperatorFallback": "Operateur",
     "request.dispatchOutsideHours": "Hors plage horaire : aucun ascenseur ne prend les demandes pour le moment.",
     "request.dispatchNoOperator": "Aucun operateur en ligne pour le moment : les demandes sont suspendues.",
     "eta.label": "Arrivee estimee dans environ {min} a {max} min",
@@ -103,7 +103,7 @@ export const translations = {
     "operator.nextPass": "prochain passage",
     "operator.tablet": "Tablette operateur",
     "operator.movements": "Mouvements a traiter",
-    "operator.nextVisible": "Prochain visible",
+    "operator.nextVisible": "À traiter en premier",
     "operator.up": "Montee",
     "operator.down": "Descente",
     "operator.nextRequest": "Prochaine demande",
@@ -399,8 +399,6 @@ export const translations = {
     "operator.tabletSessionsTitle": "Tablettes encore liees aux ascenseurs",
     "operator.tabletSessionsBody":
       "Si une tablette est restee ouverte ou ne repond plus, vous pouvez couper la connexion ici (meme chose que desactiver depuis la cabine).",
-    "operator.deviceAutoCaption":
-      "Cet appareil sera identifie automatiquement (navigateur / plateforme) lorsque vous activez une cabine — ce n'est pas le nom Bluetooth des reglages.",
     "operator.tabletSessionsDeviceLine": "Appareil : {device}",
     "operator.tabletNoDeviceName": "Appareil non identifie",
     "operator.tabletStatusConnected": "Tablette jointe",
@@ -508,7 +506,7 @@ export const translations = {
     "request.urgentPlaceholder": "Ex: safety emergency, injury, important delivery...",
     "request.submit": "Request the hoist",
     "request.sending": "Sending...",
-    "request.dispatchAvailableBanner": "Operators are reachable today between {hours} (site time).",
+    "request.dispatchOperatorFallback": "Operator",
     "request.dispatchOutsideHours": "Outside service hours: no hoist is accepting requests right now.",
     "request.dispatchNoOperator": "No operator is online right now: requests are paused.",
     "eta.label": "Estimated arrival in about {min} to {max} min",
@@ -523,7 +521,7 @@ export const translations = {
     "operator.nextPass": "next pass",
     "operator.tablet": "Operator tablet",
     "operator.movements": "Movements to handle",
-    "operator.nextVisible": "Next visible",
+    "operator.nextVisible": "Handle first",
     "operator.up": "Up",
     "operator.down": "Down",
     "operator.nextRequest": "Next request",
@@ -820,8 +818,6 @@ export const translations = {
     "operator.tabletSessionsTitle": "Tablets still linked to hoists",
     "operator.tabletSessionsBody":
       "If a tablet was left open or stopped responding, you can disconnect it here (same as releasing from the cab).",
-    "operator.deviceAutoCaption":
-      "This device is identified automatically (browser / platform) when you activate a hoist — not your Bluetooth or OS device name.",
     "operator.tabletSessionsDeviceLine": "Device: {device}",
     "operator.tabletNoDeviceName": "Device not identified",
     "operator.tabletStatusConnected": "Tablet connected",

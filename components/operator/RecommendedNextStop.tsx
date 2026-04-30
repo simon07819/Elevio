@@ -11,9 +11,13 @@ import { useLanguage } from "@/components/i18n/LanguageProvider";
 export function RecommendedNextStop({
   recommendation,
   actionRequests,
+  operatorElevatorId,
+  onPickupSuccess,
 }: {
   recommendation: DispatchRecommendation;
   actionRequests: EnrichedRequest[];
+  operatorElevatorId: string;
+  onPickupSuccess?: (request: EnrichedRequest) => void;
 }) {
   const [handledIds, setHandledIds] = useState<Set<string>>(() => new Set());
   const [isPending, startTransition] = useTransition();
@@ -32,9 +36,12 @@ export function RecommendedNextStop({
 
     const requestId = actionRequest.id;
     startTransition(async () => {
-      const result = await advanceRequestStatus(requestId, "boarded");
+      const result = await advanceRequestStatus(requestId, "boarded", {
+        assignElevatorId: operatorElevatorId,
+      });
       if (result.ok) {
         setHandledIds((current) => new Set(current).add(requestId));
+        onPickupSuccess?.(actionRequest);
         router.refresh();
       }
     });

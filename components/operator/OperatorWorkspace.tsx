@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LockKeyhole, TabletSmartphone } from "lucide-react";
 import {
@@ -9,6 +9,8 @@ import {
   heartbeatOperatorElevator,
   releaseOperatorElevator,
 } from "@/lib/actions";
+import { createClient } from "@/lib/supabase/client";
+import { subscribeToTable, unsubscribe, type ElevatorRealtimePayload } from "@/lib/realtime";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { formatFloorLabel } from "@/lib/utils";
 import { ServiceTimePicker } from "@/components/ServiceTimePicker";
@@ -107,6 +109,36 @@ export function OperatorWorkspace({
   useEffect(() => {
     setLocalElevators(elevators);
   }, [elevators]);
+
+  const patchElevator = useCallback((elevatorId: string, patch: Partial<Elevator>) => {
+    setLocalElevators((current) =>
+      current.map((item) => (item.id === elevatorId ? { ...item, ...patch } : item)),
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!selectedElevatorId) {
+      return;
+    }
+
+    const client = createClient();
+    const channel = subscribeToTable<ElevatorRealtimePayload>({
+      client,
+      table: "elevators",
+      filter: `id=eq.${selectedElevatorId}`,
+      onChange: (payload) => {
+        if (payload.eventType !== "UPDATE" || !payload.new?.id) {
+          return;
+        }
+
+        setLocalElevators((current) =>
+          current.map((item) => (item.id === payload.new.id ? { ...item, ...payload.new } : item)),
+        );
+      },
+    });
+
+    return () => unsubscribe(client, channel);
+  }, [selectedElevatorId]);
 
   useEffect(() => {
     const onVisible = () => {
@@ -216,7 +248,7 @@ export function OperatorWorkspace({
   }
 
   const activeDeviceSubtitle =
-    selectedElevator?.operator_tablet_label?.trim() || deviceLabel || t("operator.tabletNoDeviceName");
+    deviceLabel.trim() || selectedElevator?.operator_tablet_label?.trim() || t("operator.tabletNoDeviceName");
 
   if (selectedElevator) {
     return (
@@ -250,6 +282,7 @@ export function OperatorWorkspace({
           requests={requests}
           elevator={selectedElevator}
           prioritiesEnabled={project.priorities_enabled !== false}
+          onElevatorPatch={patchElevator}
           activePassengers={activePassengers.filter((passenger) =>
             requests.some((request) => request.id === passenger.requestId && request.elevator_id === selectedElevator.id),
           )}
@@ -260,7 +293,7 @@ export function OperatorWorkspace({
 
   return (
     <>
-      <OperatorTabletSessionsPanel projectId={project.id} elevators={localElevators} />
+      <OperatorTabletSessionsPanel projectId={project.id} elevators={localElevators} sessionId={sessionId} deviceLabel={deviceLabel} />
       <section className="mx-auto grid max-w-7xl gap-4 rounded-3xl border border-white/10 bg-white/8 p-5">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-200">
@@ -268,7 +301,6 @@ export function OperatorWorkspace({
           </p>
           <h2 className="mt-2 text-3xl font-black text-white">{project.name}</h2>
           <p className="mt-2 max-w-2xl text-sm font-bold text-slate-400">{t("operator.activateBody")}</p>
-          <p className="mt-2 max-w-2xl text-xs font-bold text-slate-500">{t("operator.deviceAutoCaption")}</p>
         </div>
 
         {message && <div className="rounded-2xl bg-white/10 p-3 text-sm font-bold text-slate-100">{message}</div>}

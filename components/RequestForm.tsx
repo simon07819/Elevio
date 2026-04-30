@@ -173,7 +173,21 @@ export function RequestForm({
     <>
       {dispatch.canDispatch ? (
         <div className="shrink-0 rounded-[1.25rem] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-950">
-          {t("request.dispatchAvailableBanner", { hours: serviceHoursLabel })}
+          {dispatch.dispatchOperators.length > 0 ? (
+            <ul className="list-none space-y-2 leading-snug">
+              {dispatch.dispatchOperators.map((op, idx) => (
+                <li key={`${op.displayName ?? ""}-${op.hoursRange}-${idx}`}>
+                  <span className="font-black">{op.displayName?.trim() || t("request.dispatchOperatorFallback")}</span>{" "}
+                  <span className="font-bold opacity-90">({op.hoursRange})</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>
+              <span className="font-black">{t("request.dispatchOperatorFallback")}</span>{" "}
+              <span className="font-bold opacity-90">({serviceHoursLabel})</span>
+            </p>
+          )}
         </div>
       ) : (
         <div className="shrink-0 rounded-[1.25rem] border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-950">

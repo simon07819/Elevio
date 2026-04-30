@@ -1,7 +1,7 @@
 "use client";
 
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import type { HoistRequest } from "@/types/hoist";
+import type { Elevator, HoistRequest } from "@/types/hoist";
 
 type RealtimeHandler<T> = (payload: T) => void;
 
@@ -9,6 +9,12 @@ export type RequestRealtimePayload = {
   eventType: "INSERT" | "UPDATE" | "DELETE";
   new: HoistRequest;
   old: Partial<HoistRequest>;
+};
+
+export type ElevatorRealtimePayload = {
+  eventType: "INSERT" | "UPDATE" | "DELETE";
+  new: Elevator;
+  old: Partial<Elevator>;
 };
 
 export function mergeRealtimeRequest(current: HoistRequest[], payload: RequestRealtimePayload) {

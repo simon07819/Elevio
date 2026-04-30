@@ -1,21 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Minus, Plus, Users } from "lucide-react";
-import { adjustElevatorLoad } from "@/lib/actions";
+import { Users } from "lucide-react";
 import type { Elevator } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
 export function CapacityPanel({ elevator }: { elevator: Elevator }) {
-  const [load, setLoad] = useState(elevator.current_load);
   const { t } = useLanguage();
+  const load = elevator.current_load;
   const remaining = Math.max(0, elevator.capacity - load);
-
-  function updateLoad(next: number) {
-    const normalized = Math.max(0, Math.min(elevator.capacity, next));
-    setLoad(normalized);
-    adjustElevatorLoad(elevator.id, normalized);
-  }
 
   return (
     <section className="rounded-3xl border border-white/10 bg-white/8 p-4">
@@ -36,20 +28,6 @@ export function CapacityPanel({ elevator }: { elevator: Elevator }) {
           <p className="text-xs font-bold">{t("operator.remaining")}</p>
           <p className="text-2xl font-black">{remaining}</p>
         </div>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <button
-          onClick={() => updateLoad(load - 1)}
-          className="touch-target rounded-xl border border-white/15 bg-white/10 text-xl font-black"
-        >
-          <Minus className="mx-auto" />
-        </button>
-        <button
-          onClick={() => updateLoad(load + 1)}
-          className="touch-target rounded-xl bg-yellow-300 text-xl font-black text-slate-950"
-        >
-          <Plus className="mx-auto" />
-        </button>
       </div>
     </section>
   );

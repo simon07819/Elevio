@@ -1,3 +1,4 @@
+import { formatPostgresTimeToAmPm } from "@/lib/utils";
 import { elevatorOperatorSessionAppearsLive } from "@/lib/operatorTablet";
 import type { Elevator } from "@/types/hoist";
 
@@ -5,10 +6,19 @@ export const DEFAULT_PROJECT_TIMEZONE = "America/Toronto";
 
 export type DispatchBlockReason = "outside_hours" | "no_live_operator";
 
+export type PassengerDispatchOperatorSummary = {
+  /** null si profil sans nom — UI affiche une etiquette generique */
+  displayName: string | null;
+  /** Plage horaire cabine (fuseau chantier), ex. 12 h AM–3 h PM */
+  hoursRange: string;
+};
+
 export type PassengerDispatchState = {
   canDispatch: boolean;
   blockReason: DispatchBlockReason | null;
   hourRanges: Array<{ start: string; end: string }>;
+  /** Opérateurs actuellement joignables avec horaires cabine */
+  dispatchOperators: PassengerDispatchOperatorSummary[];
 };
 
 /** Valide un fuseau IANA (lève si invalide pour Intl). */
@@ -62,6 +72,28 @@ export function isElevatorWithinServiceHours(elevator: Elevator, timeZone: strin
     return nowM >= start && nowM <= end;
   }
   return nowM >= start || nowM <= end;
+}
+
+/** Plage horaire service cabine en 12 h pour affichage passager. */
+export function elevatorServiceHoursAmPmRange(elevator: Elevator): string {
+  const start = (elevator.service_start_time ?? "07:00:00").slice(0, 5);
+  const end = (elevator.service_end_time ?? "15:00:00").slice(0, 5);
+  return `${formatPostgresTimeToAmPm(start)}–${formatPostgresTimeToAmPm(end)}`;
+}
+
+/** Liste dedupliquee pour la vue demande passager. */
+export function passengerDispatchOperatorSummaries(elevators: Elevator[]): PassengerDispatchOperatorSummary[] {
+  const raw = elevators.map((e) => ({
+    displayName: e.operator_display_name?.trim() || null,
+    hoursRange: elevatorServiceHoursAmPmRange(e),
+  }));
+  const seen = new Set<string>();
+  return raw.filter((row) => {
+    const key = `${row.displayName ?? ""}|${row.hoursRange}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export function isElevatorDispatchableNow(elevator: Elevator, timeZone: string, now?: Date): boolean {

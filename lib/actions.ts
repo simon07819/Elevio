@@ -439,7 +439,16 @@ export async function deleteFloor(floorId: string, projectId: string) {
 }
 
 const elevatorSelectColumns =
-  "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,operator_tablet_label,service_start_time,service_end_time";
+  "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,operator_tablet_label,operator_display_name,service_start_time,service_end_time";
+
+const TABLET_SESSION_FIELDS_CLEAR = {
+  operator_session_id: null,
+  operator_session_started_at: null,
+  operator_session_heartbeat_at: null,
+  operator_user_id: null,
+  operator_tablet_label: null,
+  operator_display_name: null,
+} as const;
 
 function normalizeElevatorName(name: string) {
   return name.trim().toLowerCase();
@@ -492,6 +501,7 @@ export async function createElevator(
       service_start_time: "07:00:00",
       service_end_time: "15:00:00",
       operator_tablet_label: null,
+      operator_display_name: null,
     };
     return { ok: true, message: "Mode demo: elevateur ajoute localement.", elevator };
   }
@@ -645,7 +655,7 @@ export async function activateOperatorElevator(
 
   const { data: elevator, error: elevatorError } = await supabase
     .from("elevators")
-    .select("id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,operator_tablet_label,service_start_time,service_end_time")
+      .select("id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,operator_tablet_label,operator_display_name,service_start_time,service_end_time")
     .eq("id", elevatorId)
     .eq("project_id", projectId)
     .single();
@@ -662,13 +672,7 @@ export async function activateOperatorElevator(
     return { ok: false, message: "Cet elevateur est deja active sur une autre tablette." };
   }
 
-  const sessionClear = {
-    operator_session_id: null,
-    operator_session_started_at: null,
-    operator_session_heartbeat_at: null,
-    operator_user_id: null,
-    operator_tablet_label: null,
-  };
+  const sessionClear = { ...TABLET_SESSION_FIELDS_CLEAR };
 
   /* Index unique sur operator_session_id: une session ne peut être que sur un ascenseur.
    * Sans cette étape, activer un 2e ascenseur avec la même session (ex. heartbeats périmés,
@@ -684,6 +688,20 @@ export async function activateOperatorElevator(
   }
 
   const now = new Date().toISOString();
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("first_name, last_name")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const operatorDisplayName =
+    [profile?.first_name, profile?.last_name]
+      .map((s) => (typeof s === "string" ? s.trim() : ""))
+      .filter(Boolean)
+      .join(" ")
+      .trim() || null;
+
   const { error } = await supabase
     .from("elevators")
     .update({
@@ -692,6 +710,7 @@ export async function activateOperatorElevator(
       operator_session_heartbeat_at: now,
       operator_user_id: user.id,
       operator_tablet_label: normalizedTabletLabel,
+      operator_display_name: operatorDisplayName,
       current_floor_id: currentFloorId || null,
       direction: "idle",
       current_load: 0,
@@ -749,11 +768,7 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
   const { error } = await supabase
     .from("elevators")
     .update({
-      operator_session_id: null,
-      operator_session_started_at: null,
-      operator_session_heartbeat_at: null,
-      operator_user_id: null,
-      operator_tablet_label: null,
+      ...TABLET_SESSION_FIELDS_CLEAR,
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId)
@@ -796,11 +811,7 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
   const { error } = await supabase
     .from("elevators")
     .update({
-      operator_session_id: null,
-      operator_session_started_at: null,
-      operator_session_heartbeat_at: null,
-      operator_user_id: null,
-      operator_tablet_label: null,
+      ...TABLET_SESSION_FIELDS_CLEAR,
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId);
@@ -1013,6 +1024,19 @@ const statusEventMap: Record<RequestStatus, RequestEventType> = {
   cancelled: "cancelled",
 };
 
+async function sumBoardedPassengersForElevator(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  elevatorId: string,
+): Promise<number> {
+  const { data: rows } = await supabase
+    .from("requests")
+    .select("passenger_count")
+    .eq("elevator_id", elevatorId)
+    .eq("status", "boarded");
+
+  return (rows ?? []).reduce((sum, row) => sum + Number(row.passenger_count ?? 0), 0);
+}
+
 async function syncElevatorWithRequestStatus(
   supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
   requestId: string,
@@ -1030,6 +1054,8 @@ async function syncElevatorWithRequestStatus(
 
   const elevatorId = req.elevator_id as string;
   const projectId = req.project_id as string;
+
+  const current_load = await sumBoardedPassengersForElevator(supabase, elevatorId);
 
   const { data: elevator } = await supabase.from("elevators").select("id, current_floor_id").eq("id", elevatorId).single();
 
@@ -1071,7 +1097,7 @@ async function syncElevatorWithRequestStatus(
     return;
   }
 
-  const patch: Record<string, unknown> = { direction };
+  const patch: Record<string, unknown> = { direction, current_load };
   if (current_floor_id !== undefined) {
     patch.current_floor_id = current_floor_id;
   }
@@ -1083,7 +1109,12 @@ async function syncElevatorWithRequestStatus(
   }
 }
 
-export async function updateRequestStatus(requestId: string, status: RequestStatus, message?: string) {
+export async function updateRequestStatus(
+  requestId: string,
+  status: RequestStatus,
+  message?: string,
+  options?: { assignElevatorId?: string },
+) {
   const supabase = await createClient();
 
   if (!supabase) {
@@ -1098,6 +1129,31 @@ export async function updateRequestStatus(requestId: string, status: RequestStat
     status,
     updated_at: new Date().toISOString(),
   };
+
+  if (
+    status === "boarded" &&
+    options?.assignElevatorId &&
+    isUuid(options.assignElevatorId)
+  ) {
+    const { data: existing } = await supabase
+      .from("requests")
+      .select("elevator_id, project_id")
+      .eq("id", requestId)
+      .single();
+
+    if (existing?.elevator_id == null && existing?.project_id) {
+      const { data: lift } = await supabase
+        .from("elevators")
+        .select("id")
+        .eq("id", options.assignElevatorId)
+        .eq("project_id", existing.project_id as string)
+        .maybeSingle();
+
+      if (lift) {
+        updates.elevator_id = options.assignElevatorId;
+      }
+    }
+  }
 
   if (status === "completed") {
     updates.completed_at = new Date().toISOString();
@@ -1136,6 +1192,12 @@ export async function assignRequestElevator(requestId: string, elevatorId: strin
     return staleIdsAction();
   }
 
+  const { data: before } = await supabase
+    .from("requests")
+    .select("elevator_id, project_id")
+    .eq("id", requestId)
+    .single();
+
   const { error } = await supabase
     .from("requests")
     .update({ elevator_id: elevatorId || null, updated_at: new Date().toISOString() })
@@ -1145,12 +1207,30 @@ export async function assignRequestElevator(requestId: string, elevatorId: strin
     return { ok: false, message: error.message };
   }
 
+  const projectId = before?.project_id as string | undefined;
+  if (projectId) {
+    const touchedElevators = new Set<string>();
+    const prevElevatorId = before?.elevator_id as string | null;
+    if (prevElevatorId) touchedElevators.add(prevElevatorId);
+    if (elevatorId) touchedElevators.add(elevatorId);
+
+    for (const liftId of touchedElevators) {
+      const current_load = await sumBoardedPassengersForElevator(supabase, liftId);
+      await supabase.from("elevators").update({ current_load }).eq("id", liftId).eq("project_id", projectId);
+    }
+    revalidateAdminProject(projectId);
+  }
+
   revalidatePath("/operator");
   revalidatePath("/admin");
   return { ok: true, message: elevatorId ? "Demande reassignee." : "Demande remise non assignee." };
 }
 
-export async function advanceRequestStatus(requestId: string, status: RequestStatus) {
+export async function advanceRequestStatus(
+  requestId: string,
+  status: RequestStatus,
+  options?: { assignElevatorId?: string },
+) {
   const messages: Record<RequestStatus, string> = {
     pending: "Reporte au prochain passage.",
     assigned: "Pris en charge par l'operateur.",
@@ -1160,7 +1240,7 @@ export async function advanceRequestStatus(requestId: string, status: RequestSta
     cancelled: "Annule par l'operateur.",
   };
 
-  return updateRequestStatus(requestId, status, messages[status]);
+  return updateRequestStatus(requestId, status, messages[status], options);
 }
 
 export async function createRequestEvent(requestId: string, eventType: RequestEventType, message: string) {

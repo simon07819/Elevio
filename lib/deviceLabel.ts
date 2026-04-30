@@ -22,6 +22,31 @@ function readNavigatorUAData(): UADataHints | undefined {
   return (navigator as Navigator & { userAgentData: UADataHints }).userAgentData;
 }
 
+/** Exclut les marques génériques (Mozilla seul quand un autre navigateur est listé, Not=A?Brand, Gecko). */
+function meaningfulBrandEntries(brands: { brand: string; version: string }[] | undefined): { brand: string; version: string }[] {
+  if (!brands?.length) return [];
+  const names = brands.map((b) => b.brand.trim()).filter(Boolean);
+  return brands.filter((b) => {
+    const brand = b.brand.trim();
+    if (!brand || /^not/i.test(brand)) return false;
+    if (brand === "Gecko") return false;
+    if (brand === "Mozilla" && names.some((n) => n !== "Mozilla" && n !== "Gecko")) return false;
+    return true;
+  });
+}
+
+function brandsSummaryLowEntropy(brands: { brand: string; version: string }[] | undefined): string {
+  const entries = meaningfulBrandEntries(brands);
+  if (!entries.length) return "";
+  return entries.map((b) => `${b.brand} ${b.version}`.trim()).join(", ");
+}
+
+function brandsSummaryNamesOnly(brands: { brand: string; version: string }[] | undefined): string {
+  const entries = meaningfulBrandEntries(brands);
+  if (!entries.length) return "";
+  return entries.map((b) => b.brand).join(", ");
+}
+
 export async function getOperatorDeviceLabel(): Promise<string> {
   if (typeof navigator === "undefined") {
     return "Web";
@@ -32,13 +57,13 @@ export async function getOperatorDeviceLabel(): Promise<string> {
     try {
       if (typeof uaData.getHighEntropyValues === "function") {
         const hints = await uaData.getHighEntropyValues(["model", "platformVersion"]);
-        const brands = uaData.brands?.map((b) => b.brand).join(", ") ?? "";
+        const brandsStr = brandsSummaryNamesOnly(uaData.brands);
         const parts = [
-          hints.model != null && String(hints.model),
+          hints.model != null && String(hints.model).trim(),
           uaData.platform,
           hints.platformVersion != null && String(hints.platformVersion),
           uaData.mobile ? "Mobile" : "Desktop",
-          brands,
+          brandsStr || undefined,
         ].filter(Boolean);
         if (parts.length > 0) {
           return truncate(parts.join(" · "));
@@ -48,7 +73,7 @@ export async function getOperatorDeviceLabel(): Promise<string> {
       /* fall through */
     }
 
-    const brands = uaData.brands?.map((b) => `${b.brand} ${b.version}`).join(", ");
+    const brands = brandsSummaryLowEntropy(uaData.brands);
     const coarse = [uaData.platform, uaData.mobile ? "Mobile" : "Desktop", brands].filter(Boolean).join(" · ");
     if (coarse) {
       return truncate(coarse);

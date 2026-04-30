@@ -9,7 +9,12 @@ import {
   enrichRequests,
 } from "@/lib/demoData";
 import { createClient } from "@/lib/supabase/client";
-import { mergeRealtimeRequest, subscribeToTable, unsubscribe, type RequestRealtimePayload } from "@/lib/realtime";
+import {
+  mergeRealtimeRequest,
+  subscribeToTable,
+  unsubscribe,
+  type RequestRealtimePayload,
+} from "@/lib/realtime";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatFloorLabel } from "@/lib/utils";
 import { getRecommendedNextStop } from "@/services/dispatchEngine";
@@ -39,15 +44,21 @@ export function OperatorDashboard({
   elevator = demoElevator,
   activePassengers = demoActivePassengers,
   prioritiesEnabled = true,
+  onElevatorPatch,
 }: {
   floors?: Floor[];
   requests?: HoistRequest[];
   elevator?: Elevator;
   activePassengers?: ActivePassenger[];
   prioritiesEnabled?: boolean;
+  onElevatorPatch?: (elevatorId: string, patch: Partial<Elevator>) => void;
 }) {
   const [liveRequests, setLiveRequests] = useState(requests);
   const projectId = elevator.project_id;
+
+  useEffect(() => {
+    setLiveRequests(requests);
+  }, [requests]);
 
   useEffect(() => {
     const client = createClient();
@@ -105,12 +116,6 @@ export function OperatorDashboard({
     floors,
     prioritiesEnabled,
   });
-  const displayDirection: Direction =
-    elevator.direction !== "idle"
-      ? elevator.direction
-      : recommendation.suggestedDirection !== "idle"
-        ? recommendation.suggestedDirection
-        : "idle";
   const recommendedIds = new Set(recommendation.requestsToPickup.map((request) => request.id));
   const liveQueue = [...enriched].sort((a, b) => {
     const aTerminal = a.status === "completed" || a.status === "cancelled" ? 1 : 0;
@@ -136,13 +141,34 @@ export function OperatorDashboard({
     ...activeQueue.filter((request) => !recommendedIds.has(request.id)),
   ];
 
+  const displayFloor =
+    recommendation.nextFloor ?? actionRequests[0]?.from_floor ?? currentFloor;
+
+  let displayDirection: Direction =
+    recommendation.suggestedDirection !== "idle"
+      ? recommendation.suggestedDirection
+      : elevator.direction !== "idle"
+        ? elevator.direction
+        : "idle";
+
+  if (
+    displayDirection === "idle" &&
+    Number(displayFloor.sort_order) !== Number(currentFloor.sort_order)
+  ) {
+    if (Number(displayFloor.sort_order) > Number(currentFloor.sort_order)) {
+      displayDirection = "up";
+    } else if (Number(displayFloor.sort_order) < Number(currentFloor.sort_order)) {
+      displayDirection = "down";
+    }
+  }
+
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
       <section className="grid gap-3 lg:grid-cols-[1fr_340px]">
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="rounded-3xl border border-white/10 bg-white/8 p-4">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400"><T k="operator.floor" /></p>
-            <p className="mt-1 text-4xl font-black text-white">{formatFloorLabel(currentFloor)}</p>
+            <p className="mt-1 text-4xl font-black text-white">{formatFloorLabel(displayFloor)}</p>
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/8 p-4">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400"><T k="operator.direction" /></p>
@@ -176,7 +202,34 @@ export function OperatorDashboard({
         <CapacityPanel elevator={elevator} />
       </section>
 
-      <RecommendedNextStop recommendation={recommendation} actionRequests={actionRequests} />
+      <RecommendedNextStop
+        recommendation={recommendation}
+        actionRequests={actionRequests}
+        operatorElevatorId={elevator.id}
+        onPickupSuccess={(req) => {
+          setLiveRequests((prev) => {
+            const next = prev.map((r) =>
+              r.id === req.id
+                ? {
+                    ...r,
+                    status: "boarded" as const,
+                    updated_at: new Date().toISOString(),
+                    elevator_id: r.elevator_id ?? elevator.id,
+                  }
+                : r,
+            );
+            const boardedLoad = next
+              .filter((r) => r.elevator_id === elevator.id && r.status === "boarded")
+              .reduce((sum, r) => sum + r.passenger_count, 0);
+            onElevatorPatch?.(elevator.id, {
+              current_floor_id: req.from_floor_id,
+              direction: req.direction,
+              current_load: boardedLoad,
+            });
+            return next;
+          });
+        }}
+      />
 
       <section className="rounded-3xl border border-white/10 bg-white/8 p-4">
         <div className="mb-3">

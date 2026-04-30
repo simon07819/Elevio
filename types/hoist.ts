@@ -70,6 +70,8 @@ export type Elevator = {
   operator_user_id: string | null;
   /** Etiquette auto-navigateur ou ancienne saisie ; affichee pour distinguer la tablette. */
   operator_tablet_label?: string | null;
+  /** Prenom + nom du profil admin a l'activation tablette ; visible passagers QR. */
+  operator_display_name?: string | null;
   /** Local wall-clock service window (project.service_timezone). Postgres `time`. */
   service_start_time?: string | null;
   service_end_time?: string | null;
