@@ -16,6 +16,7 @@ import {
   parsePostgresTimeToMinutes,
   type DispatchBlockReason,
 } from "@/lib/operatorDispatchAvailability";
+import { ensureProfileForUser } from "@/lib/profile";
 
 function normalizeText(value: FormDataEntryValue | null) {
   const text = typeof value === "string" ? value.trim() : "";
@@ -445,7 +446,28 @@ const TABLET_SESSION_FIELDS_CLEAR = {
   operator_session_heartbeat_at: null,
   operator_user_id: null,
   operator_tablet_label: null,
+  operator_display_name: null,
 } as const;
+
+type OperatorProfileNameFields = {
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+};
+
+/** Nom affiche aux passagers : prenom + nom du profil inscription, sinon partie locale du courriel. */
+function operatorPublicDisplayName(profile: OperatorProfileNameFields): string | null {
+  const combined = [profile.first_name, profile.last_name]
+    .map((s) => (typeof s === "string" ? s.trim() : ""))
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const fallback =
+    profile.email && profile.email.includes("@") ? profile.email.split("@")[0]!.trim() : "";
+  const raw = combined || fallback;
+  if (!raw) return null;
+  return raw.length > 120 ? raw.slice(0, 120) : raw;
+}
 
 function normalizeElevatorName(name: string) {
   return name.trim().toLowerCase();
@@ -650,6 +672,9 @@ export async function activateOperatorElevator(
     return { ok: false, message: "Connexion operateur requise." };
   }
 
+  const profile = await ensureProfileForUser(supabase, user);
+  const operatorDisplayName = operatorPublicDisplayName(profile);
+
   const { data: elevator, error: elevatorError } = await supabase
     .from("elevators")
     .select("*")
@@ -693,6 +718,7 @@ export async function activateOperatorElevator(
       operator_session_started_at: now,
       operator_session_heartbeat_at: now,
       operator_user_id: user.id,
+      operator_display_name: operatorDisplayName,
       operator_tablet_label: normalizedTabletLabel,
       current_floor_id: currentFloorId || null,
       direction: "idle",
@@ -723,9 +749,32 @@ export async function heartbeatOperatorElevator(projectId: string, elevatorId: s
     return staleIdsAction();
   }
 
+  const patch: Record<string, unknown> = {
+    operator_session_heartbeat_at: new Date().toISOString(),
+  };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("first_name,last_name,email")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (prof) {
+      const name = operatorPublicDisplayName(prof);
+      if (name != null) {
+        patch.operator_display_name = name;
+      }
+    }
+  }
+
   const { error } = await supabase
     .from("elevators")
-    .update({ operator_session_heartbeat_at: new Date().toISOString() })
+    .update(patch)
     .eq("id", elevatorId)
     .eq("project_id", projectId)
     .eq("operator_session_id", sessionId);
