@@ -447,7 +447,6 @@ const TABLET_SESSION_FIELDS_CLEAR = {
   operator_session_heartbeat_at: null,
   operator_user_id: null,
   operator_tablet_label: null,
-  operator_display_name: null,
 } as const;
 
 function normalizeElevatorName(name: string) {
@@ -655,7 +654,7 @@ export async function activateOperatorElevator(
 
   const { data: elevator, error: elevatorError } = await supabase
     .from("elevators")
-      .select("id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_session_started_at,operator_session_heartbeat_at,operator_user_id,operator_tablet_label,operator_display_name,service_start_time,service_end_time")
+    .select("*")
     .eq("id", elevatorId)
     .eq("project_id", projectId)
     .single();
@@ -689,19 +688,6 @@ export async function activateOperatorElevator(
 
   const now = new Date().toISOString();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("first_name, last_name")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const operatorDisplayName =
-    [profile?.first_name, profile?.last_name]
-      .map((s) => (typeof s === "string" ? s.trim() : ""))
-      .filter(Boolean)
-      .join(" ")
-      .trim() || null;
-
   const { error } = await supabase
     .from("elevators")
     .update({
@@ -710,7 +696,6 @@ export async function activateOperatorElevator(
       operator_session_heartbeat_at: now,
       operator_user_id: user.id,
       operator_tablet_label: normalizedTabletLabel,
-      operator_display_name: operatorDisplayName,
       current_floor_id: currentFloorId || null,
       direction: "idle",
       current_load: 0,
