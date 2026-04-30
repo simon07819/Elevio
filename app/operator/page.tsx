@@ -74,6 +74,7 @@ export default async function OperatorPage() {
           requests={data.requests}
           activePassengers={activePassengers}
           operatorDisplayName={operatorDisplayName}
+          hydrationNowMs={Date.now()}
         />
       ) : (
         <div className="mx-auto max-w-7xl rounded-3xl border border-white/10 bg-white/8 p-5 text-white">

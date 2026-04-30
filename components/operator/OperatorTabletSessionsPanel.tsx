@@ -35,12 +35,15 @@ export function OperatorTabletSessionsPanel({
   sessionId,
   deviceLabel = "",
   operatorDisplayName = "",
+  nowMs,
 }: {
   projectId: string;
   elevators: Elevator[];
   sessionId?: string | null;
   deviceLabel?: string;
   operatorDisplayName?: string;
+  /** Horloge alignée avec OperatorWorkspace (hydration-safe). */
+  nowMs: number;
 }) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -80,7 +83,7 @@ export function OperatorTabletSessionsPanel({
 
       <ul className="mt-4 grid gap-3">
         {bound.map((elevator) => {
-          const live = elevatorOperatorSessionAppearsLive(elevator);
+          const live = elevatorOperatorSessionAppearsLive(elevator, nowMs);
           const displayLine = tabletDeviceDisplayLine(elevator, sessionId, deviceLabel);
           const operatorLine = tabletOperatorName(elevator, sessionId, operatorDisplayName);
           return (

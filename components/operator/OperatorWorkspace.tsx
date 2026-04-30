@@ -85,6 +85,7 @@ export function OperatorWorkspace({
   requests,
   activePassengers,
   operatorDisplayName,
+  hydrationNowMs,
 }: {
   project: Project;
   floors: Floor[];
@@ -92,6 +93,8 @@ export function OperatorWorkspace({
   requests: HoistRequest[];
   activePassengers: ActivePassenger[];
   operatorDisplayName: string;
+  /** Horloge figée côté serveur pour le 1er rendu ; évite mismatch hydration Activer/Reprendre. */
+  hydrationNowMs: number;
 }) {
   const router = useRouter();
   const { t } = useLanguage();
@@ -101,6 +104,15 @@ export function OperatorWorkspace({
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [deviceLabel, setDeviceLabel] = useState("");
+  const [operatorClockMs, setOperatorClockMs] = useState<number | null>(null);
+
+  const effectiveNowMs = operatorClockMs ?? hydrationNowMs;
+
+  useEffect(() => {
+    setOperatorClockMs(Date.now());
+    const id = window.setInterval(() => setOperatorClockMs(Date.now()), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     void getOperatorDeviceLabel().then(setDeviceLabel);
@@ -302,6 +314,7 @@ export function OperatorWorkspace({
         sessionId={sessionId}
         deviceLabel={deviceLabel}
         operatorDisplayName={operatorDisplayName}
+        nowMs={effectiveNowMs}
       />
       <section className="mx-auto grid max-w-7xl gap-4 rounded-3xl border border-white/10 bg-white/8 p-5">
         <div>
@@ -318,7 +331,7 @@ export function OperatorWorkspace({
           {localElevators.map((elevator) => {
             const heldByOtherSession =
               Boolean(elevator.operator_session_id) && elevator.operator_session_id !== sessionId;
-            const heartbeatStale = isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at);
+            const heartbeatStale = isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at, effectiveNowMs);
             const lockActive = heldByOtherSession && !heartbeatStale;
             const locked = lockActive;
             const staleOtherBinding =
