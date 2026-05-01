@@ -48,32 +48,22 @@ function MovementTable({
                 className={
                   request.status === "boarded"
                     ? recommendedIds.has(request.id)
-                      ? "grid gap-3 rounded-2xl bg-sky-100/90 p-3 text-sm font-bold ring-2 ring-inset ring-sky-300/70 sm:grid-cols-[1fr_128px]"
-                      : "grid gap-3 rounded-2xl bg-sky-50 p-3 text-sm font-bold ring-1 ring-inset ring-sky-200/80 sm:grid-cols-[1fr_128px]"
+                      ? "grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-sky-100/90 px-3 py-2 text-sm font-bold ring-2 ring-inset ring-sky-300/70"
+                      : "grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-sky-50 px-3 py-2 text-sm font-bold ring-1 ring-inset ring-sky-200/80"
                     : recommendedIds.has(request.id)
-                      ? "grid gap-3 rounded-2xl bg-yellow-50 p-3 text-sm font-bold ring-2 ring-inset ring-yellow-300/55 sm:grid-cols-[1fr_128px]"
-                      : "grid gap-3 rounded-2xl bg-white p-3 text-sm font-bold sm:grid-cols-[1fr_128px]"
+                      ? "grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-yellow-50 px-3 py-2 text-sm font-bold ring-2 ring-inset ring-yellow-300/55"
+                      : "grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-bold"
                 }
               >
                 <div className="min-w-0">
-                  <div className="grid grid-cols-[1fr_34px_1fr] items-center gap-2">
-                    <div className="min-w-0 rounded-xl bg-slate-950/[0.04] px-3 py-2">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                        {t("common.from")}
-                      </p>
-                      <p className="truncate text-2xl font-black tabular-nums text-slate-950">
-                        {formatFloorLabel(request.from_floor)}
-                      </p>
-                    </div>
-                    <Icon className={`mx-auto ${arrowTone}`} size={24} strokeWidth={2.8} />
-                    <div className="min-w-0 rounded-xl bg-slate-950/[0.04] px-3 py-2">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
-                        {t("common.to")}
-                      </p>
-                      <p className="truncate text-2xl font-black tabular-nums text-slate-950">
-                        {formatFloorLabel(request.to_floor)}
-                      </p>
-                    </div>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-xl font-black tabular-nums text-slate-950">
+                      {formatFloorLabel(request.from_floor)}
+                    </span>
+                    <Icon className={`shrink-0 ${arrowTone}`} size={19} strokeWidth={2.8} />
+                    <span className="truncate text-xl font-black tabular-nums text-slate-950">
+                      {formatFloorLabel(request.to_floor)}
+                    </span>
                   </div>
 
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -98,9 +88,9 @@ function MovementTable({
                     title={t("requests.cancel")}
                     disabled={cancelingIds.has(request.id)}
                     onClick={() => onCancelRequest(request)}
-                    className="touch-target flex min-h-16 w-full items-center justify-center gap-2 rounded-2xl border-2 border-red-200 bg-red-50 px-4 py-3 text-base font-black text-red-800 shadow-sm transition active:scale-[0.98] disabled:opacity-45 sm:h-full sm:min-h-0 sm:flex-col"
+                    className="touch-target inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-2xl border-2 border-red-200 bg-red-50 px-3 py-2 text-sm font-black text-red-800 shadow-sm transition active:scale-[0.98] disabled:opacity-45"
                   >
-                    <Trash2 size={22} />
+                    <Trash2 size={18} />
                     {t("requests.cancel")}
                   </button>
                 )}
