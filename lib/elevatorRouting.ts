@@ -99,11 +99,13 @@ export function directionToward(fromSort: number, toSort: number): Direction {
 /**
  * Cabine au repos sans obligation de dépose : inférer un sens de desserte vers les haltes d’appel
  * pour que `targetForDirection` / scoring SCAN ne restent pas coincés sur « idle » (borne = étage courant).
+ * Si la géométrie pointe vers une phase où aucune attente n’a le même sens de voyage, on prend la phase
+ * opposée lorsqu’au moins une requête la matche — évite un pool directionnel vide (idle_blocked).
  */
 export function inferPickupPhaseDirection(
   currentSortOrder: number,
   elevatorDirection: Direction,
-  openRequests: { from_sort_order: number }[],
+  openRequests: { from_sort_order: number; direction: Direction }[],
 ): Direction {
   if (elevatorDirection !== "idle") {
     return elevatorDirection;
@@ -122,12 +124,25 @@ export function inferPickupPhaseDirection(
       nearestDist = d;
     }
   }
+  let geo: Direction;
   if (nearestSo > cur) {
-    return "up";
+    geo = "up";
+  } else if (nearestSo < cur) {
+    geo = "down";
+  } else {
+    return "idle";
   }
-  if (nearestSo < cur) {
-    return "down";
+
+  const alignedCount = openRequests.filter((r) => r.direction === geo).length;
+  if (alignedCount > 0) {
+    return geo;
   }
+
+  const opposite: Direction = geo === "up" ? "down" : "up";
+  if (openRequests.some((r) => r.direction === opposite)) {
+    return opposite;
+  }
+
   return "idle";
 }
 
@@ -147,6 +162,83 @@ export function pickupFromSortOnSegmentToDropoff(
     return from < cur && from > drop;
   }
   return false;
+}
+
+/** Haltes d’appel éligibles pour le SCAN (tie-break file). */
+export type PickupScanCandidate = {
+  from_sort_order: number;
+  sequence_number: number;
+};
+
+function comparePickupCandidates(a: PickupScanCandidate, b: PickupScanCandidate, cur: number): PickupScanCandidate {
+  const sa = Number(a.from_sort_order);
+  const sb = Number(b.from_sort_order);
+  const da = Math.abs(sa - cur);
+  const db = Math.abs(sb - cur);
+  if (da !== db) {
+    return da < db ? a : b;
+  }
+  if (sa !== sb) {
+    return sa < sb ? a : b;
+  }
+  return a.sequence_number <= b.sequence_number ? a : b;
+}
+
+/**
+ * Prochain palier d’appel parmi des candidats capacité-OK :
+ * d’abord les attentes au palier courant, sinon halte la plus loin dans `phaseDirection`
+ * (plus haut au-dessus en montée, plus bas en dessous en descente). Si `phaseDirection`
+ * est `idle`, palier le plus proche en distance absolue (tie-break séquence).
+ */
+export function nearestEligiblePickupFloorSCAN(
+  currentSortOrder: number,
+  phaseDirection: Direction,
+  candidates: PickupScanCandidate[],
+): number | null {
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const cur = Number(currentSortOrder);
+
+  const atCurrent = candidates.filter((c) => Number(c.from_sort_order) === cur);
+  if (atCurrent.length > 0) {
+    return cur;
+  }
+
+  if (phaseDirection === "up") {
+    const eligible = candidates.filter((c) => Number(c.from_sort_order) > cur);
+    if (eligible.length === 0) {
+      return null;
+    }
+    const targetSort = Math.max(...eligible.map((c) => Number(c.from_sort_order)));
+    return targetSort;
+  }
+
+  if (phaseDirection === "down") {
+    const eligible = candidates.filter((c) => Number(c.from_sort_order) < cur);
+    if (eligible.length === 0) {
+      return null;
+    }
+    const targetSort = Math.min(...eligible.map((c) => Number(c.from_sort_order)));
+    return targetSort;
+  }
+
+  const winner = candidates.reduce((best, c) => comparePickupCandidates(c, best, cur));
+  return Number(winner.from_sort_order);
+}
+
+/** Appels paliers sur le segment vers la prochaine dépose (exclut sens passager). */
+export function openPickupsTowardNextDropoff<T extends { from_sort_order: number }>(
+  openRequests: T[],
+  currentSortOrder: number,
+  nextDropSort: number,
+): T[] {
+  const cur = Number(currentSortOrder);
+  return openRequests.filter(
+    (r) =>
+      Number(r.from_sort_order) === cur || pickupFromSortOnSegmentToDropoff(r.from_sort_order, currentSortOrder, nextDropSort),
+  );
 }
 
 /** Borne de trajet dans le sens donné (aligné dispatchEngine / hall collectif). */

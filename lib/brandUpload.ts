@@ -58,7 +58,14 @@ function revalidateBrandPaths(projectId?: string) {
 
 export type BrandLogoKind = "company" | "project" | "site";
 
-export async function uploadBrandLogo(formData: FormData): Promise<{ ok: boolean; message: string }> {
+function logoStoragePath(userId: string, kind: BrandLogoKind, ext: string, projectId?: string | null) {
+  const version = `${Date.now()}-${crypto.randomUUID()}`;
+  if (kind === "company") return `${userId}/company/${version}.${ext}`;
+  if (kind === "project") return `${userId}/project/${version}.${ext}`;
+  return `${userId}/sites/${projectId}/${version}.${ext}`;
+}
+
+export async function uploadBrandLogo(formData: FormData): Promise<{ ok: boolean; message: string; url?: string | null }> {
   const supabase = await createClient();
 
   if (!supabase) {
@@ -96,10 +103,11 @@ export async function uploadBrandLogo(formData: FormData): Promise<{ ok: boolean
   }
 
   let storagePath: string;
+  let previousUrl: string | null | undefined = null;
   if (kind === "company") {
-    storagePath = `${user.id}/company.${ext}`;
+    storagePath = logoStoragePath(user.id, kind, ext);
   } else if (kind === "project") {
-    storagePath = `${user.id}/project.${ext}`;
+    storagePath = logoStoragePath(user.id, kind, ext);
   } else if (kind === "site") {
     if (!projectId) {
       return { ok: false, message: "Projet manquant pour le logo chantier." };
@@ -113,7 +121,7 @@ export async function uploadBrandLogo(formData: FormData): Promise<{ ok: boolean
     if (error || !row || row.owner_id !== user.id) {
       return { ok: false, message: "Projet introuvable ou acces refuse." };
     }
-    storagePath = `${user.id}/sites/${projectId}.${ext}`;
+    storagePath = logoStoragePath(user.id, kind, ext, projectId);
   } else {
     return { ok: false, message: "Type de logo invalide." };
   }
@@ -125,18 +133,17 @@ export async function uploadBrandLogo(formData: FormData): Promise<{ ok: boolean
       .eq("id", user.id)
       .single();
 
-    const previousUrl = kind === "company" ? profile?.company_logo_url : profile?.project_logo_url;
-    await deleteStoredUrl(supabase, user.id, previousUrl);
+    previousUrl = kind === "company" ? profile?.company_logo_url : profile?.project_logo_url;
   } else if (kind === "site" && projectId) {
     const { data: project } = await supabase.from("projects").select("logo_url").eq("id", projectId).single();
 
-    await deleteStoredUrl(supabase, user.id, project?.logo_url);
+    previousUrl = project?.logo_url;
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
-    .upload(storagePath, bytes, { contentType: mime, upsert: true });
+    .upload(storagePath, bytes, { contentType: mime, upsert: false });
 
   if (uploadError) {
     const msg = uploadError.message ?? "";
@@ -156,17 +163,28 @@ export async function uploadBrandLogo(formData: FormData): Promise<{ ok: boolean
 
   if (kind === "company") {
     const { error } = await supabase.from("profiles").update({ company_logo_url: publicUrl }).eq("id", user.id);
-    if (error) return { ok: false, message: error.message };
+    if (error) {
+      await deleteStoredPath(supabase, storagePath);
+      return { ok: false, message: error.message };
+    }
   } else if (kind === "project") {
     const { error } = await supabase.from("profiles").update({ project_logo_url: publicUrl }).eq("id", user.id);
-    if (error) return { ok: false, message: error.message };
+    if (error) {
+      await deleteStoredPath(supabase, storagePath);
+      return { ok: false, message: error.message };
+    }
   } else if (kind === "site" && projectId) {
     const { error } = await supabase.from("projects").update({ logo_url: publicUrl }).eq("id", projectId).eq("owner_id", user.id);
-    if (error) return { ok: false, message: error.message };
+    if (error) {
+      await deleteStoredPath(supabase, storagePath);
+      return { ok: false, message: error.message };
+    }
   }
 
+  await deleteStoredUrl(supabase, user.id, previousUrl);
+
   revalidateBrandPaths(kind === "site" ? projectId ?? undefined : undefined);
-  return { ok: true, message: "Logo enregistre." };
+  return { ok: true, message: "Logo enregistre.", url: publicUrl };
 }
 
 export async function removeBrandLogo(kind: BrandLogoKind, projectId?: string): Promise<{ ok: boolean; message: string }> {

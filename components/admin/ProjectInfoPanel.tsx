@@ -100,6 +100,16 @@ export function ProjectInfoPanel({ project }: { project: Project }) {
           <label className="mt-4 flex cursor-pointer items-center gap-3 rounded-xl border border-transparent p-1 transition-colors hover:border-white/10 hover:bg-white/[0.03]">
             <input
               type="checkbox"
+              name="capacityEnabled"
+              value="on"
+              defaultChecked={project.capacity_enabled !== false}
+              className="size-5 shrink-0 accent-yellow-300"
+            />
+            <span className="text-sm font-black text-white">{t("project.capacityEnabledLabel")}</span>
+          </label>
+          <label className="mt-3 flex cursor-pointer items-center gap-3 rounded-xl border border-transparent p-1 transition-colors hover:border-white/10 hover:bg-white/[0.03]">
+            <input
+              type="checkbox"
               name="prioritiesEnabled"
               value="on"
               defaultChecked={project.priorities_enabled !== false}

@@ -10,6 +10,8 @@ export function getRecommendedNextStop({
   activePassengers,
   floors,
   prioritiesEnabled = true,
+  capacityEnabled = true,
+  manualFull = false,
 }: DispatchInput): DispatchRecommendation {
   const elevator: Elevator = {
     id: "operator-current-elevator",
@@ -24,6 +26,7 @@ export function getRecommendedNextStop({
     operator_session_started_at: null,
     operator_session_heartbeat_at: null,
     operator_user_id: null,
+    manual_full: manualFull,
   };
 
   const result = computeNextOperatorAction({
@@ -32,6 +35,7 @@ export function getRecommendedNextStop({
     onboardPassengers: activePassengers,
     projectFloors: floors ?? [currentFloor],
     prioritiesEnabled,
+    capacityEnabled,
   });
 
   return {

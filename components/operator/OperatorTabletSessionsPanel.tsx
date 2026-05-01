@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { TabletSmartphone } from "lucide-react";
 import { adminDeactivateOperatorTablet } from "@/lib/actions";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
-import { elevatorHasOperatorTabletBinding, elevatorOperatorSessionAppearsLive } from "@/lib/operatorTablet";
+import { elevatorOperatorSessionAppearsLive } from "@/lib/operatorTablet";
 import { formatStoredTabletLabel } from "@/lib/deviceLabel";
 import type { Elevator } from "@/types/hoist";
 
@@ -36,6 +36,7 @@ export function OperatorTabletSessionsPanel({
   deviceLabel = "",
   operatorDisplayName = "",
   nowMs,
+  onSessionCleared,
 }: {
   projectId: string;
   elevators: Elevator[];
@@ -44,13 +45,14 @@ export function OperatorTabletSessionsPanel({
   operatorDisplayName?: string;
   /** Horloge alignée avec OperatorWorkspace (hydration-safe). */
   nowMs: number;
+  onSessionCleared?: (elevatorId: string) => void;
 }) {
   const router = useRouter();
   const { t } = useLanguage();
   const [isPending, startTransition] = useTransition();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const bound = elevators.filter((e) => elevatorHasOperatorTabletBinding(e));
+  const bound = elevators.filter((e) => elevatorOperatorSessionAppearsLive(e, nowMs));
 
   if (bound.length === 0) {
     return null;
@@ -65,6 +67,7 @@ export function OperatorTabletSessionsPanel({
         setErrorMessage(result.message);
         return;
       }
+      onSessionCleared?.(elevatorId);
       router.refresh();
     });
   }

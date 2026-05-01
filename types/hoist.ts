@@ -10,11 +10,18 @@ export type RequestStatus =
   | "completed"
   | "cancelled";
 
-/** Statuts encore affiches dans la file « mouvements » operateur (en attente de prise en charge a l'etage). */
-export const OPERATOR_MOVEMENT_QUEUE_STATUSES = ["pending", "assigned", "arriving"] as const;
+/** Statuts affiches dans la file « mouvements » operateur jusqu’a la depose (inclut a bord). */
+export const OPERATOR_MOVEMENT_QUEUE_STATUSES = ["pending", "assigned", "arriving", "boarded"] as const;
 
 export function isOperatorMovementQueueStatus(status: RequestStatus): boolean {
   return OPERATOR_MOVEMENT_QUEUE_STATUSES.includes(status as (typeof OPERATOR_MOVEMENT_QUEUE_STATUSES)[number]);
+}
+
+/** Encore au palier : pas encore marque a bord — pour fallback pickup / boutons ramasser. */
+export const OPERATOR_AWAITING_PICKUP_STATUSES = ["pending", "assigned", "arriving"] as const;
+
+export function isOperatorAwaitingPickup(status: RequestStatus): boolean {
+  return OPERATOR_AWAITING_PICKUP_STATUSES.includes(status as (typeof OPERATOR_AWAITING_PICKUP_STATUSES)[number]);
 }
 
 export type RequestEventType =
@@ -43,6 +50,8 @@ export type Project = {
   logo_url?: string | null;
   /** When false, passenger/operator hide priority UI and dispatch ignores priority scoring. */
   priorities_enabled?: boolean;
+  /** When false, dispatch ignores cabin capacity and does not split groups by capacity. */
+  capacity_enabled?: boolean;
 };
 
 export type Floor = {
@@ -75,6 +84,8 @@ export type Elevator = {
   /** Local wall-clock service window (project.service_timezone). Postgres `time`. */
   service_start_time?: string | null;
   service_end_time?: string | null;
+  /** Operator-set capacity pause for material/tools: no new pickups until cleared. */
+  manual_full?: boolean;
 };
 
 export type HoistUser = {
@@ -169,6 +180,10 @@ export type DispatchInput = {
   floors?: Floor[];
   /** Default true. When false, priority flags do not affect recommendation scoring or messaging. */
   prioritiesEnabled?: boolean;
+  /** Default true. When false, pickup/dropoff logic ignores capacity limits and warnings. */
+  capacityEnabled?: boolean;
+  /** Operator-set full pause: continue dropoffs, block pickups. */
+  manualFull?: boolean;
 };
 
 export type DispatchRecommendation = {

@@ -11,6 +11,8 @@ export type ElevatorAssignment = {
   elevatorId: string | null;
   score: number;
   reason: string;
+  /** Places pour cette vague de dispatch ; défini si elevatorId est défini. */
+  assignableChunk?: number;
 };
 
 export function assignRequestToBestElevator({
@@ -19,12 +21,14 @@ export function assignRequestToBestElevator({
   floors,
   requests,
   prioritiesEnabled = true,
+  capacityEnabled = true,
 }: {
   request: DispatchableRequest;
   elevators: Elevator[];
   floors: Floor[];
   requests: HoistRequest[];
   prioritiesEnabled?: boolean;
+  capacityEnabled?: boolean;
 }): ElevatorAssignment {
   const onlineElevators = elevators.map((elevator) => ({
     ...elevator,
@@ -37,11 +41,13 @@ export function assignRequestToBestElevator({
     activeRequests: requests,
     projectFloors: floors,
     prioritiesEnabled,
+    capacityEnabled,
   });
 
   return {
     elevatorId: assignment.elevatorId,
     score: assignment.score,
     reason: assignment.reason,
+    assignableChunk: assignment.assignableChunk,
   };
 }

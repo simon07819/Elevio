@@ -12,6 +12,11 @@ import { isUuid } from "@/lib/utils";
 import { notFound } from "next/navigation";
 import type { Elevator, Floor, HoistRequest, HoistUser, Project } from "@/types/hoist";
 
+const PROJECT_SELECT_WITH_CAPACITY =
+  "id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled,capacity_enabled";
+const PROJECT_SELECT_LEGACY =
+  "id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled";
+
 export type AdminProjectBranding = {
   company_logo_url: string | null;
   project_logo_url: string | null;
@@ -56,19 +61,33 @@ export async function getAdminProjectData(projectId: string): Promise<AdminProje
     notFound();
   }
 
+  let projectQuery = (await supabase
+    .from("projects")
+    .select(PROJECT_SELECT_WITH_CAPACITY)
+    .eq("id", projectId)
+    .single()) as unknown as {
+    data: Project | null;
+    error: { message: string; code?: string } | null;
+  };
+
+  if (projectQuery.error?.message.includes("capacity_enabled")) {
+    projectQuery = (await supabase
+      .from("projects")
+      .select(PROJECT_SELECT_LEGACY)
+      .eq("id", projectId)
+      .single()) as unknown as {
+      data: Project | null;
+      error: { message: string; code?: string } | null;
+    };
+  }
+
   const [
-    { data: project, error: projectError },
     { data: profileBranding },
     { data: floors },
     { data: elevators },
     { data: operators },
     { data: requests },
   ] = await Promise.all([
-    supabase
-      .from("projects")
-      .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled")
-      .eq("id", projectId)
-      .single(),
     supabase.from("profiles").select("company_logo_url, project_logo_url").eq("id", user.id).maybeSingle(),
     supabase
       .from("floors")
@@ -92,6 +111,8 @@ export async function getAdminProjectData(projectId: string): Promise<AdminProje
       .limit(80),
   ]);
 
+  const { data: project, error: projectError } = projectQuery;
+
   if (projectError || !project) {
     notFound();
   }
@@ -102,7 +123,7 @@ export async function getAdminProjectData(projectId: string): Promise<AdminProje
   };
 
   return {
-    project: project as Project,
+    project: { ...(project as Project), capacity_enabled: (project as Project).capacity_enabled ?? true },
     floors: (floors ?? []) as Floor[],
     elevators: (elevators ?? []) as Elevator[],
     operators: (operators ?? []) as HoistUser[],

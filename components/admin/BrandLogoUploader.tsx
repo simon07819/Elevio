@@ -21,9 +21,10 @@ export function BrandLogoUploader({ kind, projectId, currentUrl, titleKey, bodyK
   const { t } = useLanguage();
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(currentUrl);
   const [isPending, startTransition] = useTransition();
 
-  const showThumbnail = Boolean(currentUrl) && !isPending;
+  const showThumbnail = Boolean(previewUrl) && !isPending;
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const input = event.target;
@@ -42,6 +43,7 @@ export function BrandLogoUploader({ kind, projectId, currentUrl, titleKey, bodyK
       setMessage(result.message);
       setSuccess(result.ok);
       if (result.ok) {
+        setPreviewUrl(result.url ?? null);
         router.refresh();
       }
     });
@@ -61,7 +63,7 @@ export function BrandLogoUploader({ kind, projectId, currentUrl, titleKey, bodyK
           <div className="flex min-h-[112px] items-center justify-center p-3">
             {showThumbnail ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={currentUrl!} alt="" className="max-h-28 max-w-full object-contain" />
+              <img src={previewUrl!} alt="" className="max-h-28 max-w-full object-contain" />
             ) : null}
           </div>
           {isPending ? (
@@ -90,7 +92,7 @@ export function BrandLogoUploader({ kind, projectId, currentUrl, titleKey, bodyK
         />
       </label>
 
-      {currentUrl ? (
+      {previewUrl ? (
         <div className="mt-2">
           <button
             type="button"
@@ -101,6 +103,7 @@ export function BrandLogoUploader({ kind, projectId, currentUrl, titleKey, bodyK
                 setMessage(result.message);
                 setSuccess(result.ok);
                 if (result.ok) {
+                  setPreviewUrl(null);
                   router.refresh();
                 }
               });

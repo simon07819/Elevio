@@ -34,7 +34,9 @@ export function RecommendedNextStop({
   onDropoffSuccess?: (payload: { requestIds: string[]; dropFloorId: string }) => void;
 }) {
   const [completedDropoffIds, setCompletedDropoffIds] = useState<Set<string>>(() => new Set());
-  const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
+  const [pendingPickupIds, setPendingPickupIds] = useState<Set<string>>(() => new Set());
+  const [pendingDropoffIds, setPendingDropoffIds] = useState<Set<string>>(() => new Set());
+  const [actionError, setActionError] = useState<string | null>(null);
   const { t, locale } = useLanguage();
 
   const reasonLine = formatDispatchRecommendationReason(
@@ -55,10 +57,26 @@ export function RecommendedNextStop({
     return recommendation.requestsToDropoff.filter((p) => !completedDropoffIds.has(p.requestId));
   }, [recommendation.requestsToDropoff, completedDropoffIds]);
 
+  const dropoffIds = useMemo(() => {
+    const fromRecommendation = pendingDropoffs.map((p) => p.requestId);
+    if (fromRecommendation.length > 0) {
+      return [...new Set(fromRecommendation)];
+    }
+
+    const boardedAtTarget = actionRequests
+      .filter((request) => request.status === "boarded" && (!dropFloorId || request.to_floor_id === dropFloorId))
+      .map((request) => request.id);
+    if (boardedAtTarget.length > 0) {
+      return [...new Set(boardedAtTarget)];
+    }
+
+    return [...new Set(actionRequests.filter((request) => request.status === "boarded").map((request) => request.id))];
+  }, [actionRequests, dropFloorId, pendingDropoffs]);
+
   const actionRequest = useMemo(() => {
     const candidates = actionRequests.filter(
       (request) =>
-        !pendingIds.has(request.id) &&
+        !pendingPickupIds.has(request.id) &&
         (request.status === "pending" || request.status === "assigned" || request.status === "arriving"),
     );
     const primaryId = recommendation.primaryPickupRequestId;
@@ -67,9 +85,9 @@ export function RecommendedNextStop({
     }
     const primary = candidates.find((request) => request.id === primaryId);
     return primary ?? null;
-  }, [actionRequests, pendingIds, recommendation.primaryPickupRequestId]);
+  }, [actionRequests, pendingPickupIds, recommendation.primaryPickupRequestId]);
 
-  const showDropoff = pendingDropoffs.length > 0 && dropFloorId !== "";
+  const showDropoff = dropoffIds.length > 0 && dropFloorId !== "";
   const showPickup = !showDropoff && actionRequest !== null;
   const showPrimaryAction = showDropoff || showPickup;
 
@@ -123,35 +141,43 @@ export function RecommendedNextStop({
     }
 
     const requestId = actionRequest.id;
-    if (pendingIds.has(requestId)) return;
+    if (pendingPickupIds.has(requestId)) return;
 
-    setPendingIds((current) => new Set(current).add(requestId));
+    setActionError(null);
+    setPendingPickupIds((current) => new Set(current).add(requestId));
     onPickupSuccess?.(actionRequest);
 
     void advanceRequestStatus(requestId, "boarded", {
       assignElevatorId: operatorElevatorId,
-    }).then((result) => {
-      setPendingIds((current) => {
-        const next = new Set(current);
-        next.delete(requestId);
-        return next;
+    })
+      .then((result) => {
+        if (!result.ok) {
+          setActionError(result.message);
+        }
+      })
+      .catch(() => {
+        setActionError("Action impossible. Verifiez la connexion et reessayez.");
+      })
+      .finally(() => {
+        setPendingPickupIds((current) => {
+          const next = new Set(current);
+          next.delete(requestId);
+          return next;
+        });
       });
-      if (!result.ok) {
-        return;
-      }
-    });
   }
 
   function dropoff() {
-    const ids = [...new Set(pendingDropoffs.map((p) => p.requestId))];
+    const ids = dropoffIds;
     if (ids.length === 0 || !dropFloorId) {
       return;
     }
 
-    const alreadyPending = ids.some((id) => pendingIds.has(id));
+    const alreadyPending = ids.some((id) => pendingDropoffIds.has(id));
     if (alreadyPending) return;
 
-    setPendingIds((current) => {
+    setActionError(null);
+    setPendingDropoffIds((current) => {
       const next = new Set(current);
       for (const id of ids) next.add(id);
       return next;
@@ -163,20 +189,33 @@ export function RecommendedNextStop({
     });
     onDropoffSuccess?.({ requestIds: ids, dropFloorId });
 
-    void Promise.all(ids.map((requestId) => advanceRequestStatus(requestId, "completed"))).then((results) => {
-      setPendingIds((current) => {
-        const next = new Set(current);
-        for (const id of ids) next.delete(id);
-        return next;
-      });
-      if (!results.every((r) => r.ok)) {
+    void Promise.all(ids.map((requestId) => advanceRequestStatus(requestId, "completed")))
+      .then((results) => {
+        const failed = results.find((result) => !result.ok);
+        if (failed) {
+          setActionError(failed.message);
+          setCompletedDropoffIds((current) => {
+            const next = new Set(current);
+            for (const id of ids) next.delete(id);
+            return next;
+          });
+        }
+      })
+      .catch(() => {
+        setActionError("Action impossible. Verifiez la connexion et reessayez.");
         setCompletedDropoffIds((current) => {
           const next = new Set(current);
           for (const id of ids) next.delete(id);
           return next;
         });
-      }
-    });
+      })
+      .finally(() => {
+        setPendingDropoffIds((current) => {
+          const next = new Set(current);
+          for (const id of ids) next.delete(id);
+          return next;
+        });
+      });
   }
 
   return (
@@ -187,6 +226,11 @@ export function RecommendedNextStop({
         </p>
       ) : null}
       {actionButton}
+      {actionError ? (
+        <p className="mt-3 rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-center text-sm font-bold text-red-100">
+          {actionError}
+        </p>
+      ) : null}
       {recommendation.capacityWarnings.length > 0 && (
         <div className="mt-3 rounded-2xl bg-slate-950/90 p-3 text-yellow-100">
           <p className="flex items-center gap-2 text-sm font-black">

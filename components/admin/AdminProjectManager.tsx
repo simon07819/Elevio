@@ -19,7 +19,7 @@ type ProjectActionResult = {
 };
 
 const PRIORITIES_ENABLED_MIGRATION_SQL =
-  "alter table projects add column if not exists priorities_enabled boolean not null default true;";
+  "alter table projects add column if not exists priorities_enabled boolean not null default true;\nalter table projects add column if not exists capacity_enabled boolean not null default true;";
 
 function statusClass(project: Project) {
   if (project.active) return "bg-emerald-400 text-slate-950";
@@ -68,7 +68,7 @@ export function AdminProjectManager({
         <div className="rounded-[2rem] border border-red-400/35 bg-red-500/10 px-5 py-4 sm:px-6">
           <p className="text-sm font-black text-red-100">{t("admin.projectsLoadErrorTitle")}</p>
           <p className="mt-2 font-mono text-xs leading-relaxed text-red-200/85">{projectsLoadError}</p>
-          {projectsLoadError.includes("priorities_enabled") ? (
+          {projectsLoadError.includes("priorities_enabled") || projectsLoadError.includes("capacity_enabled") ? (
             <div className="mt-4 rounded-xl border border-emerald-400/35 bg-emerald-950/50 p-4">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">{t("admin.projectsLoadErrorPrioritiesTitle")}</p>
               <p className="mt-2 text-sm font-bold text-emerald-100/95">{t("admin.projectsLoadErrorPrioritiesSteps")}</p>
@@ -101,6 +101,8 @@ export function AdminProjectManager({
             const name = String(formData.get("name") ?? "").trim();
             const address = String(formData.get("address") ?? "").trim();
             const active = formData.get("active") === "on";
+            const capacityEnabled = formData.get("capacityEnabled") === "on";
+            const prioritiesEnabled = formData.get("prioritiesEnabled") === "on";
 
             runAction(() => createProject(formData), (result) => {
               const now = new Date().toISOString();
@@ -110,7 +112,8 @@ export function AdminProjectManager({
                   name,
                   address,
                   active,
-                  priorities_enabled: true,
+                  capacity_enabled: capacityEnabled,
+                  priorities_enabled: prioritiesEnabled,
                   logo_url: null,
                   created_at: now,
                   updated_at: now,
@@ -152,6 +155,16 @@ export function AdminProjectManager({
           </div>
 
           <div className="flex flex-col gap-4 border-t border-white/10 pt-5 lg:flex-row lg:flex-nowrap lg:items-center lg:justify-between lg:gap-6">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-black text-white lg:shrink-0">
+              <input
+                name="capacityEnabled"
+                type="checkbox"
+                value="on"
+                defaultChecked
+                className="size-5 shrink-0 accent-yellow-300"
+              />
+              {t("project.capacityEnabledLabel")}
+            </label>
             <label className="flex cursor-pointer items-center gap-2 text-sm font-black text-white lg:shrink-0">
               <input
                 name="prioritiesEnabled"

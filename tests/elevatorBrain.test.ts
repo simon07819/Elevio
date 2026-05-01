@@ -145,6 +145,162 @@ test("un ascenseur plein ne prend plus de nouveaux passagers", () => {
   assert.equal(result.elevatorId, null);
 });
 
+test("capacite desactivee: un ascenseur plein peut encore recevoir une demande", () => {
+  const result = computeBestElevatorForRequest({
+    newRequest: request("r1", "2", "5", { passenger_count: 12 }),
+    elevators: [elevator("full", "2", "idle", { current_load: 4, capacity: 4 })],
+    activeRequests: [],
+    projectFloors: floors,
+    capacityEnabled: false,
+    nowMs: now,
+  });
+
+  assert.equal(result.elevatorId, "full");
+  assert.equal(result.assignableChunk, 12);
+});
+
+test("bouton plein: la cabine ne recoit plus de nouveaux ramassages meme si capacite desactivee", () => {
+  const result = computeBestElevatorForRequest({
+    newRequest: request("r1", "2", "5", { passenger_count: 1 }),
+    elevators: [
+      elevator("full-manual", "2", "idle", { capacity: 10, current_load: 0, manual_full: true }),
+      elevator("available", "3", "idle", { capacity: 10, current_load: 0 }),
+    ],
+    activeRequests: [],
+    projectFloors: floors,
+    capacityEnabled: false,
+    nowMs: now,
+  });
+
+  assert.equal(result.elevatorId, "available");
+});
+
+test("bouton plein: avec passagers a bord, l'operateur depose avant de reprendre des pickups", () => {
+  const onboard = request("r21", "rdc", "5", { elevator_id: "e1", status: "boarded" });
+  const onRoutePickup = request("r22", "2", "5", { elevator_id: "e1" });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc", "up", { current_load: 1, manual_full: true }),
+    assignedRequests: enrichDispatchRequests([onRoutePickup], floors),
+    onboardPassengers: enrichDispatchRequests([onboard], floors).map((r) => ({
+      requestId: r.id,
+      from_floor_id: r.from_floor_id,
+      to_floor_id: r.to_floor_id,
+      from_sort_order: r.from_sort_order,
+      to_sort_order: r.to_sort_order,
+      passenger_count: r.passenger_count,
+    })),
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(action.action, "dropoff");
+  assert.equal(action.requestsToPickup.length, 0);
+  assert.equal(action.requestsToDropoff[0]?.requestId, "r21");
+});
+
+test("un groupe de 40 avec deux cabines cap 15 est eligible pour une vague de 15 passagers", () => {
+  const big = {
+    from_floor_id: "rdc",
+    to_floor_id: "5",
+    direction: "up" as const,
+    passenger_count: 40,
+    priority: false,
+    wait_started_at: "2026-04-30T11:58:00.000Z",
+  };
+  const result = computeBestElevatorForRequest({
+    newRequest: big,
+    elevators: [
+      elevator("e1", "rdc", "idle", { capacity: 15 }),
+      elevator("e2", "1", "idle", { capacity: 15 }),
+    ],
+    activeRequests: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(result.assignableChunk, 15);
+  assert.ok(result.elevatorId === "e1" || result.elevatorId === "e2");
+  assert.equal(result.candidates.filter((c) => c.eligible).length, 2);
+});
+
+test("un seul ascenseur cap 15 peut planifier plusieurs vagues pour un groupe de 40", () => {
+  let remaining = 40;
+  const e1 = elevator("e1", "rdc", "idle", { capacity: 15 });
+  for (let wave = 0; wave < 3; wave++) {
+    const result = computeBestElevatorForRequest({
+      newRequest: {
+        from_floor_id: "rdc",
+        to_floor_id: "5",
+        direction: "up",
+        passenger_count: remaining,
+        priority: false,
+        wait_started_at: "2026-04-30T11:58:00.000Z",
+      },
+      elevators: [e1],
+      activeRequests: [],
+      projectFloors: floors,
+      nowMs: now,
+    });
+
+    assert.equal(result.elevatorId, "e1");
+    const expectedChunk = wave === 2 ? 10 : 15;
+    assert.equal(result.assignableChunk, expectedChunk);
+    remaining -= result.assignableChunk ?? 0;
+  }
+  assert.equal(remaining, 0);
+});
+
+test("un groupe qui depasse la capacite est reparti sur les autres operateurs actifs avant une nouvelle vague", () => {
+  const elevators = [
+    elevator("e1", "rdc", "idle", { capacity: 15 }),
+    elevator("e2", "rdc", "idle", { capacity: 15 }),
+  ];
+  const assigned: Array<{ elevatorId: string; passengers: number }> = [];
+  let syntheticReservations: HoistRequest[] = [];
+  let remaining = 25;
+
+  while (remaining > 0) {
+    const result = computeBestElevatorForRequest({
+      newRequest: {
+        from_floor_id: "rdc",
+        to_floor_id: "5",
+        direction: "up",
+        passenger_count: remaining,
+        priority: false,
+        wait_started_at: "2026-04-30T11:58:00.000Z",
+      },
+      elevators,
+      activeRequests: syntheticReservations,
+      projectFloors: floors,
+      nowMs: now,
+    });
+
+    if (!result.elevatorId) {
+      syntheticReservations = [];
+      continue;
+    }
+
+    const passengers = result.assignableChunk ?? remaining;
+    assigned.push({ elevatorId: result.elevatorId, passengers });
+    syntheticReservations.push(
+      request(`split-${assigned.length}`, "rdc", "5", {
+        elevator_id: result.elevatorId,
+        passenger_count: passengers,
+        original_passenger_count: 25,
+        remaining_passenger_count: Math.max(0, remaining - passengers),
+        split_required: true,
+        status: "assigned",
+      }),
+    );
+    remaining -= passengers;
+  }
+
+  assert.deepEqual(assigned, [
+    { elevatorId: "e1", passengers: 15 },
+    { elevatorId: "e2", passengers: 10 },
+  ]);
+});
+
 test("deux ascenseurs disponibles choisissent le meilleur", () => {
   const result = computeBestElevatorForRequest({
     newRequest: request("r1", "5", "rdc"),
@@ -256,6 +412,27 @@ test("les places reservees par des demandes assignees comptent dans la capacite 
   assert.equal(result.elevatorId, "e2");
 });
 
+test("capacite desactivee: l'operateur peut ramasser un groupe qui depasse la capacite", () => {
+  const oversized = request("r20", "rdc", "5", {
+    elevator_id: "e1",
+    passenger_count: 12,
+    original_passenger_count: 12,
+    remaining_passenger_count: 12,
+  });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc", "idle", { capacity: 4 }),
+    assignedRequests: enrichDispatchRequests([oversized], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    capacityEnabled: false,
+    nowMs: now,
+  });
+
+  assert.equal(action.action, "pickup");
+  assert.equal(action.requestsToPickup[0]?.id, "r20");
+  assert.equal(action.capacityWarnings.length, 0);
+});
+
 test("le message de pickup utilise le vrai libelle d'etage, pas le sort_order", () => {
   const action = computeNextOperatorAction({
     elevator: elevator("e1", "rdc"),
@@ -303,5 +480,139 @@ test("sans passager a bord, une direction stale ne force pas une montee inutile"
 
   assert.equal(action.primaryPickupRequestId, "r15");
   assert.equal(action.nextFloor?.id, "p1");
+  assert.equal(action.suggestedDirection, "down");
+});
+
+test("cabine vide avec appels P1 et RDC vers le haut commence par P1 puis ramasse RDC en chemin", () => {
+  const p1Pickup = request("r16", "p1", "8", { elevator_id: "e1", sequence_number: 2 });
+  const rdcPickup = request("r17", "rdc", "16", { elevator_id: "e1", sequence_number: 1 });
+  const first = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc", "idle"),
+    assignedRequests: enrichDispatchRequests([rdcPickup, p1Pickup], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(first.primaryPickupRequestId, "r16");
+  assert.equal(first.nextFloor?.id, "p1");
+
+  const boardedP1 = enrichDispatchRequests([{ ...p1Pickup, status: "boarded" }], floors)[0];
+  const second = computeNextOperatorAction({
+    elevator: elevator("e1", "p1", "up", { current_load: 1 }),
+    assignedRequests: enrichDispatchRequests([rdcPickup], floors),
+    onboardPassengers: [
+      {
+        requestId: boardedP1.id,
+        from_floor_id: boardedP1.from_floor_id,
+        to_floor_id: boardedP1.to_floor_id,
+        from_sort_order: boardedP1.from_sort_order,
+        to_sort_order: boardedP1.to_sort_order,
+        passenger_count: boardedP1.passenger_count,
+      },
+    ],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(second.primaryPickupRequestId, "r17");
+  assert.equal(second.nextFloor?.id, "rdc");
+});
+
+test("cabine vide avec appels au-dessus vers le bas commence par le plus haut pickup", () => {
+  const lower = request("r18", "5", "rdc", { elevator_id: "e1", sequence_number: 1 });
+  const higher = request("r19", "8", "p1", { elevator_id: "e1", sequence_number: 2 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "5", "idle"),
+    assignedRequests: enrichDispatchRequests([lower, higher], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(action.primaryPickupRequestId, "r19");
+  assert.equal(action.nextFloor?.id, "8");
+});
+
+test("cabine vide : montée commence par le palier le plus bas puis collecte en montant", () => {
+  const near = request("r51", "2", "5", { elevator_id: "e1", sequence_number: 10 });
+  const far = request("r52", "5", "8", { elevator_id: "e1", sequence_number: 1 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc"),
+    assignedRequests: enrichDispatchRequests([far, near], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(action.primaryPickupRequestId, "r51");
+  assert.equal(action.nextFloor?.id, "2");
+});
+
+test("cabine vide : descente commence par le palier le plus haut puis collecte en descendant", () => {
+  const higherBelow = request("r53", "5", "rdc", { elevator_id: "e1", sequence_number: 2 });
+  const lowerBelow = request("r54", "2", "rdc", { elevator_id: "e1", sequence_number: 1 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "8", "idle"),
+    assignedRequests: enrichDispatchRequests([lowerBelow, higherBelow], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(action.nextFloor?.id, "5");
+});
+
+test("cabine au-dessus de haltes montée : cible le plus bas (P1) avant RDC", () => {
+  const rdcUp = request("r60", "rdc", "16", { elevator_id: "e1", sequence_number: 1 });
+  const p1Up = request("r61", "p1", "8", { elevator_id: "e1", sequence_number: 2 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "8", "idle"),
+    assignedRequests: enrichDispatchRequests([rdcUp, p1Up], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(action.action, "pickup");
+  assert.equal(action.nextFloor?.id, "p1");
+  assert.equal(action.primaryPickupRequestId, "r61");
+});
+
+test("avec passagers en descente : ignore les appels montée sur le segment", () => {
+  const onboard = request("r55", "16", "rdc", { elevator_id: "e1", status: "boarded" });
+  const midPickup = request("r56", "4", "16", { elevator_id: "e1", sequence_number: 1 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "8", "down", { current_load: 1 }),
+    assignedRequests: enrichDispatchRequests([midPickup], floors),
+    onboardPassengers: enrichDispatchRequests([onboard], floors).map((r) => ({
+      requestId: r.id,
+      from_floor_id: r.from_floor_id,
+      to_floor_id: r.to_floor_id,
+      from_sort_order: r.from_sort_order,
+      to_sort_order: r.to_sort_order,
+      passenger_count: r.passenger_count,
+    })),
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(action.action, "dropoff");
+  assert.equal(action.nextFloor?.id, "rdc");
+  assert.equal(action.primaryPickupRequestId, null);
+});
+
+test("cabine vide : direction DB encore « up » ne bloque pas les appels en descente (sync retardée)", () => {
+  const downLeg = request("r62", "4", "rdc", { elevator_id: "e1", sequence_number: 1 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "8", "up"),
+    assignedRequests: enrichDispatchRequests([downLeg], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(action.action, "pickup");
+  assert.equal(action.primaryPickupRequestId, "r62");
   assert.equal(action.suggestedDirection, "down");
 });

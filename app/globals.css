@@ -212,9 +212,13 @@ textarea {
   print-color-adjust: exact;
 }
 
-/* Rangée logos pied de page QR : une seule ligne à l’impression. */
+/* Rangée logos pied de page QR : une seule ligne à l’impression ; emplacements élargis en preview. */
 .qr-brand-footer-row {
   flex-wrap: nowrap;
+}
+
+.qr-brand-slot {
+  min-width: 0;
 }
 
 @media print {
@@ -278,25 +282,6 @@ textarea {
     flex-wrap: nowrap !important;
   }
 
-  /* Pied logos QR : centré sur la largeur utile */
-  .qr-floor-poster .qr-sheet-brand-footer {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    box-sizing: border-box;
-    width: 100%;
-  }
-
-  .qr-floor-poster .qr-sheet-brand-footer .qr-brand-footer-row {
-    margin-inline: auto;
-    justify-content: center !important;
-  }
-
-  .qr-print-sheet[data-print-bw="true"] .qr-poster-grid {
-    filter: grayscale(100%);
-  }
-
-  /* Une affiche = une page ; couleurs comme à l’écran ; éviter coupure au milieu */
   .qr-floor-poster {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
@@ -305,6 +290,67 @@ textarea {
     page-break-after: always;
     break-after: page;
     max-width: 100%;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: calc(100vh - 16mm) !important;
+  }
+
+  .qr-floor-poster .qr-poster-body {
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    min-height: 0 !important;
+  }
+
+  .qr-floor-poster .qr-sheet-brand-footer {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-end !important;
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    margin-top: auto !important;
+    padding-top: 5mm !important;
+    padding-bottom: 6mm !important;
+    box-sizing: border-box !important;
+    align-items: stretch !important;
+  }
+
+  .qr-floor-poster .qr-sheet-brand-footer .qr-brand-footer-row {
+    margin-inline: auto;
+    justify-content: stretch !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    max-width: none !important;
+    gap: 5mm !important;
+  }
+
+  .qr-floor-poster .qr-sheet-brand-footer .qr-brand-slot {
+    min-height: 34mm !important;
+    max-height: 46mm !important;
+    padding: 3mm 2mm !important;
+  }
+
+  .qr-floor-poster .qr-sheet-brand-footer .qr-brand-logo-img {
+    max-height: 42mm !important;
+    max-width: 100% !important;
+    width: auto !important;
+  }
+
+  .qr-floor-poster .qr-sheet-brand-footer .qr-brand-solo-wrap {
+    min-height: 42mm !important;
+    max-height: 52mm !important;
+    padding-top: 4mm !important;
+    padding-bottom: 4mm !important;
+  }
+
+  .qr-floor-poster .qr-sheet-brand-footer .qr-brand-logo-solo {
+    max-height: 48mm !important;
+    max-width: min(92%, 160mm) !important;
+  }
+
+  .qr-print-sheet[data-print-bw="true"] .qr-poster-grid {
+    filter: grayscale(100%);
   }
 
   .qr-floor-poster:last-child {
@@ -317,7 +363,7 @@ textarea {
   }
 
   .qr-print-sheet[data-print-floor-id] .qr-floor-poster[data-print-selected="true"] {
-    display: block !important;
+    display: flex !important;
     page-break-after: auto;
     break-after: auto;
   }

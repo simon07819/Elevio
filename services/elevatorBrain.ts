@@ -4,11 +4,15 @@ import {
   estimateFloorsToReachPickup,
   hoistQueueToActivePassengersBoarded,
   hoistQueueToShaftRequests,
+  inferPickupPhaseDirection,
   isBetween,
+  nearestEligiblePickupFloorSCAN,
   nextBoardedDropoffSortOrder,
-  pickupFromSortOnSegmentToDropoff,
+  openPickupsTowardNextDropoff,
+  pendingBoardedDestinations,
   routeLimitForElevator,
 } from "../lib/elevatorRouting";
+import { formatFloorLabel, floorLabelForSortOrder } from "../lib/utils";
 import { formatDispatchRecommendationReason } from "../lib/recommendationReason";
 import type {
   ActivePassenger,
@@ -57,6 +61,8 @@ export type ElevatorScoreBreakdown = {
   reason: string;
   etaFloors: number;
   remainingCapacity: number;
+  /** Places attribuables pour cette vague : min(demande, capacité cabine, places libres). */
+  assignableChunk: number;
   onRoute: boolean;
   sameDirection: boolean;
   effectiveDirection: Direction;
@@ -69,6 +75,8 @@ export type BestElevatorResult = {
   score: number;
   reason: string;
   candidates: ElevatorScoreBreakdown[];
+  /** Défini lorsque le meilleur ascenseur peut prendre une partie du groupe (split). */
+  assignableChunk?: number;
 };
 
 export type OperatorAction =
@@ -108,7 +116,7 @@ function floorFromSortOrder(sortOrder: number): Floor {
   return {
     id: `virtual-floor-${sortOrder}`,
     project_id: "virtual",
-    label: sortOrder === 0 ? "RDC" : String(sortOrder),
+    label: floorLabelForSortOrder(sortOrder),
     sort_order: sortOrder,
     qr_token: "",
     access_code: "",
@@ -122,10 +130,7 @@ function resolveFloorEntity(floors: Floor[] | undefined, sortOrder: number): Flo
 
 function floorLabel(floors: Floor[], floorId: string, sortOrder: number): string {
   const floor = floors.find((item) => item.id === floorId) ?? resolveFloorEntity(floors, sortOrder);
-  if (Number(floor.sort_order) <= 0) {
-    return floorFromSortOrder(Number(floor.sort_order)).label;
-  }
-  return floor.label || floorFromSortOrder(Number(floor.sort_order)).label;
+  return formatFloorLabel(floor);
 }
 
 function asDispatchRequest(request: BrainRequest, floors: Floor[]): DispatchRequest {
@@ -171,6 +176,7 @@ function scoreElevatorForRequest({
   activeRequests,
   projectFloors,
   prioritiesEnabled,
+  capacityEnabled,
   nowMs,
 }: {
   elevator: BrainElevator;
@@ -178,6 +184,7 @@ function scoreElevatorForRequest({
   activeRequests: BrainRequest[];
   projectFloors: Floor[];
   prioritiesEnabled: boolean;
+  capacityEnabled: boolean;
   nowMs: number;
 }): ElevatorScoreBreakdown {
   const queue = elevator.queue ?? queueForElevator(activeRequests, elevator.id);
@@ -195,7 +202,9 @@ function scoreElevatorForRequest({
       : sameDirection && isBetween(fromSort, currentSort, routeLimit);
   const computedLoad =
     Math.max(Number(elevator.current_load ?? 0), activeLoadFromQueue(queue)) + reservedPickupLoadFromQueue(queue);
-  const remainingCapacity = Math.max(0, Number(elevator.capacity) - computedLoad);
+  const remainingCapacity = capacityEnabled ? Math.max(0, Number(elevator.capacity) - computedLoad) : request.passenger_count;
+  const maxCabChunk = capacityEnabled ? Math.min(request.passenger_count, Number(elevator.capacity)) : request.passenger_count;
+  const assignableChunk = Math.min(maxCabChunk, remainingCapacity);
   const etaFloors = estimateFloorsToReachPickup(currentSort, effectiveDirection, boarded, fromSort);
   const queueDepth = queue.filter((item) => item.status !== "boarded").length;
   const waitMinutes = minutesWaiting(request.wait_started_at, nowMs);
@@ -206,10 +215,13 @@ function scoreElevatorForRequest({
     queue: queueDepth * 10,
     direction: effectiveDirection === "idle" || sameDirection ? 0 : 130,
     offRoute: onRoute || effectiveDirection === "idle" ? 0 : 90,
-    full: remainingCapacity <= 0 ? 900 : 0,
-    insufficientCapacity: request.passenger_count > remainingCapacity ? 260 : 0,
-    overElevatorCapacity: request.passenger_count > elevator.capacity ? 2000 : 0,
+    full: capacityEnabled && remainingCapacity <= 0 ? 900 : 0,
+    insufficientCapacity:
+      capacityEnabled && assignableChunk > 0 && assignableChunk < request.passenger_count
+        ? Math.min(220, (request.passenger_count - assignableChunk) * 12)
+        : 0,
     offline: elevator.online === false || elevator.active === false ? 4000 : 0,
+    manualFull: elevator.manual_full === true ? 5000 : 0,
   };
 
   const bonuses: Record<string, number> = {
@@ -218,16 +230,15 @@ function scoreElevatorForRequest({
     idle: effectiveDirection === "idle" ? 55 : 0,
     priority: prioritiesEnabled && request.priority ? 180 : 0,
     age: Math.min(150, waitMinutes * 3),
+    /** Favorise la cabine qui peut vider plus du groupe en un trajet si le score est proche. */
+    chunkThroughput: Math.min(75, assignableChunk * 5),
   };
 
   const penaltyTotal = Object.values(penalties).reduce((sum, value) => sum + value, 0);
   const bonusTotal = Object.values(bonuses).reduce((sum, value) => sum + value, 0);
   const score = penaltyTotal - bonusTotal;
   const eligible =
-    elevator.active !== false &&
-    elevator.online !== false &&
-    remainingCapacity > 0 &&
-    request.passenger_count <= elevator.capacity;
+    elevator.active !== false && elevator.online !== false && elevator.manual_full !== true && assignableChunk > 0;
 
   return {
     elevatorId: elevator.id,
@@ -235,10 +246,11 @@ function scoreElevatorForRequest({
     score,
     eligible,
     reason: eligible
-      ? `${elevator.name}: ETA ${etaFloors} étage(s), ${remainingCapacity} place(s) libre(s).`
+      ? `${elevator.name}: ${assignableChunk} passager(s) pour ce trajet, ETA ${etaFloors} étage(s), ${remainingCapacity} place(s) libre(s).`
       : `${elevator.name}: indisponible pour cette demande.`,
     etaFloors,
     remainingCapacity,
+    assignableChunk,
     onRoute,
     sameDirection,
     effectiveDirection,
@@ -253,6 +265,7 @@ export function computeBestElevatorForRequest({
   activeRequests,
   projectFloors,
   prioritiesEnabled = true,
+  capacityEnabled = true,
   nowMs = Date.now(),
 }: {
   newRequest: NewBrainRequest;
@@ -261,6 +274,7 @@ export function computeBestElevatorForRequest({
   onboardPassengers?: ActivePassenger[];
   projectFloors: Floor[];
   prioritiesEnabled?: boolean;
+  capacityEnabled?: boolean;
   nowMs?: number;
 }): BestElevatorResult {
   if (newRequest.id) {
@@ -283,10 +297,17 @@ export function computeBestElevatorForRequest({
         activeRequests,
         projectFloors,
         prioritiesEnabled,
+        capacityEnabled,
         nowMs,
       }),
     )
-    .sort((a, b) => a.score - b.score || b.remainingCapacity - a.remainingCapacity || a.elevatorName.localeCompare(b.elevatorName));
+    .sort(
+      (a, b) =>
+        a.score - b.score ||
+        b.remainingCapacity - a.remainingCapacity ||
+        b.assignableChunk - a.assignableChunk ||
+        a.elevatorName.localeCompare(b.elevatorName),
+    );
 
   const winner = candidates.find((candidate) => candidate.eligible) ?? null;
 
@@ -304,11 +325,15 @@ export function computeBestElevatorForRequest({
     score: winner.score,
     reason: winner.reason,
     candidates,
+    assignableChunk: winner.assignableChunk,
   };
 }
 
-function capacityWarnings(request: DispatchRequest, capacity: number, remainingCapacity: number) {
+function capacityWarnings(request: DispatchRequest, capacity: number, remainingCapacity: number, capacityEnabled: boolean) {
   const warnings: OperatorActionResult["capacityWarnings"] = [];
+  if (!capacityEnabled) {
+    return warnings;
+  }
   if (request.passenger_count > remainingCapacity) {
     warnings.push({
       requestId: request.id,
@@ -333,49 +358,6 @@ function capacityWarnings(request: DispatchRequest, capacity: number, remainingC
   return warnings;
 }
 
-function pickupScore({
-  request,
-  currentSortOrder,
-  travelDirection,
-  routeLimit,
-  remainingCapacity,
-  capacity,
-  oldestSequence,
-  prioritiesEnabled,
-  nowMs,
-}: {
-  request: DispatchRequest;
-  currentSortOrder: number;
-  travelDirection: Direction;
-  routeLimit: number;
-  remainingCapacity: number;
-  capacity: number;
-  oldestSequence: number;
-  prioritiesEnabled: boolean;
-  nowMs: number;
-}) {
-  const sameDirection = requestWouldTravelWithDirection(request, travelDirection);
-  const onRoute =
-    travelDirection === "idle" ||
-    (sameDirection && isBetween(request.from_sort_order, currentSortOrder, routeLimit));
-  const capacityValid = request.passenger_count <= remainingCapacity && request.passenger_count <= capacity;
-  const detour = onRoute ? 0 : Math.abs(request.from_sort_order - currentSortOrder);
-  const age = minutesWaiting(request.wait_started_at, nowMs);
-  const sequenceLag = oldestSequence === Number.MAX_SAFE_INTEGER ? 0 : Math.max(0, request.sequence_number - oldestSequence);
-
-  let score = 0;
-  score += prioritiesEnabled && request.priority ? 420 : 0;
-  score += Math.min(220, age * 5);
-  score += sameDirection ? 180 : 0;
-  score += onRoute ? 280 : 0;
-  score += capacityValid ? 120 : -1000;
-  score -= detour * 130;
-  score -= Math.min(180, sequenceLag * 16);
-  score -= !onRoute && sequenceLag > 0 ? 180 : 0;
-
-  return { score, onRoute, capacityValid };
-}
-
 function pickupReasonDetail(
   request: DispatchRequest,
   currentSort: number,
@@ -391,36 +373,57 @@ function pickupReasonDetail(
   };
 }
 
-function scoreIdlePickupRequest({
-  request,
-  currentSortOrder,
-  remainingCapacity,
-  capacity,
-  oldestSequence,
-  prioritiesEnabled,
-  nowMs,
-}: {
-  request: DispatchRequest;
-  currentSortOrder: number;
-  remainingCapacity: number;
-  capacity: number;
-  oldestSequence: number;
-  prioritiesEnabled: boolean;
-  nowMs: number;
-}) {
-  const capacityValid = request.passenger_count <= remainingCapacity && request.passenger_count <= capacity;
-  const pickupDistance = Math.abs(request.from_sort_order - currentSortOrder);
-  const age = minutesWaiting(request.wait_started_at, nowMs);
-  const sequenceLag = oldestSequence === Number.MAX_SAFE_INTEGER ? 0 : Math.max(0, request.sequence_number - oldestSequence);
+function filterPriorityPickupPool<T extends { priority: boolean }>(candidates: T[], prioritiesEnabled: boolean): T[] {
+  if (!prioritiesEnabled || candidates.length === 0) {
+    return candidates;
+  }
+  const prio = candidates.filter((r) => r.priority);
+  return prio.length > 0 ? prio : candidates;
+}
 
-  let score = 0;
-  score += capacityValid ? 1000 : -1000;
-  score += prioritiesEnabled && request.priority ? 260 : 0;
-  score += Math.min(220, age * 5);
-  score -= pickupDistance * 90;
-  score -= Math.min(260, sequenceLag * 18);
+function resolvePickupFloorSCAN(currentSort: number, primaryPhaseDir: Direction, pool: DispatchRequest[]): number | null {
+  const cands = pool.map((r) => ({
+    from_sort_order: r.from_sort_order,
+    sequence_number: r.sequence_number,
+  }));
+  let floor = nearestEligiblePickupFloorSCAN(currentSort, primaryPhaseDir, cands);
+  if (floor === null && primaryPhaseDir !== "idle") {
+    floor = nearestEligiblePickupFloorSCAN(currentSort, primaryPhaseDir === "up" ? "down" : "up", cands);
+  }
+  if (floor === null) {
+    floor = nearestEligiblePickupFloorSCAN(currentSort, "idle", cands);
+  }
+  return floor;
+}
 
-  return { request, score, capacityValid };
+function sortPickupsAtFloor(requests: DispatchRequest[]): DispatchRequest[] {
+  return [...requests].sort(
+    (a, b) => Number(b.priority) - Number(a.priority) || a.sequence_number - b.sequence_number,
+  );
+}
+
+function collectivePickupWave(
+  currentSort: number,
+  requests: DispatchRequest[],
+): { direction: Exclude<Direction, "idle">; targetFloor: number; pool: DispatchRequest[] } | null {
+  const groups = (["up", "down"] as const)
+    .map((direction) => {
+      const pool = requests.filter((request) => request.direction === direction);
+      if (pool.length === 0) return null;
+      const targetFloor =
+        direction === "up"
+          ? Math.min(...pool.map((request) => Number(request.from_sort_order)))
+          : Math.max(...pool.map((request) => Number(request.from_sort_order)));
+      const oldestSequence = Math.min(...pool.map((request) => request.sequence_number));
+      const oldestWait = Math.min(...pool.map((request) => new Date(request.wait_started_at).getTime()));
+      const distance = Math.abs(targetFloor - currentSort);
+      const score = pool.length * 90 - distance * 28 - oldestSequence * 0.5 - oldestWait / 60_000_000;
+      return { direction, targetFloor, pool, score, oldestSequence };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null)
+    .sort((a, b) => b.score - a.score || a.oldestSequence - b.oldestSequence);
+
+  return groups[0] ?? null;
 }
 
 export function computeNextOperatorAction({
@@ -429,6 +432,7 @@ export function computeNextOperatorAction({
   onboardPassengers,
   projectFloors,
   prioritiesEnabled = true,
+  capacityEnabled = true,
   nowMs = Date.now(),
 }: {
   elevator: Elevator;
@@ -436,61 +440,58 @@ export function computeNextOperatorAction({
   onboardPassengers: ActivePassenger[];
   projectFloors: Floor[];
   prioritiesEnabled?: boolean;
+  capacityEnabled?: boolean;
   nowMs?: number;
 }): OperatorActionResult {
+  void nowMs;
   const currentSort = floorSortOrder(projectFloors, elevator.current_floor_id);
   const openRequests = assignedRequests
     .filter((request) => WAITING_STATUSES.has(request.status))
     .sort((a, b) => a.sequence_number - b.sequence_number);
   const activeLoad = onboardPassengers.reduce((sum, passenger) => sum + passenger.passenger_count, 0);
   const currentLoad = Math.max(Number(elevator.current_load ?? 0), activeLoad);
-  const remainingCapacity = Math.max(0, elevator.capacity - currentLoad);
+  const remainingCapacity = capacityEnabled ? Math.max(0, elevator.capacity - currentLoad) : Number.POSITIVE_INFINITY;
+  const manualFull = elevator.manual_full === true;
   const serviceDirection = effectiveServiceDirection(currentSort, elevator.direction, onboardPassengers);
   const nextDropSort = nextBoardedDropoffSortOrder(currentSort, serviceDirection, onboardPassengers);
-  const oldestSequence = openRequests[0]?.sequence_number ?? Number.MAX_SAFE_INTEGER;
 
   if (nextDropSort !== null) {
     const travelDirection = directionToward(currentSort, nextDropSort);
-    const enRoute = openRequests.filter(
-      (request) =>
-        request.direction === travelDirection &&
-        pickupFromSortOnSegmentToDropoff(request.from_sort_order, currentSort, nextDropSort),
-    );
-    const scored = enRoute
-      .map((request) => ({
-        request,
-        ...pickupScore({
-          request,
-          currentSortOrder: currentSort,
-          travelDirection,
-          routeLimit: nextDropSort,
-          remainingCapacity,
-          capacity: elevator.capacity,
-          oldestSequence,
-          prioritiesEnabled,
-          nowMs,
-        }),
-      }))
-      .sort((a, b) => b.score - a.score || a.request.sequence_number - b.request.sequence_number);
-    const pickup = scored.find((item) => item.capacityValid);
+    const geographic = openPickupsTowardNextDropoff(openRequests, currentSort, nextDropSort);
+    const capacityOkAtPickup = manualFull
+      ? []
+      : capacityEnabled
+        ? geographic.filter((request) => request.passenger_count <= remainingCapacity && request.passenger_count <= elevator.capacity)
+        : geographic;
+    const priorityPool = filterPriorityPickupPool(capacityOkAtPickup, prioritiesEnabled);
+    const directionPool =
+      travelDirection === "idle"
+        ? priorityPool
+        : priorityPool.filter((request) => request.direction === travelDirection);
+    const targetFloor = resolvePickupFloorSCAN(currentSort, travelDirection, directionPool);
 
-    if (pickup) {
-      const sameFloor = scored
-        .filter((item) => item.capacityValid && item.request.from_sort_order === pickup.request.from_sort_order)
-        .map((item) => item.request);
-      const reasonDetail = pickupReasonDetail(pickup.request, currentSort, prioritiesEnabled, projectFloors);
-      return {
-        action: "pickup",
-        nextFloor: resolveFloorEntity(projectFloors, pickup.request.from_sort_order),
-        nextFloorSortOrder: pickup.request.from_sort_order,
-        primaryPickupRequestId: pickup.request.id,
-        reasonDetail,
-        reason: formatDispatchRecommendationReason(reasonDetail, "fr", ""),
-        requestsToPickup: sameFloor,
-        requestsToDropoff: [],
-        suggestedDirection: directionToward(currentSort, pickup.request.from_sort_order),
-        capacityWarnings: enRoute.flatMap((request) => capacityWarnings(request, elevator.capacity, remainingCapacity)),
-      };
+    if (targetFloor !== null) {
+      const atFloor = sortPickupsAtFloor(
+        directionPool.filter((r) => Number(r.from_sort_order) === Number(targetFloor)),
+      );
+      const primary = atFloor[0];
+      if (primary) {
+        const reasonDetail = pickupReasonDetail(primary, currentSort, prioritiesEnabled, projectFloors);
+        return {
+          action: "pickup",
+          nextFloor: resolveFloorEntity(projectFloors, primary.from_sort_order),
+          nextFloorSortOrder: primary.from_sort_order,
+          primaryPickupRequestId: primary.id,
+          reasonDetail,
+          reason: formatDispatchRecommendationReason(reasonDetail, "fr", ""),
+          requestsToPickup: atFloor,
+          requestsToDropoff: [],
+          suggestedDirection: directionToward(currentSort, primary.from_sort_order),
+          capacityWarnings: geographic.flatMap((request) =>
+            capacityWarnings(request, elevator.capacity, remainingCapacity, capacityEnabled),
+          ),
+        };
+      }
     }
 
     const dropoffs = onboardPassengers.filter((passenger) => Number(passenger.to_sort_order) === Number(nextDropSort));
@@ -510,23 +511,40 @@ export function computeNextOperatorAction({
     };
   }
 
-  const scored = openRequests
-    .map((request) =>
-      scoreIdlePickupRequest({
-        request,
-        currentSortOrder: currentSort,
-        remainingCapacity,
-        capacity: elevator.capacity,
-        oldestSequence,
-        prioritiesEnabled,
-        nowMs,
-      }),
-    )
-    .sort((a, b) => b.score - a.score || a.request.sequence_number - b.request.sequence_number);
-  const winner = scored.find((item) => item.capacityValid) ?? null;
-  const warnings = openRequests.flatMap((request) => capacityWarnings(request, elevator.capacity, remainingCapacity));
+  /* Sans dépose à desservir hors étage courant, ne pas figer la phase sur `elevator.direction` :
+   * la ligne en base peut rester « up » quelques centaines de ms après une action — sinon les appels
+   * dans l’autre sens sont exclus et la carte « direction / prochain palier » reste bloquée. */
+  const noAwayBoardedDestinations = pendingBoardedDestinations(currentSort, onboardPassengers).length === 0;
+  const idleCapacityOk = manualFull
+    ? []
+    : capacityEnabled
+      ? openRequests.filter((request) => request.passenger_count <= remainingCapacity && request.passenger_count <= elevator.capacity)
+      : openRequests;
+  const idlePriorityPool = filterPriorityPickupPool(idleCapacityOk, prioritiesEnabled);
+  const wave = noAwayBoardedDestinations ? collectivePickupWave(currentSort, idlePriorityPool) : null;
+  const idlePhaseDirection = wave
+    ? wave.direction
+    : inferPickupPhaseDirection(
+        currentSort,
+        noAwayBoardedDestinations ? "idle" : elevator.direction,
+        openRequests,
+      );
+  let idleDirectionPool = wave
+    ? wave.pool
+    : idlePhaseDirection === "idle"
+      ? idlePriorityPool
+      : idlePriorityPool.filter((request) => request.direction === idlePhaseDirection);
+  let idleResolvePhase = idlePhaseDirection;
+  if (!wave && idleResolvePhase !== "idle" && idleDirectionPool.length === 0 && idlePriorityPool.length > 0) {
+    idleResolvePhase = "idle";
+    idleDirectionPool = idlePriorityPool;
+  }
+  const idleTargetFloor = wave?.targetFloor ?? resolvePickupFloorSCAN(currentSort, idleResolvePhase, idleDirectionPool);
+  const warnings = openRequests.flatMap((request) =>
+    capacityWarnings(request, elevator.capacity, remainingCapacity, capacityEnabled),
+  );
 
-  if (!winner) {
+  if (idleTargetFloor === null) {
     const waitDetail: DispatchRecommendationReason =
       openRequests.length === 0 ? { kind: "idle_empty" } : { kind: "idle_blocked" };
     return {
@@ -543,22 +561,39 @@ export function computeNextOperatorAction({
     };
   }
 
-  const pickupAtSameStop = scored
-    .filter((item) => item.capacityValid && item.request.from_sort_order === winner.request.from_sort_order)
-    .map((item) => item.request);
+  const idleAtFloor = sortPickupsAtFloor(
+    idleDirectionPool.filter((r) => Number(r.from_sort_order) === Number(idleTargetFloor)),
+  );
+  const idlePrimary = idleAtFloor[0];
+  if (!idlePrimary) {
+    const waitDetail: DispatchRecommendationReason =
+      openRequests.length === 0 ? { kind: "idle_empty" } : { kind: "idle_blocked" };
+    return {
+      action: "wait",
+      nextFloor: null,
+      nextFloorSortOrder: null,
+      primaryPickupRequestId: null,
+      reasonDetail: waitDetail,
+      reason: formatDispatchRecommendationReason(waitDetail, "fr", ""),
+      requestsToPickup: [],
+      requestsToDropoff: [],
+      suggestedDirection: "idle",
+      capacityWarnings: warnings,
+    };
+  }
 
-  const idlePickupDetail = pickupReasonDetail(winner.request, currentSort, prioritiesEnabled, projectFloors);
+  const idlePickupDetail = pickupReasonDetail(idlePrimary, currentSort, prioritiesEnabled, projectFloors);
 
   return {
     action: "pickup",
-    nextFloor: resolveFloorEntity(projectFloors, winner.request.from_sort_order),
-    nextFloorSortOrder: winner.request.from_sort_order,
-    primaryPickupRequestId: winner.request.id,
+    nextFloor: resolveFloorEntity(projectFloors, idlePrimary.from_sort_order),
+    nextFloorSortOrder: idlePrimary.from_sort_order,
+    primaryPickupRequestId: idlePrimary.id,
     reasonDetail: idlePickupDetail,
     reason: formatDispatchRecommendationReason(idlePickupDetail, "fr", ""),
-    requestsToPickup: pickupAtSameStop,
+    requestsToPickup: idleAtFloor,
     requestsToDropoff: [],
-    suggestedDirection: directionToward(currentSort, winner.request.from_sort_order),
+    suggestedDirection: directionToward(currentSort, idlePrimary.from_sort_order),
     capacityWarnings: warnings,
   };
 }

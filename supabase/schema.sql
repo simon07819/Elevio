@@ -121,8 +121,11 @@ create table if not exists elevators (
   operator_tablet_label text,
   operator_display_name text,
   service_start_time time not null default time '07:00',
-  service_end_time time not null default time '15:00'
+  service_end_time time not null default time '15:00',
+  manual_full boolean not null default false
 );
+
+alter table elevators add column if not exists manual_full boolean not null default false;
 
 alter table elevators add column if not exists operator_session_id text;
 alter table elevators add column if not exists operator_session_started_at timestamptz;
@@ -193,9 +196,11 @@ create index if not exists projects_owner_idx on projects(owner_id, active);
 create index if not exists project_members_user_idx on project_members(user_id, project_id);
 create index if not exists profiles_account_role_idx on profiles(account_role);
 create index if not exists elevators_project_active_idx on elevators(project_id, active);
+create index if not exists elevators_project_session_idx on elevators(project_id, operator_session_id);
 create unique index if not exists elevators_operator_session_idx on elevators(operator_session_id) where operator_session_id is not null;
 create unique index if not exists elevators_project_name_lower_idx on elevators (project_id, lower(trim(name)));
 create index if not exists requests_project_status_idx on requests(project_id, status, created_at);
+create index if not exists requests_elevator_status_created_idx on requests(elevator_id, status, created_at desc);
 create index if not exists requests_floor_idx on requests(from_floor_id, to_floor_id);
 create index if not exists request_events_request_idx on request_events(request_id, created_at);
 create index if not exists operator_messages_project_idx on operator_messages(project_id, created_at desc);
@@ -450,6 +455,7 @@ alter table profiles add column if not exists project_logo_url text;
 alter table projects add column if not exists logo_url text;
 alter table projects add column if not exists service_timezone text not null default 'America/Toronto';
 alter table projects add column if not exists priorities_enabled boolean not null default true;
+alter table projects add column if not exists capacity_enabled boolean not null default true;
 
 -- Storage: public bucket so poster URLs work without signed URLs; paths are scoped by auth.uid() prefix.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

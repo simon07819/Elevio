@@ -5,6 +5,10 @@ import type { Project } from "@/types/hoist";
 
 type FloorQrRow = { project_id: string; active: boolean; qr_token: string | null };
 type ElevatorRow = { project_id: string };
+const PROJECT_SELECT_WITH_CAPACITY =
+  "id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled,capacity_enabled";
+const PROJECT_SELECT_LEGACY =
+  "id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled";
 
 /** Au moins un étage actif avec token QR + au moins un ascenseur (aligné sur le setup chantier). */
 function isProjectQrBundleReady(
@@ -66,17 +70,37 @@ export async function getProjects(): Promise<ProjectsLoadResult> {
   }
 
   /** Visibilité = policy RLS (propriétaire ou membre), sans filtrer seulement sur owner_id. */
-  const { data, error } = await supabase
+  let projectQuery = (await supabase
     .from("projects")
-    .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled")
+    .select(PROJECT_SELECT_WITH_CAPACITY)
     .order("active", { ascending: false })
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })) as unknown as {
+    data: Project[] | null;
+    error: { message: string; code?: string } | null;
+  };
+
+  const capacityColumnMissing = projectQuery.error?.message.includes("capacity_enabled") ?? false;
+  if (capacityColumnMissing) {
+    projectQuery = (await supabase
+      .from("projects")
+      .select(PROJECT_SELECT_LEGACY)
+      .order("active", { ascending: false })
+      .order("created_at", { ascending: false })) as unknown as {
+      data: Project[] | null;
+      error: { message: string; code?: string } | null;
+    };
+  }
+
+  const { data, error } = projectQuery;
 
   if (error) {
     return { projects: [], loadError: error.message, qrReadyProjectIds: [] };
   }
 
-  const projects = (data ?? []) as Project[];
+  const projects = ((data ?? []) as Project[]).map((project) => ({
+    ...project,
+    capacity_enabled: project.capacity_enabled ?? true,
+  }));
   const ids = projects.map((p) => p.id);
 
   if (ids.length === 0) {
@@ -98,5 +122,9 @@ export async function getProjects(): Promise<ProjectsLoadResult> {
     (elevatorRows ?? []) as ElevatorRow[],
   );
 
-  return { projects, loadError: null, qrReadyProjectIds };
+  return {
+    projects,
+    loadError: null,
+    qrReadyProjectIds,
+  };
 }

@@ -31,10 +31,6 @@ export default async function RequestPage({
             </Link>
           </div>
         </header>
-        <div className="mb-3 shrink-0 rounded-[1.5rem] border border-slate-200 bg-white px-4 py-4 shadow-sm ring-1 ring-slate-900/[0.04]">
-          <h1 className="text-2xl font-black leading-tight text-slate-950"><T k="request.title" /></h1>
-          <p className="mt-1 text-sm font-semibold text-slate-600"><T k="request.detected" /></p>
-        </div>
 
         <RequestForm
           project={project}

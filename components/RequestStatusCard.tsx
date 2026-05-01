@@ -56,7 +56,17 @@ export function RequestStatusCard({ request }: { request: HoistRequest }) {
       {canCancel && (
         <button
           type="button"
-          onClick={() => updateRequestStatus(currentRequest.id, "cancelled", "Annule par le passager.")}
+          onClick={() =>
+            updateRequestStatus(currentRequest.id, "cancelled", "Annule par le passager.", {
+              cancelRelatedSplit: {
+                projectId: currentRequest.project_id,
+                fromFloorId: currentRequest.from_floor_id,
+                toFloorId: currentRequest.to_floor_id,
+                waitStartedAt: currentRequest.wait_started_at,
+                originalPassengerCount: currentRequest.original_passenger_count,
+              },
+            })
+          }
           className="touch-target mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 font-black text-red-800"
         >
           <XCircle size={20} />

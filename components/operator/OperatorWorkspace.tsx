@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LockKeyhole, TabletSmartphone } from "lucide-react";
 import {
@@ -14,7 +14,10 @@ import { bindRealtimeWithAuthSession, subscribeToTable, type ElevatorRealtimePay
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { formatFloorLabel } from "@/lib/utils";
 import { ServiceTimePicker } from "@/components/ServiceTimePicker";
-import { elevatorHasOperatorTabletBinding, isOperatorTabletSessionStale } from "@/lib/operatorTablet";
+import {
+  elevatorHasOperatorTabletBinding,
+  isOperatorTabletSessionStale,
+} from "@/lib/operatorTablet";
 import { formatStoredTabletLabel, getOperatorDeviceLabel } from "@/lib/deviceLabel";
 import type { Elevator, Floor, HoistRequest, Project } from "@/types/hoist";
 import { OperatorDashboard } from "@/components/operator/OperatorDashboard";
@@ -78,6 +81,26 @@ function storedElevatorId(projectId: string) {
   return null;
 }
 
+function mergeElevatorRows(current: Elevator[], incoming: Elevator[]) {
+  const mergedById = new Map(current.map((elevator) => [elevator.id, elevator]));
+  for (const elevator of incoming) {
+    mergedById.set(elevator.id, { ...(mergedById.get(elevator.id) ?? {}), ...elevator });
+  }
+  return [...mergedById.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function clearOperatorSessionFields(elevator: Elevator): Elevator {
+  return {
+    ...elevator,
+    operator_session_id: null,
+    operator_session_started_at: null,
+    operator_session_heartbeat_at: null,
+    operator_user_id: null,
+    operator_tablet_label: null,
+    operator_display_name: null,
+  };
+}
+
 export function OperatorWorkspace({
   project,
   floors,
@@ -100,11 +123,49 @@ export function OperatorWorkspace({
   const [localElevators, setLocalElevators] = useState(elevators);
   const [selectedElevatorId, setSelectedElevatorId] = useState<string | null>(() => storedElevatorId(project.id));
   const [message, setMessage] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [activatingElevatorId, setActivatingElevatorId] = useState<string | null>(null);
+  const [releasingElevatorId, setReleasingElevatorId] = useState<string | null>(null);
   const [deviceLabel, setDeviceLabel] = useState("");
   const [operatorClockMs, setOperatorClockMs] = useState(() => Date.now());
+  const [localSessionClaim, setLocalSessionClaim] = useState(() => ({
+    elevatorId: storedElevatorId(project.id),
+    updatedAt: Date.now(),
+  }));
+  const [locallyReleasedElevatorIds, setLocallyReleasedElevatorIds] = useState<Set<string>>(() => new Set());
 
   const effectiveNowMs = operatorClockMs || hydrationNowMs;
+  const capacityEnabled = project.capacity_enabled !== false;
+  const localClaimActive =
+    localSessionClaim.elevatorId != null && effectiveNowMs - localSessionClaim.updatedAt < 15_000;
+
+  const mergeWithLocalClaim = useCallback(
+    (current: Elevator[], incoming: Elevator[]) => {
+      let merged = mergeElevatorRows(current, incoming);
+      if (locallyReleasedElevatorIds.size > 0) {
+        merged = merged.map((elevator) =>
+          locallyReleasedElevatorIds.has(elevator.id) && elevator.operator_session_id === sessionId
+            ? clearOperatorSessionFields(elevator)
+            : elevator,
+        );
+      }
+      if (!localClaimActive || !localSessionClaim.elevatorId) {
+        return merged;
+      }
+      return merged.map((elevator) =>
+        elevator.id === localSessionClaim.elevatorId &&
+        !locallyReleasedElevatorIds.has(elevator.id) &&
+        !elevator.operator_session_id
+          ? {
+              ...elevator,
+              operator_session_id: sessionId,
+              operator_session_started_at: elevator.operator_session_started_at ?? new Date().toISOString(),
+              operator_session_heartbeat_at: new Date().toISOString(),
+            }
+          : elevator,
+      );
+    },
+    [localClaimActive, localSessionClaim.elevatorId, locallyReleasedElevatorIds, sessionId],
+  );
 
   useEffect(() => {
     const id = window.setInterval(() => setOperatorClockMs(Date.now()), 15_000);
@@ -117,19 +178,10 @@ export function OperatorWorkspace({
 
   useEffect(() => {
     const id = window.setTimeout(() => {
-      setLocalElevators((current) => {
-        const currentById = new Map(current.map((elevator) => [elevator.id, elevator]));
-        const merged = elevators.map((elevator) => currentById.get(elevator.id) ?? elevator);
-        for (const elevator of current) {
-          if (!elevators.some((item) => item.id === elevator.id)) {
-            merged.push(elevator);
-          }
-        }
-        return merged;
-      });
+      setLocalElevators((current) => mergeWithLocalClaim(current, elevators));
     }, 0);
     return () => window.clearTimeout(id);
-  }, [elevators]);
+  }, [elevators, mergeWithLocalClaim]);
 
   const patchElevator = useCallback((elevatorId: string, patch: Partial<Elevator>) => {
     setLocalElevators((current) =>
@@ -139,7 +191,7 @@ export function OperatorWorkspace({
 
   useEffect(() => {
     const client = createClient();
-    return bindRealtimeWithAuthSession(client, () =>
+    const cleanupRealtime = bindRealtimeWithAuthSession(client, () =>
       subscribeToTable<ElevatorRealtimePayload>({
         client,
         table: "elevators",
@@ -150,14 +202,33 @@ export function OperatorWorkspace({
           }
 
           setLocalElevators((current) =>
-            current.some((item) => item.id === payload.new.id)
-              ? current.map((item) => (item.id === payload.new.id ? { ...item, ...payload.new } : item))
-              : [...current, payload.new],
+            mergeWithLocalClaim(current, [payload.new]),
           );
         },
       }),
     );
-  }, [project.id]);
+
+    let cancelled = false;
+    async function syncElevators() {
+      if (!client) return;
+      const { data } = await client
+        .from("elevators")
+        .select("*")
+        .eq("project_id", project.id)
+        .order("name", { ascending: true });
+      if (cancelled || !data) return;
+      setLocalElevators((current) => mergeWithLocalClaim(current, data as Elevator[]));
+    }
+
+    void syncElevators();
+    const poll = window.setInterval(syncElevators, 750);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(poll);
+      cleanupRealtime();
+    };
+  }, [mergeWithLocalClaim, project.id]);
 
   useEffect(() => {
     const bump = () => router.refresh();
@@ -187,13 +258,17 @@ export function OperatorWorkspace({
     };
   }, [router]);
 
-  const selectedElevator = useMemo(
-    () =>
-      localElevators.find(
-        (elevator) => elevator.id === selectedElevatorId && elevator.operator_session_id === sessionId,
-      ) ?? null,
-    [localElevators, selectedElevatorId, sessionId],
-  );
+  const selectedElevator = useMemo(() => {
+    const elevator = localElevators.find((item) => item.id === selectedElevatorId) ?? null;
+    if (!elevator) return null;
+
+    const heldByAnotherLiveSession =
+      Boolean(elevator.operator_session_id) &&
+      elevator.operator_session_id !== sessionId &&
+      !isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at, effectiveNowMs);
+
+    return heldByAnotherLiveSession ? null : elevator;
+  }, [effectiveNowMs, localElevators, selectedElevatorId, sessionId]);
 
   useEffect(() => {
     if (!selectedElevator) {
@@ -208,67 +283,110 @@ export function OperatorWorkspace({
   }, [project.id, selectedElevator, sessionId]);
 
   function handleActivate(elevator: Elevator, formData: FormData) {
-    startTransition(async () => {
-      const tabletLabel = await getOperatorDeviceLabel();
-      const currentFloorId = String(formData.get("currentFloorId") ?? "");
-      const serviceStart = String(formData.get("serviceStart") ?? "");
-      const serviceEnd = String(formData.get("serviceEnd") ?? "");
-      const capacityRaw = formData.get("capacity");
+    const currentFloorId = String(formData.get("currentFloorId") ?? "");
+    const serviceStart = String(formData.get("serviceStart") ?? "");
+    const serviceEnd = String(formData.get("serviceEnd") ?? "");
+    const capacityRaw = formData.get("capacity");
+    const now = new Date().toISOString();
+    const nowMs = Date.parse(now);
+    const activatedCapacity = Number.parseInt(String(capacityRaw ?? "").trim(), 10);
+    const optimisticTabletLabel = deviceLabel.trim() || elevator.operator_tablet_label?.trim() || "Web";
 
-      const result = await activateOperatorElevator(
-        project.id,
-        elevator.id,
-        sessionId,
-        currentFloorId,
-        tabletLabel,
-        serviceStart,
-        serviceEnd,
-        capacityRaw != null ? String(capacityRaw) : "",
-      );
-      setMessage(result.ok ? null : result.message);
-
-      if (result.ok) {
-        window.localStorage.setItem(elevatorStorageKey(project.id), elevator.id);
-        setSelectedElevatorId(elevator.id);
-        const activatedCapacity = Number.parseInt(String(capacityRaw ?? "").trim(), 10);
-        setLocalElevators((current) =>
-          current.map((item) =>
-            item.id === elevator.id
-              ? {
-                  ...item,
-                  operator_session_id: sessionId,
-                  operator_session_started_at: new Date().toISOString(),
-                  operator_session_heartbeat_at: new Date().toISOString(),
-                  operator_tablet_label: tabletLabel,
-                  capacity: Number.isFinite(activatedCapacity) && activatedCapacity >= 1 ? activatedCapacity : item.capacity,
-                  service_start_time: hhmmToPostgresTime(serviceStart),
-                  service_end_time: hhmmToPostgresTime(serviceEnd),
-                  current_floor_id: currentFloorId || item.current_floor_id,
-                  direction: "idle",
-                  current_load: 0,
-                }
-              : item,
-          ),
-        );
-      }
+    window.localStorage.setItem(elevatorStorageKey(project.id), elevator.id);
+    setSelectedElevatorId(elevator.id);
+    setLocalSessionClaim({ elevatorId: elevator.id, updatedAt: nowMs });
+    setLocallyReleasedElevatorIds((current) => {
+      if (!current.has(elevator.id)) return current;
+      const next = new Set(current);
+      next.delete(elevator.id);
+      return next;
     });
-  }
+    setMessage(null);
+    setLocalElevators((current) =>
+      current.map((item) =>
+        item.id === elevator.id
+          ? {
+              ...item,
+              operator_session_id: sessionId,
+              operator_session_started_at: now,
+              operator_session_heartbeat_at: now,
+              operator_tablet_label: optimisticTabletLabel,
+              capacity:
+                capacityEnabled && Number.isFinite(activatedCapacity) && activatedCapacity >= 1
+                  ? activatedCapacity
+                  : item.capacity,
+              service_start_time: hhmmToPostgresTime(serviceStart),
+              service_end_time: hhmmToPostgresTime(serviceEnd),
+              current_floor_id: currentFloorId || item.current_floor_id,
+              direction: "idle",
+              current_load: 0,
+              manual_full: false,
+            }
+          : item.operator_session_id === sessionId
+            ? {
+                ...item,
+                operator_session_id: null,
+                operator_session_started_at: null,
+                operator_session_heartbeat_at: null,
+                operator_user_id: null,
+                operator_tablet_label: null,
+                operator_display_name: null,
+              }
+            : item,
+      ),
+    );
 
-  function release() {
-    if (!selectedElevator) {
-      return;
-    }
+    setActivatingElevatorId(elevator.id);
+    void (async () => {
+      try {
+        const tabletLabel = await getOperatorDeviceLabel();
+        if (tabletLabel !== optimisticTabletLabel) {
+          patchElevator(elevator.id, { operator_tablet_label: tabletLabel });
+        }
 
-    startTransition(async () => {
-      const result = await releaseOperatorElevator(project.id, selectedElevator.id, sessionId);
-      setMessage(result.message);
+        const result = await activateOperatorElevator(
+          project.id,
+          elevator.id,
+          sessionId,
+          currentFloorId,
+          tabletLabel,
+          serviceStart,
+          serviceEnd,
+          capacityEnabled && capacityRaw != null ? String(capacityRaw) : String(elevator.capacity),
+          operatorDisplayName,
+        );
+        setMessage(result.ok ? null : result.message);
 
-      if (result.ok) {
+        if (!result.ok) {
+          const rollbackMs = Date.parse(new Date().toISOString());
+          window.localStorage.removeItem(elevatorStorageKey(project.id));
+          setSelectedElevatorId(null);
+          setLocalSessionClaim({ elevatorId: null, updatedAt: rollbackMs });
+          setLocalElevators((current) =>
+            current.map((item) =>
+              item.id === elevator.id && item.operator_session_id === sessionId
+                ? {
+                    ...item,
+                    operator_session_id: null,
+                    operator_session_started_at: null,
+                    operator_session_heartbeat_at: null,
+                    operator_user_id: null,
+                    operator_tablet_label: null,
+                    operator_display_name: null,
+                  }
+                : item,
+            ),
+          );
+        }
+      } catch {
+        const rollbackMs = Date.parse(new Date().toISOString());
+        setMessage("Impossible d'activer cette tablette. Verifiez la connexion et reessayez.");
         window.localStorage.removeItem(elevatorStorageKey(project.id));
         setSelectedElevatorId(null);
+        setLocalSessionClaim({ elevatorId: null, updatedAt: rollbackMs });
         setLocalElevators((current) =>
           current.map((item) =>
-            item.id === selectedElevator.id
+            item.id === elevator.id && item.operator_session_id === sessionId
               ? {
                   ...item,
                   operator_session_id: null,
@@ -276,12 +394,107 @@ export function OperatorWorkspace({
                   operator_session_heartbeat_at: null,
                   operator_user_id: null,
                   operator_tablet_label: null,
+                  operator_display_name: null,
                 }
               : item,
-          ),
-        );
+            ),
+          );
+      } finally {
+        setActivatingElevatorId(null);
       }
-    });
+    })();
+  }
+
+  function release() {
+    if (!selectedElevator) {
+      return;
+    }
+
+    const releasingElevator = selectedElevator;
+    const releaseMs = Date.parse(new Date().toISOString());
+    window.localStorage.removeItem(elevatorStorageKey(project.id));
+    setSelectedElevatorId(null);
+    setLocalSessionClaim({ elevatorId: null, updatedAt: releaseMs });
+    setLocallyReleasedElevatorIds((current) => new Set(current).add(releasingElevator.id));
+    setMessage(null);
+    setReleasingElevatorId(releasingElevator.id);
+    setLocalElevators((current) =>
+      current.map((item) =>
+        item.id === releasingElevator.id
+          ? {
+              ...item,
+              operator_session_id: null,
+              operator_session_started_at: null,
+              operator_session_heartbeat_at: null,
+              operator_user_id: null,
+              operator_tablet_label: null,
+              operator_display_name: null,
+            }
+          : item,
+      ),
+    );
+
+    void (async () => {
+      try {
+        const result = await releaseOperatorElevator(project.id, releasingElevator.id, sessionId);
+
+        if (!result.ok) {
+          const rollbackMs = Date.parse(new Date().toISOString());
+          setMessage(result.message);
+          window.localStorage.setItem(elevatorStorageKey(project.id), releasingElevator.id);
+          setSelectedElevatorId(releasingElevator.id);
+          setLocalSessionClaim({ elevatorId: releasingElevator.id, updatedAt: rollbackMs });
+          setLocallyReleasedElevatorIds((current) => {
+            const next = new Set(current);
+            next.delete(releasingElevator.id);
+            return next;
+          });
+          setLocalElevators((current) =>
+            current.map((item) =>
+              item.id === releasingElevator.id
+                ? {
+                    ...item,
+                    operator_session_id: sessionId,
+                    operator_session_started_at: releasingElevator.operator_session_started_at ?? new Date().toISOString(),
+                    operator_session_heartbeat_at: new Date().toISOString(),
+                    operator_user_id: releasingElevator.operator_user_id,
+                    operator_tablet_label: releasingElevator.operator_tablet_label,
+                    operator_display_name: releasingElevator.operator_display_name,
+                  }
+                : item,
+            ),
+          );
+        }
+      } catch {
+        const rollbackMs = Date.parse(new Date().toISOString());
+        setMessage("Impossible de liberer cette tablette. Verifiez la connexion et reessayez.");
+        window.localStorage.setItem(elevatorStorageKey(project.id), releasingElevator.id);
+        setSelectedElevatorId(releasingElevator.id);
+        setLocalSessionClaim({ elevatorId: releasingElevator.id, updatedAt: rollbackMs });
+        setLocallyReleasedElevatorIds((current) => {
+          const next = new Set(current);
+          next.delete(releasingElevator.id);
+          return next;
+        });
+        setLocalElevators((current) =>
+          current.map((item) =>
+            item.id === releasingElevator.id
+              ? {
+                  ...item,
+                  operator_session_id: sessionId,
+                  operator_session_started_at: releasingElevator.operator_session_started_at ?? new Date().toISOString(),
+                  operator_session_heartbeat_at: new Date().toISOString(),
+                  operator_user_id: releasingElevator.operator_user_id,
+                  operator_tablet_label: releasingElevator.operator_tablet_label,
+                  operator_display_name: releasingElevator.operator_display_name,
+                }
+              : item,
+            ),
+        );
+      } finally {
+        setReleasingElevatorId(null);
+      }
+    })();
   }
 
   const rawDeviceSubtitle =
@@ -293,6 +506,15 @@ export function OperatorWorkspace({
   if (selectedElevator) {
     return (
       <div className="mx-auto grid max-w-7xl gap-4">
+        <OperatorDashboard
+          floors={floors}
+          requests={requests}
+          elevator={selectedElevator}
+          prioritiesEnabled={project.priorities_enabled !== false}
+          capacityEnabled={capacityEnabled}
+          onElevatorPatch={patchElevator}
+        />
+        {message ? <div className="rounded-2xl bg-white/10 p-3 text-sm font-bold text-slate-100">{message}</div> : null}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-3">
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-sm font-black text-emerald-100">
@@ -308,7 +530,7 @@ export function OperatorWorkspace({
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             <button
               type="button"
-              disabled={isPending}
+              disabled={releasingElevatorId === selectedElevator.id}
               onClick={release}
               className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-black text-white disabled:opacity-60"
             >
@@ -316,14 +538,6 @@ export function OperatorWorkspace({
             </button>
           </div>
         </div>
-        {message && <div className="rounded-2xl bg-white/10 p-3 text-sm font-bold text-slate-100">{message}</div>}
-        <OperatorDashboard
-          floors={floors}
-          requests={requests}
-          elevator={selectedElevator}
-          prioritiesEnabled={project.priorities_enabled !== false}
-          onElevatorPatch={patchElevator}
-        />
       </div>
     );
   }
@@ -337,6 +551,23 @@ export function OperatorWorkspace({
         deviceLabel={deviceLabel}
         operatorDisplayName={operatorDisplayName}
         nowMs={effectiveNowMs}
+        onSessionCleared={(elevatorId) => {
+          setLocalElevators((current) =>
+            current.map((elevator) =>
+              elevator.id === elevatorId
+                ? {
+                    ...elevator,
+                    operator_session_id: null,
+                    operator_session_started_at: null,
+                    operator_session_heartbeat_at: null,
+                    operator_user_id: null,
+                    operator_tablet_label: null,
+                    operator_display_name: null,
+                  }
+                : elevator,
+            ),
+          );
+        }}
       />
       <section className="mx-auto grid max-w-7xl gap-4 rounded-3xl border border-white/10 bg-white/8 p-5">
         <div>
@@ -351,6 +582,7 @@ export function OperatorWorkspace({
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {localElevators.map((elevator) => {
+            const isActivatingThisElevator = activatingElevatorId === elevator.id;
             const heldByOtherSession =
               Boolean(elevator.operator_session_id) && elevator.operator_session_id !== sessionId;
             const heartbeatStale = isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at, effectiveNowMs);
@@ -377,9 +609,11 @@ export function OperatorWorkspace({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="text-xl font-black text-white">{elevator.name}</h3>
-                    <p className="mt-1 text-sm font-bold text-slate-400">
-                      {elevator.capacity} {t("operator.places")}
-                    </p>
+                    {capacityEnabled ? (
+                      <p className="mt-1 text-sm font-bold text-slate-400">
+                        {elevator.capacity} {t("operator.places")}
+                      </p>
+                    ) : null}
                   </div>
                   <span
                     className={
@@ -405,7 +639,7 @@ export function OperatorWorkspace({
                   <select
                     name="currentFloorId"
                     defaultValue={defaultFloorId}
-                    disabled={locked || isPending}
+                    disabled={locked || isActivatingThisElevator}
                     className="rounded-2xl bg-white px-4 py-3 font-bold text-slate-950 outline-none disabled:opacity-60"
                   >
                     {floors.map((floor) => (
@@ -416,20 +650,22 @@ export function OperatorWorkspace({
                   </select>
                 </label>
 
-                <label className="mt-3 grid gap-2 text-sm font-black text-slate-200" htmlFor={`op-cap-${elevator.id}`}>
-                  {t("elevator.capacityLabel")}
-                  <input
-                    id={`op-cap-${elevator.id}`}
-                    name="capacity"
-                    type="number"
-                    min={1}
-                    step={1}
-                    defaultValue={elevator.capacity}
-                    required
-                    disabled={locked || isPending}
-                    className="max-w-[8rem] rounded-2xl bg-white px-4 py-3 text-center text-base font-black tabular-nums text-slate-950 outline-none disabled:opacity-60"
-                  />
-                </label>
+                {capacityEnabled ? (
+                  <label className="mt-3 grid gap-2 text-sm font-black text-slate-200" htmlFor={`op-cap-${elevator.id}`}>
+                    {t("elevator.capacityLabel")}
+                    <input
+                      id={`op-cap-${elevator.id}`}
+                      name="capacity"
+                      type="number"
+                      min={1}
+                      step={1}
+                      defaultValue={elevator.capacity}
+                      required
+                      disabled={locked || isActivatingThisElevator}
+                      className="max-w-[8rem] rounded-2xl bg-white px-4 py-3 text-center text-base font-black tabular-nums text-slate-950 outline-none disabled:opacity-60"
+                    />
+                  </label>
+                ) : null}
 
                 <div className="mt-3 grid gap-2">
                   <span className="text-sm font-black text-slate-200">{t("elevator.serviceStartLabel")}</span>
@@ -438,7 +674,7 @@ export function OperatorWorkspace({
                     name="serviceStart"
                     defaultTime={elevator.service_start_time ?? "07:00:00"}
                     ariaLabel={t("elevator.serviceStartLabel")}
-                    disabled={locked || isPending}
+                    disabled={locked || isActivatingThisElevator}
                   />
                 </div>
                 <div className="mt-3 grid gap-2">
@@ -448,13 +684,13 @@ export function OperatorWorkspace({
                     name="serviceEnd"
                     defaultTime={elevator.service_end_time ?? "15:00:00"}
                     ariaLabel={t("elevator.serviceEndLabel")}
-                    disabled={locked || isPending}
+                    disabled={locked || isActivatingThisElevator}
                   />
                 </div>
 
                 <button
                   type="submit"
-                  disabled={locked || isPending}
+                  disabled={locked || isActivatingThisElevator}
                   className="touch-target mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-yellow-300 px-5 py-4 font-black text-slate-950 disabled:opacity-50"
                 >
                   <LockKeyhole size={18} />

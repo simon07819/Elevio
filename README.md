@@ -39,8 +39,11 @@ Créer `.env.local`:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+NEXT_PUBLIC_APP_URL=https://YOUR_PUBLIC_DOMAIN.example.com
 SUPERADMIN_EMAILS=owner@example.com
 ```
+
+`NEXT_PUBLIC_APP_URL` doit être l’URL **publique** du site (sans slash final), par ex. `https://elevio-seven.vercel.app` sur Vercel. Elle sert aux **liens encodés dans les codes QR** : sans elle, si vous générez les affiches depuis `localhost`, les téléphones ouvriront localhost.
 
 Sans variables Supabase, l'app fonctionne en mode demo avec les donnees locales dans `lib/demoData.ts`.
 

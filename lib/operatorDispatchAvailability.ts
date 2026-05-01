@@ -1,18 +1,57 @@
 import { formatPostgresTimeToAmPm } from "@/lib/utils";
-import { elevatorOperatorSessionAppearsLive } from "@/lib/operatorTablet";
+import { elevatorOperatorSessionAppearsLive, isOperatorTabletSessionStale } from "@/lib/operatorTablet";
 import type { Elevator } from "@/types/hoist";
 
 export const DEFAULT_PROJECT_TIMEZONE = "America/Toronto";
+
+/** True si la chaîne ressemble à un UA / libellé appareil (pas un nom humain). */
+function looksLikeTabletUaSummary(value: string): boolean {
+  const t = value.trim().toLowerCase();
+  if (!t) return false;
+  if (/\b(safari|chrome|firefox|chromium|crios)\b/.test(t)) return true;
+  if (t.includes("edg/")) return true;
+  if (/\b(ipad|iphone|android|mozilla)\b/.test(t)) return true;
+  if (t.includes(" · ") || /\bmac\s*os\b/.test(t)) return true;
+  return false;
+}
+
+/** Nom passagers : nom de cabine en premier ; sinon profil ; jamais l’étiquette tablette ni un UA. */
+export function passengerFacingOperatorName(elevator: Elevator): string | null {
+  const tablet = elevator.operator_tablet_label?.trim() ?? "";
+
+  const cab = elevator.name?.trim() ?? "";
+  if (cab && !(tablet && normCollapse(cab) === normCollapse(tablet)) && !looksLikeTabletUaSummary(cab)) {
+    return cab;
+  }
+
+  let fromDb = elevator.operator_display_name?.trim() ?? "";
+  if (fromDb && tablet && (fromDb === tablet || normCollapse(fromDb) === normCollapse(tablet))) {
+    fromDb = "";
+  }
+  if (fromDb && looksLikeTabletUaSummary(fromDb)) {
+    fromDb = "";
+  }
+  if (fromDb) return fromDb;
+
+  if (!cab) return null;
+  if (tablet && normCollapse(cab) === normCollapse(tablet)) return null;
+  if (looksLikeTabletUaSummary(cab)) return null;
+  return cab;
+}
+
+function normCollapse(s: string): string {
+  return s.replace(/\s+/g, " ").trim().toLowerCase();
+}
 
 /** Bloqué uniquement quand aucune cabine n’a de session opérateur vivante (heartbeat). */
 export type DispatchBlockReason = "no_live_operator";
 
 export type PassengerDispatchOperatorSummary = {
-  /** null si profil sans nom — UI affiche une etiquette generique */
+  /** Nom cabine en priorité ; sinon libellé profil ; UI générique si null */
   displayName: string | null;
   /** Plage horaire cabine (fuseau chantier), ex. 12 h AM–3 h PM */
   hoursRange: string;
-  /** Session vivante mais heure actuelle hors plage configurée — UI sans affichage des heures. */
+  /** Session vivante mais heure actuelle hors plage configurée — bandeau ambre + expliquateur */
   outsideScheduledHours: boolean;
 };
 
@@ -20,7 +59,7 @@ export type PassengerDispatchState = {
   canDispatch: boolean;
   blockReason: DispatchBlockReason | null;
   hourRanges: Array<{ start: string; end: string }>;
-  /** Opérateurs en ligne ; hors plage configurée → pas d’horaire affiché, libellé dédié. */
+  /** Opérateurs en ligne ; chaque entrée inclut la plage horaire cabine pour le QR passager */
   dispatchOperators: PassengerDispatchOperatorSummary[];
 };
 
@@ -98,7 +137,7 @@ export function passengerDispatchOperatorSummaries(
   }
   const raw = elevators
     .map((e) => {
-      const displayName = e.operator_display_name?.trim() || null;
+      const displayName = passengerFacingOperatorName(e);
       return {
         displayName,
         hoursRange: elevatorServiceHoursAmPmRange(e),
@@ -118,7 +157,11 @@ export function passengerDispatchOperatorSummaries(
 /** Ascenseur peut recevoir une demande passager : session tablette vivante (sans garde-heures). */
 export function isElevatorDispatchableNow(elevator: Elevator, timeZone?: string, now?: Date): boolean {
   void timeZone;
-  return elevatorOperatorSessionAppearsLive(elevator, now?.getTime());
+  const nowMs = now?.getTime() ?? Date.now();
+  if (elevatorOperatorSessionAppearsLive(elevator, nowMs)) {
+    return true;
+  }
+  return Boolean(elevator.operator_session_heartbeat_at && !isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at, nowMs));
 }
 
 export function analyzePassengerDispatch({
@@ -138,7 +181,10 @@ export function analyzePassengerDispatch({
   void timeZone;
   const activeElevators = elevators.filter((e) => e.active !== false);
   const nowMs = now.getTime();
-  const dispatchableElevators = activeElevators.filter((e) => elevatorOperatorSessionAppearsLive(e, nowMs));
+  const dispatchableElevators = activeElevators.filter((e) =>
+    elevatorOperatorSessionAppearsLive(e, nowMs) ||
+    Boolean(e.operator_session_heartbeat_at && !isOperatorTabletSessionStale(e.operator_session_heartbeat_at, nowMs)),
+  );
 
   if (dispatchableElevators.length > 0) {
     return { canDispatch: true, blockReason: null, dispatchableElevators };

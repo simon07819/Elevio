@@ -6,7 +6,7 @@ import QRCode from "qrcode";
 import { Link as LinkIcon, Mail, Printer, Share2 } from "lucide-react";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { translations, type Locale, type TranslationKey } from "@/lib/i18n";
-import { formatFloorLabel, makeQrUrl } from "@/lib/utils";
+import { formatFloorLabel, getConfiguredPublicAppUrl, makeQrUrl } from "@/lib/utils";
 import type { Floor, Project } from "@/types/hoist";
 
 type SheetLanguage = Locale | "both";
@@ -29,7 +29,7 @@ function tr(locale: Locale, key: TranslationKey, values?: Record<string, string 
 
 function QrSheetHeader({ requestTitle, projectName, address }: { requestTitle: string; projectName: string; address: string }) {
   return (
-    <header className="overflow-hidden border-b border-slate-200 bg-white print:border-slate-300">
+    <header className="shrink-0 overflow-hidden border-b border-slate-200 bg-white print:border-slate-300">
       <div className="p-4 pb-3 sm:p-5 sm:pb-4 print:p-3 print:pb-2">
         <div className="space-y-1 text-balance break-words px-1 text-center sm:space-y-1.5 sm:px-0 print:space-y-0.5">
           <h3 className="text-xl font-black leading-snug tracking-tight text-slate-950 print:text-lg print:leading-tight">{requestTitle}</h3>
@@ -51,23 +51,23 @@ function QrSheetFooterBranding({
   const hasClientLogos = Boolean(companyLogoUrl || projectLogoUrl);
 
   const outerClass =
-    "qr-sheet-brand-footer mt-2 flex w-full flex-col items-center border-t border-slate-200 px-2 pt-2 sm:mt-3 sm:px-3 sm:pt-3 print:mt-1 print:px-2 print:pt-2";
+    "qr-sheet-brand-footer mt-auto flex w-full flex-col items-stretch border-t border-slate-200 bg-slate-50/80 px-2 py-4 sm:mt-4 sm:px-4 sm:py-6 print:border-slate-300 print:bg-white print:px-3 print:py-[5mm]";
 
   const rowClass =
-    "qr-brand-footer-row inline-flex max-w-full flex-nowrap items-center justify-center gap-3 sm:gap-6 print:gap-4";
+    "qr-brand-footer-row flex w-full max-w-none flex-nowrap items-stretch justify-center gap-3 sm:gap-5 print:gap-[4mm]";
 
   const slotClass =
-    "flex h-9 w-20 shrink-0 items-center justify-center sm:h-11 sm:w-[6.5rem] md:w-28 print:h-9 print:w-[5.25rem]";
+    "qr-brand-slot flex min-h-[5.5rem] flex-1 basis-0 items-center justify-center rounded-xl bg-white/90 px-2 py-3 sm:min-h-[7rem] sm:px-3 sm:py-4";
 
   const imgInSlot = "qr-brand-logo-img max-h-full max-w-full object-contain";
 
   const elevioSoloClass =
-    "h-8 max-h-9 w-auto max-w-[min(85%,220px)] print:h-8 print:max-h-[2rem] print:max-w-[min(75%,200px)]";
+    "qr-brand-logo-img qr-brand-logo-solo max-h-[min(42vh,14rem)] w-auto max-w-[min(92%,420px)] object-contain sm:max-h-[15rem]";
 
   if (!hasClientLogos) {
     return (
       <div className={outerClass}>
-        <div className="flex justify-center">
+        <div className="qr-brand-solo-wrap flex min-h-[6rem] w-full flex-1 items-center justify-center py-2 sm:min-h-[8rem] sm:py-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-print.svg" alt="" className={elevioSoloClass} />
         </div>
@@ -134,11 +134,11 @@ function QrFloorPoster({
     <article
       data-floor-id={floor.id}
       data-print-selected={printFloorId === floor.id ? "true" : undefined}
-      className="qr-floor-poster w-full max-w-full overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-lg print:rounded-none print:shadow-none"
+      className="qr-floor-poster flex min-h-[min(76vh,720px)] w-full max-w-full flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-lg sm:min-h-[min(78vh,780px)] print:rounded-none print:shadow-none"
     >
       <QrSheetHeader requestTitle={requestTitle} projectName={project.name} address={project.address ?? ""} />
 
-      <div className="grid min-w-0 place-items-center bg-slate-50 p-3 text-center sm:p-5 print:p-2 print:pb-2 qr-poster-body">
+      <div className="qr-poster-body flex min-h-0 w-full min-w-0 flex-1 flex-col items-center bg-slate-50 p-3 text-center sm:p-5 print:flex-1 print:p-3 print:pb-3">
         <p className="break-words px-1 text-xs font-black uppercase tracking-[0.22em] text-slate-500 sm:text-sm print:text-[10px] print:leading-tight">
           {youAreAtText}
         </p>
@@ -202,15 +202,24 @@ export function QRCodeGenerator({
   projectLogoUrl?: string | null;
 }) {
   const { t } = useLanguage();
-  const [origin] = useState(() =>
-    typeof window === "undefined" ? "https://elevio.app" : window.location.origin,
-  );
+  const envPublicUrl = getConfiguredPublicAppUrl();
+  const [origin, setOrigin] = useState(envPublicUrl);
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [printFloorId, setPrintFloorId] = useState<string | null>(null);
   const [sheetLanguage, setSheetLanguage] = useState<SheetLanguage>("both");
   const [printBlackWhite, setPrintBlackWhite] = useState(false);
   const bundleUrl = `${origin}/admin/qrcodes?projectId=${encodeURIComponent(project.id)}`;
+  const localhostQrWarning =
+    Boolean(origin) &&
+    (origin.includes("localhost") || /^https?:\/\/127\./.test(origin) || /^https?:\/\/0\.0\.0\.0/.test(origin));
+
+  useEffect(() => {
+    if (!envPublicUrl && typeof window !== "undefined") {
+      const id = window.setTimeout(() => setOrigin(window.location.origin), 0);
+      return () => window.clearTimeout(id);
+    }
+  }, [envPublicUrl]);
 
   function sheetText(key: TranslationKey, values?: Record<string, string | number>) {
     if (sheetLanguage === "both") {
@@ -273,6 +282,9 @@ export function QRCodeGenerator({
     let cancelled = false;
 
     async function buildCodes() {
+      if (!origin) {
+        return;
+      }
       const entries = await Promise.all(
         floors.map(async (floor) => [
           floor.id,
@@ -375,6 +387,12 @@ export function QRCodeGenerator({
       </div>
       {message ? (
         <div className="no-print mb-5 rounded-2xl bg-emerald-100 p-3 text-sm font-black text-emerald-900">{message}</div>
+      ) : null}
+      {localhostQrWarning ? (
+        <div className="no-print mb-5 rounded-2xl border border-amber-400/50 bg-amber-50 p-4 text-sm font-bold text-amber-950">
+          <p className="font-black">{t("qr.localhostWarningTitle")}</p>
+          <p className="mt-2 leading-snug">{t("qr.localhostWarningBody")}</p>
+        </div>
       ) : null}
 
       <div className="no-print mb-5 rounded-3xl border border-slate-200 bg-slate-50 p-4">

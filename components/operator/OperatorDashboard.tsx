@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { MapPin } from "lucide-react";
 import { clearElevatorActiveRequests } from "@/lib/actions";
 import {
@@ -13,7 +13,6 @@ import { createClient } from "@/lib/supabase/client";
 import {
   bindRealtimeWithAuthSession,
   mergeRealtimeRequest,
-  mergeServerRequestsWithLive,
   subscribeToTable,
   type RequestRealtimePayload,
 } from "@/lib/realtime";
@@ -25,8 +24,10 @@ import {
   type Direction,
   type DispatchRequest,
   type Elevator,
+  type EnrichedRequest,
   type Floor,
   type HoistRequest,
+  isOperatorAwaitingPickup,
   isOperatorMovementQueueStatus,
 } from "@/types/hoist";
 import { CapacityPanel } from "@/components/operator/CapacityPanel";
@@ -39,28 +40,58 @@ const directionKeys = {
   up: "direction.up",
   down: "direction.down",
 } satisfies Record<Direction, TranslationKey>;
+const OPERATOR_VISIBLE_REQUEST_STATUSES = ["pending", "assigned", "arriving", "boarded"] as const;
+const OPTIMISTIC_REQUEST_TTL_MS = 30_000;
 
 export function OperatorDashboard({
   floors = demoFloors,
   requests = demoRequests,
   elevator = demoElevator,
   prioritiesEnabled = true,
+  capacityEnabled = true,
   onElevatorPatch,
 }: {
   floors?: Floor[];
   requests?: HoistRequest[];
   elevator?: Elevator;
   prioritiesEnabled?: boolean;
+  capacityEnabled?: boolean;
   onElevatorPatch?: (elevatorId: string, patch: Partial<Elevator>) => void;
 }) {
   const { locale } = useLanguage();
   const [liveRequests, setLiveRequests] = useState(requests);
+  const [operatorActionError, setOperatorActionError] = useState<string | null>(null);
+  const [isTogglingFull, setIsTogglingFull] = useState(false);
+  const [manualFullOverride, setManualFullOverride] = useState<boolean | null>(null);
+  const [cancelingRequestIds, setCancelingRequestIds] = useState<Set<string>>(() => new Set());
   const [isClearing, startClearTransition] = useTransition();
   const projectId = elevator.project_id;
+  const manualFullDesiredRef = useRef<boolean | null>(null);
+  const manualFullSyncingRef = useRef(false);
+  const optimisticRequestsRef = useRef<Map<string, { request: HoistRequest; expiresAt: number }>>(new Map());
+
+  function rememberOptimisticRequest(request: HoistRequest) {
+    optimisticRequestsRef.current.set(request.id, {
+      request,
+      expiresAt: Date.now() + OPTIMISTIC_REQUEST_TTL_MS,
+    });
+  }
+
+  function applyOptimisticRequest(request: HoistRequest): HoistRequest {
+    const optimistic = optimisticRequestsRef.current.get(request.id);
+    if (!optimistic) {
+      return request;
+    }
+    if (Date.now() > optimistic.expiresAt || request.status === optimistic.request.status) {
+      optimisticRequestsRef.current.delete(request.id);
+      return request;
+    }
+    return { ...request, ...optimistic.request };
+  }
 
   useEffect(() => {
     const id = window.setTimeout(() => {
-      setLiveRequests((prev) => mergeServerRequestsWithLive(prev, requests));
+      setLiveRequests(requests);
     }, 0);
     return () => window.clearTimeout(id);
   }, [requests]);
@@ -73,11 +104,53 @@ export function OperatorDashboard({
         table: "requests",
         filter: `project_id=eq.${projectId}`,
         onChange: (payload) => {
-          setLiveRequests((current) => mergeRealtimeRequest(current, payload));
+          const nextPayload =
+            payload.eventType === "DELETE"
+              ? payload
+              : ({ ...payload, new: applyOptimisticRequest(payload.new) } satisfies RequestRealtimePayload);
+          setLiveRequests((current) => mergeRealtimeRequest(current, nextPayload));
         },
       }),
     );
   }, [projectId]);
+
+  useEffect(() => {
+    const client = createClient();
+    let cancelled = false;
+
+    async function syncRequests() {
+      if (!client) return;
+      const { data } = await client
+        .from("requests")
+        .select(
+          "id,project_id,elevator_id,from_floor_id,to_floor_id,direction,passenger_count,original_passenger_count,remaining_passenger_count,split_required,priority,priority_reason,note,status,sequence_number,wait_started_at,created_at,updated_at,completed_at",
+        )
+        .eq("project_id", projectId)
+        .eq("elevator_id", elevator.id)
+        .in("status", OPERATOR_VISIBLE_REQUEST_STATUSES)
+        .order("created_at", { ascending: false })
+        .limit(250);
+
+      if (cancelled || !data) return;
+      setLiveRequests((current) => {
+        const liveById = new Map((data as HoistRequest[]).map((request) => [request.id, applyOptimisticRequest(request)]));
+        return current
+          .filter(
+            (request) =>
+              request.elevator_id !== elevator.id ||
+              !OPERATOR_VISIBLE_REQUEST_STATUSES.includes(request.status as (typeof OPERATOR_VISIBLE_REQUEST_STATUSES)[number]),
+          )
+          .concat([...liveById.values()]);
+      });
+    }
+
+    void syncRequests();
+    const id = window.setInterval(syncRequests, 750);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [elevator.id, projectId]);
 
   const floorById = useMemo(() => new Map(floors.map((floor) => [floor.id, floor])), [floors]);
   const elevatorRequests = useMemo(
@@ -116,8 +189,12 @@ export function OperatorDashboard({
     [floorById, elevatorRequests],
   );
   const realCurrentLoad = liveActivePassengers.reduce((sum, passenger) => sum + passenger.passenger_count, 0);
-  const effectiveElevator = { ...elevator, current_load: realCurrentLoad };
-  const remaining = Math.max(0, effectiveElevator.capacity - effectiveElevator.current_load);
+  const effectiveElevator = {
+    ...elevator,
+    current_load: realCurrentLoad,
+    manual_full: manualFullOverride ?? elevator.manual_full,
+  };
+  const remaining = capacityEnabled ? Math.max(0, effectiveElevator.capacity - effectiveElevator.current_load) : Number.POSITIVE_INFINITY;
   const recommendation = getRecommendedNextStop({
     currentFloor,
     direction: effectiveElevator.direction,
@@ -127,13 +204,15 @@ export function OperatorDashboard({
     activePassengers: liveActivePassengers,
     floors,
     prioritiesEnabled,
+    capacityEnabled,
+    manualFull: effectiveElevator.manual_full === true,
   });
   const recommendedIds = new Set(recommendation.requestsToPickup.map((request) => request.id));
   const liveQueue = [...enriched].sort((a, b) => {
     const aTerminal = a.status === "completed" || a.status === "cancelled" ? 1 : 0;
     const bTerminal = b.status === "completed" || b.status === "cancelled" ? 1 : 0;
-    const aCapacityValid = a.passenger_count <= remaining ? 1 : 0;
-    const bCapacityValid = b.passenger_count <= remaining ? 1 : 0;
+    const aCapacityValid = !capacityEnabled || a.passenger_count <= remaining ? 1 : 0;
+    const bCapacityValid = !capacityEnabled || b.passenger_count <= remaining ? 1 : 0;
     const aRecommended = recommendedIds.has(a.id) ? 1 : 0;
     const bRecommended = recommendedIds.has(b.id) ? 1 : 0;
 
@@ -146,62 +225,54 @@ export function OperatorDashboard({
     );
   });
   const priorityCount = prioritiesEnabled ? enriched.filter((request) => request.priority).length : 0;
-  const capacityBlockedCount = enriched.filter((request) => request.passenger_count > remaining).length;
+  const capacityBlockedCount = capacityEnabled ? enriched.filter((request) => request.passenger_count > remaining).length : 0;
   const activeQueue = liveQueue.filter((request) => isOperatorMovementQueueStatus(request.status));
   const hasBoardedPassengers = liveActivePassengers.length > 0;
   const hasOperatorWork = activeQueue.length > 0 || hasBoardedPassengers;
-  const fallbackPickup = activeQueue[0] ?? null;
+  const fallbackPickup = liveQueue.find((request) => isOperatorAwaitingPickup(request.status)) ?? null;
   const fallbackPickupFloor = fallbackPickup ? floorById.get(fallbackPickup.from_floor_id) ?? null : null;
-  const fallbackPickupRequests = fallbackPickup
-    ? dispatchRequests.filter((request) => request.from_floor_id === fallbackPickup.from_floor_id)
-    : [];
   const fallbackSuggestedDirection: Direction =
     fallbackPickupFloor && Number(fallbackPickupFloor.sort_order) > Number(currentFloor.sort_order)
       ? "up"
       : fallbackPickupFloor && Number(fallbackPickupFloor.sort_order) < Number(currentFloor.sort_order)
         ? "down"
         : "idle";
-  const visibleRecommendation = useMemo(() => {
-    if (!hasOperatorWork) {
-      const idleDetail = { kind: "idle_empty" as const };
-      return {
-        ...recommendation,
-        nextFloor: null,
-        nextFloorSortOrder: null,
-        primaryPickupRequestId: null,
-        reasonDetail: idleDetail,
-        reason: formatDispatchRecommendationReason(idleDetail, locale, recommendation.reason),
-        requestsToPickup: [],
-        requestsToDropoff: [],
-        suggestedDirection: "idle" as const,
-        capacityWarnings: [],
-      };
-    }
-    if (recommendation.nextFloor || recommendation.requestsToDropoff.length > 0 || !fallbackPickup || !fallbackPickupFloor) {
-      return recommendation;
-    }
+  let visibleRecommendation = recommendation;
+  if (!hasOperatorWork) {
+    const idleDetail = { kind: "idle_empty" as const };
+    visibleRecommendation = {
+      ...recommendation,
+      nextFloor: null,
+      nextFloorSortOrder: null,
+      primaryPickupRequestId: null,
+      reasonDetail: idleDetail,
+      reason: formatDispatchRecommendationReason(idleDetail, locale, recommendation.reason),
+      requestsToPickup: [],
+      requestsToDropoff: [],
+      suggestedDirection: "idle" as const,
+      capacityWarnings: [],
+    };
+  } else if (
+    !recommendation.nextFloor &&
+    recommendation.requestsToDropoff.length === 0 &&
+    fallbackPickup &&
+    fallbackPickupFloor &&
+    recommendation.reasonDetail?.kind !== "idle_blocked"
+  ) {
     const fbDetail = { kind: "pickup_fallback" as const, passengerCount: fallbackPickup.passenger_count };
-    return {
+    visibleRecommendation = {
       ...recommendation,
       nextFloor: fallbackPickupFloor,
       nextFloorSortOrder: Number(fallbackPickupFloor.sort_order),
       primaryPickupRequestId: fallbackPickup.id,
       reasonDetail: fbDetail,
       reason: formatDispatchRecommendationReason(fbDetail, locale, recommendation.reason),
-      requestsToPickup: fallbackPickupRequests,
+      requestsToPickup: dispatchRequests.filter((request) => request.from_floor_id === fallbackPickup.from_floor_id),
       requestsToDropoff: [],
       suggestedDirection: fallbackSuggestedDirection,
       capacityWarnings: recommendation.capacityWarnings,
     };
-  }, [
-    recommendation,
-    hasOperatorWork,
-    fallbackPickup,
-    fallbackPickupFloor,
-    fallbackPickupRequests,
-    fallbackSuggestedDirection,
-    locale,
-  ]);
+  }
   const visibleRecommendedIds = new Set(visibleRecommendation.requestsToPickup.map((request) => request.id));
   const actionRequests = [
     ...activeQueue.filter((request) => visibleRecommendedIds.has(request.id)),
@@ -221,23 +292,145 @@ export function OperatorDashboard({
     if (activeQueue.length === 0 && liveActivePassengers.length === 0) {
       return;
     }
+    const now = new Date().toISOString();
+    const previousRequests = liveRequests;
+    setOperatorActionError(null);
+    setLiveRequests((current) =>
+      current.map((request) =>
+        request.elevator_id === elevator.id &&
+        (request.status === "pending" ||
+          request.status === "assigned" ||
+          request.status === "arriving" ||
+          request.status === "boarded")
+          ? { ...request, status: "cancelled" as const, completed_at: now, updated_at: now }
+          : request,
+      ),
+    );
+    onElevatorPatch?.(elevator.id, { current_load: 0, direction: "idle" });
+
     startClearTransition(async () => {
       const result = await clearElevatorActiveRequests(projectId, elevator.id);
-      if (!result.ok) return;
-      const now = new Date().toISOString();
-      setLiveRequests((current) =>
-        current.map((request) =>
-          request.elevator_id === elevator.id &&
-          (request.status === "pending" ||
-            request.status === "assigned" ||
-            request.status === "arriving" ||
-            request.status === "boarded")
-            ? { ...request, status: "cancelled" as const, completed_at: now, updated_at: now }
-            : request,
-        ),
-      );
-      onElevatorPatch?.(elevator.id, { current_load: 0, direction: "idle" });
+      if (!result.ok) {
+        setLiveRequests(previousRequests);
+        setOperatorActionError(result.message);
+      }
     });
+  }
+
+  function cancelMovementRequest(request: EnrichedRequest) {
+    if (request.status === "boarded" || cancelingRequestIds.has(request.id)) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const cancelledRequest: HoistRequest = {
+      ...request,
+      status: "cancelled",
+      completed_at: now,
+      updated_at: now,
+    };
+    const previousRequests = liveRequests;
+
+    setOperatorActionError(null);
+    rememberOptimisticRequest(cancelledRequest);
+    setCancelingRequestIds((current) => new Set(current).add(request.id));
+    setLiveRequests((current) =>
+      current.map((item) => (item.id === request.id ? cancelledRequest : item)),
+    );
+
+    void (async () => {
+      const client = createClient();
+      const { data, error } = await client
+        ?.from("requests")
+        .update({
+          status: "cancelled",
+          completed_at: now,
+          updated_at: now,
+          note: "Demande supprimee par l'operateur.",
+        })
+        .eq("id", request.id)
+        .eq("project_id", projectId)
+        .eq("elevator_id", elevator.id)
+        .in("status", ["pending", "assigned", "arriving"])
+        .select("id")
+        .maybeSingle() ?? { data: null, error: new Error("Client Supabase indisponible.") };
+
+      if (error || !data) {
+        return {
+          ok: false,
+          message: error?.message ?? "Impossible de supprimer cette demande.",
+        };
+      }
+
+      return { ok: true, message: "Demande supprimee." };
+    })()
+      .then((result) => {
+        if (!result.ok) {
+          optimisticRequestsRef.current.delete(request.id);
+          setLiveRequests(previousRequests);
+          setOperatorActionError(result.message);
+        }
+      })
+      .catch(() => {
+        optimisticRequestsRef.current.delete(request.id);
+        setLiveRequests(previousRequests);
+        setOperatorActionError("Impossible de supprimer cette demande. Verifiez la connexion et reessayez.");
+      })
+      .finally(() => {
+        setCancelingRequestIds((current) => {
+          const next = new Set(current);
+          next.delete(request.id);
+          return next;
+        });
+      });
+  }
+
+  function queueManualFullSync(manualFull: boolean) {
+    setOperatorActionError(null);
+    setManualFullOverride(manualFull);
+    onElevatorPatch?.(elevator.id, { manual_full: manualFull });
+    manualFullDesiredRef.current = manualFull;
+
+    if (manualFullSyncingRef.current) {
+      return;
+    }
+
+    manualFullSyncingRef.current = true;
+    setIsTogglingFull(true);
+
+    void (async () => {
+      const client = createClient();
+      let lastSent: boolean | null = null;
+      try {
+        while (manualFullDesiredRef.current !== null) {
+          const desired = manualFullDesiredRef.current;
+          manualFullDesiredRef.current = null;
+          lastSent = desired;
+          const { error } = await client
+            ?.from("elevators")
+            .update({ manual_full: desired })
+            .eq("id", elevator.id)
+            .eq("project_id", projectId) ?? { error: new Error("Client Supabase indisponible.") };
+          if (error) {
+            setOperatorActionError(error.message);
+            if (manualFullDesiredRef.current === null) {
+              setManualFullOverride(!desired);
+              onElevatorPatch?.(elevator.id, { manual_full: !desired });
+            }
+            break;
+          }
+        }
+      } catch {
+        setOperatorActionError("Impossible de changer l'etat PLEIN. Verifiez la connexion et reessayez.");
+        if (lastSent !== null && manualFullDesiredRef.current === null) {
+          setManualFullOverride(!lastSent);
+          onElevatorPatch?.(elevator.id, { manual_full: !lastSent });
+        }
+      } finally {
+        manualFullSyncingRef.current = false;
+        setIsTogglingFull(false);
+      }
+    })();
   }
 
   return (
@@ -256,7 +449,13 @@ export function OperatorDashboard({
                 <MapPin size={22} strokeWidth={2.25} className="drop-shadow-[0_0_10px_rgba(167,243,208,0.85)]" />
               </span>
             </div>
-            <p className="mt-3 text-4xl font-black tabular-nums tracking-tight text-white drop-shadow-[0_2px_18px_rgba(0,0,0,0.5)] md:text-5xl md:leading-none">
+            <p
+              className={
+                displayFloor
+                  ? "mt-3 text-4xl font-black tabular-nums tracking-tight text-white drop-shadow-[0_2px_18px_rgba(0,0,0,0.5)] md:text-5xl md:leading-none"
+                  : "mt-3 min-w-0 text-xl font-black leading-tight tracking-tight text-white drop-shadow-[0_2px_18px_rgba(0,0,0,0.5)] sm:text-2xl md:text-3xl"
+              }
+            >
               {displayFloor ? formatFloorLabel(displayFloor) : <T k="operator.pause" />}
             </p>
           </div>
@@ -283,13 +482,21 @@ export function OperatorDashboard({
               </p>
             ) : null}
           </div>
-          <div className="rounded-3xl border border-white/10 bg-white/8 p-4">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400"><T k="operator.capacity" /></p>
-            <p className="mt-2 text-2xl font-black text-emerald-200">{remaining} <T k="operator.places" /></p>
-            <p className="text-xs font-bold text-yellow-200">{capacityBlockedCount} <T k="operator.nextPass" /></p>
-          </div>
+          {capacityEnabled ? (
+            <div className="rounded-3xl border border-white/10 bg-white/8 p-4">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400"><T k="operator.capacity" /></p>
+              <p className="mt-2 text-2xl font-black text-emerald-200">{remaining} <T k="operator.places" /></p>
+              <p className="text-xs font-bold text-yellow-200">{capacityBlockedCount} <T k="operator.nextPass" /></p>
+            </div>
+          ) : null}
         </div>
-        <CapacityPanel elevator={effectiveElevator} />
+        {capacityEnabled ? (
+          <CapacityPanel
+            elevator={effectiveElevator}
+            isTogglingFull={isTogglingFull}
+            onToggleFull={queueManualFullSync}
+          />
+        ) : null}
       </section>
 
       <RecommendedNextStop
@@ -297,13 +504,20 @@ export function OperatorDashboard({
         actionRequests={actionRequests}
         operatorElevatorId={elevator.id}
         onPickupSuccess={(req) => {
+          const now = new Date().toISOString();
+          rememberOptimisticRequest({
+            ...req,
+            status: "boarded",
+            updated_at: now,
+            elevator_id: req.elevator_id ?? elevator.id,
+          });
           setLiveRequests((prev) => {
             const next = prev.map((r) =>
               r.id === req.id
                 ? {
                     ...r,
                     status: "boarded" as const,
-                    updated_at: new Date().toISOString(),
+                    updated_at: now,
                     elevator_id: r.elevator_id ?? elevator.id,
                   }
                 : r,
@@ -324,12 +538,16 @@ export function OperatorDashboard({
           setLiveRequests((prev) => {
             const next = prev.map((r) =>
               requestIds.includes(r.id)
-                ? {
-                    ...r,
-                    status: "completed" as const,
-                    completed_at: now,
-                    updated_at: now,
-                  }
+                ? (() => {
+                    const completed = {
+                      ...r,
+                      status: "completed" as const,
+                      completed_at: now,
+                      updated_at: now,
+                    };
+                    rememberOptimisticRequest(completed);
+                    return completed;
+                  })()
                 : r,
             );
             const boardedLoad = next
@@ -361,8 +579,18 @@ export function OperatorDashboard({
             <T k="operator.clearQueue" />
           </button>
         </div>
+        {operatorActionError ? (
+          <p className="mb-3 rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-100">
+            {operatorActionError}
+          </p>
+        ) : null}
 
-        <MovementBoard requests={activeQueue} recommendedIds={visibleRecommendedIds} />
+        <MovementBoard
+          requests={activeQueue}
+          recommendedIds={visibleRecommendedIds}
+          onCancelRequest={cancelMovementRequest}
+          cancelingIds={cancelingRequestIds}
+        />
       </section>
     </div>
   );

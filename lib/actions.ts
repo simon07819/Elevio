@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { demoFloors } from "@/lib/demoData";
@@ -16,7 +17,6 @@ import {
   parsePostgresTimeToMinutes,
   type DispatchBlockReason,
 } from "@/lib/operatorDispatchAvailability";
-import { ensureProfileForUser } from "@/lib/profile";
 
 function normalizeText(value: FormDataEntryValue | null) {
   const text = typeof value === "string" ? value.trim() : "";
@@ -29,6 +29,12 @@ function normalizedDbTimeFromInput(raw: string): string | null {
   if (/^\d{2}:\d{2}$/.test(t)) return `${t}:00`;
   if (/^\d{2}:\d{2}:\d{2}$/.test(t)) return t;
   return null;
+}
+
+function normalizeOperatorDisplayName(raw: string | null | undefined) {
+  const value = (raw ?? "").trim();
+  if (!value) return null;
+  return value.length > 120 ? value.slice(0, 120) : value;
 }
 
 function parseElevatorServiceTimes(
@@ -77,7 +83,19 @@ function projectPayload(formData: FormData) {
     address: String(formData.get("address") ?? "").trim(),
     service_timezone,
     priorities_enabled: formData.get("prioritiesEnabled") === "on",
+    capacity_enabled: formData.get("capacityEnabled") === "on",
   };
+}
+
+function isMissingCapacityEnabledColumn(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message ?? "";
+  return error?.code === "PGRST204" || message.includes("capacity_enabled");
+}
+
+function stripCapacityEnabled<T extends Record<string, unknown>>(patch: T) {
+  const next = { ...patch };
+  delete next.capacity_enabled;
+  return next;
 }
 
 function isHalfStep(value: number) {
@@ -115,16 +133,33 @@ export async function createProject(formData: FormData) {
     await supabase.from("projects").update({ active: false }).eq("active", true).eq("owner_id", user.id);
   }
 
-  const { data: project, error } = await supabase
+  const createPayload = {
+    ...payload,
+    owner_id: user.id,
+    active: makeActive,
+    archived_at: null,
+  };
+  let projectQuery = (await supabase
     .from("projects")
-    .insert({
-      ...payload,
-      owner_id: user.id,
-      active: makeActive,
-      archived_at: null,
-    })
-    .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled")
-    .single();
+    .insert(createPayload)
+    .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled,capacity_enabled")
+    .single()) as unknown as {
+    data: Project | null;
+    error: { message: string; code?: string } | null;
+  };
+
+  if (isMissingCapacityEnabledColumn(projectQuery.error)) {
+    projectQuery = (await supabase
+      .from("projects")
+      .insert(stripCapacityEnabled(createPayload))
+      .select("id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled")
+      .single()) as unknown as {
+      data: Project | null;
+      error: { message: string; code?: string } | null;
+    };
+  }
+
+  const { data: project, error } = projectQuery;
 
   if (error) {
     return { ok: false, message: error.message };
@@ -132,7 +167,11 @@ export async function createProject(formData: FormData) {
 
   revalidatePath("/admin");
   revalidatePath("/admin/projects");
-  return { ok: true, message: "Projet cree.", project: project as Project };
+  return {
+    ok: true,
+    message: "Projet cree.",
+    project: { ...(project as Project), capacity_enabled: (project as Project).capacity_enabled ?? true },
+  };
 }
 
 export async function updateProject(projectId: string, formData: FormData) {
@@ -157,7 +196,12 @@ export async function updateProject(projectId: string, formData: FormData) {
     return staleIdsAction();
   }
 
-  const { error } = await supabase.from("projects").update(payload).eq("id", projectId);
+  let { error } = await supabase.from("projects").update(payload).eq("id", projectId);
+
+  if (isMissingCapacityEnabledColumn(error)) {
+    const retry = await supabase.from("projects").update(stripCapacityEnabled(payload)).eq("id", projectId);
+    error = retry.error;
+  }
 
   if (error) {
     return { ok: false, message: error.message };
@@ -495,26 +539,6 @@ const TABLET_SESSION_FIELDS_CLEAR = {
   operator_display_name: null,
 } as const;
 
-type OperatorProfileNameFields = {
-  first_name?: string | null;
-  last_name?: string | null;
-  email?: string | null;
-};
-
-/** Nom affiche aux passagers : prenom + nom du profil inscription, sinon partie locale du courriel. */
-function operatorPublicDisplayName(profile: OperatorProfileNameFields): string | null {
-  const combined = [profile.first_name, profile.last_name]
-    .map((s) => (typeof s === "string" ? s.trim() : ""))
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-  const fallback =
-    profile.email && profile.email.includes("@") ? profile.email.split("@")[0]!.trim() : "";
-  const raw = combined || fallback;
-  if (!raw) return null;
-  return raw.length > 120 ? raw.slice(0, 120) : raw;
-}
-
 function normalizeElevatorName(name: string) {
   return name.trim().toLowerCase();
 }
@@ -535,6 +559,28 @@ async function elevatorNameConflict(
 
 function isUniqueViolation(error: { code?: string; message?: string }) {
   return error.code === "23505" || error.message?.includes("elevators_project_name_lower_idx");
+}
+
+function isMissingOperatorDisplayNameColumn(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message ?? "";
+  return error?.code === "PGRST204" || message.includes("operator_display_name");
+}
+
+function stripOperatorDisplayName<T extends Record<string, unknown>>(patch: T) {
+  const next = { ...patch };
+  delete next.operator_display_name;
+  return next;
+}
+
+function isMissingElevatorManualFullColumn(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message ?? "";
+  return error?.code === "PGRST204" || message.includes("manual_full");
+}
+
+function stripElevatorManualFull<T extends Record<string, unknown>>(patch: T) {
+  const next = { ...patch };
+  delete next.manual_full;
+  return next;
 }
 
 export async function createElevator(
@@ -567,6 +613,7 @@ export async function createElevator(
       service_end_time: "15:00:00",
       operator_tablet_label: null,
       operator_display_name: null,
+      manual_full: false,
     };
     return { ok: true, message: "Mode demo: elevateur ajoute localement.", elevator };
   }
@@ -675,6 +722,7 @@ export async function activateOperatorElevator(
   serviceStart?: string | null,
   serviceEnd?: string | null,
   capacityRaw?: string | number | null,
+  operatorDisplayNameRaw?: string | null,
 ) {
   const supabase = await createClient();
 
@@ -718,8 +766,9 @@ export async function activateOperatorElevator(
     return { ok: false, message: "Connexion operateur requise." };
   }
 
-  const profile = await ensureProfileForUser(supabase, user);
-  const operatorDisplayName = operatorPublicDisplayName(profile);
+  const operatorDisplayName =
+    normalizeOperatorDisplayName(operatorDisplayNameRaw) ??
+    normalizeOperatorDisplayName(user.email?.includes("@") ? user.email.split("@")[0] : user.email);
 
   const { data: elevator, error: elevatorError } = await supabase
     .from("elevators")
@@ -745,11 +794,20 @@ export async function activateOperatorElevator(
   /* Index unique sur operator_session_id: une session ne peut être que sur un ascenseur.
    * Sans cette étape, activer un 2e ascenseur avec la même session (ex. heartbeats périmés,
    * ou changement d’ascenseur sans libération) provoque duplicate key sur elevators_operator_session_idx. */
-  const { error: clearError } = await supabase
+  let { error: clearError } = await supabase
     .from("elevators")
     .update(sessionClear)
     .eq("project_id", projectId)
     .eq("operator_session_id", sessionId);
+
+  if (clearError && isMissingOperatorDisplayNameColumn(clearError)) {
+    const retry = await supabase
+      .from("elevators")
+      .update(stripOperatorDisplayName(sessionClear))
+      .eq("project_id", projectId)
+      .eq("operator_session_id", sessionId);
+    clearError = retry.error;
+  }
 
   if (clearError) {
     return { ok: false, message: clearError.message };
@@ -757,24 +815,54 @@ export async function activateOperatorElevator(
 
   const now = new Date().toISOString();
 
-  const { error } = await supabase
+  const activationPatch = {
+    operator_session_id: sessionId,
+    operator_session_started_at: now,
+    operator_session_heartbeat_at: now,
+    operator_user_id: user.id,
+    operator_display_name: operatorDisplayName,
+    operator_tablet_label: normalizedTabletLabel,
+    current_floor_id: currentFloorId || null,
+    direction: "idle",
+    current_load: 0,
+    capacity,
+    service_start_time: serviceTimes.start,
+    service_end_time: serviceTimes.end,
+    manual_full: false,
+  };
+
+  let { error } = await supabase
     .from("elevators")
-    .update({
-      operator_session_id: sessionId,
-      operator_session_started_at: now,
-      operator_session_heartbeat_at: now,
-      operator_user_id: user.id,
-      operator_display_name: operatorDisplayName,
-      operator_tablet_label: normalizedTabletLabel,
-      current_floor_id: currentFloorId || null,
-      direction: "idle",
-      current_load: 0,
-      capacity,
-      service_start_time: serviceTimes.start,
-      service_end_time: serviceTimes.end,
-    })
+    .update(activationPatch)
     .eq("id", elevatorId)
     .eq("project_id", projectId);
+
+  if (error && isMissingOperatorDisplayNameColumn(error)) {
+    const retry = await supabase
+      .from("elevators")
+      .update(stripOperatorDisplayName(activationPatch))
+      .eq("id", elevatorId)
+      .eq("project_id", projectId);
+    error = retry.error;
+  }
+
+  if (error && isMissingElevatorManualFullColumn(error)) {
+    const retry = await supabase
+      .from("elevators")
+      .update(stripElevatorManualFull(activationPatch))
+      .eq("id", elevatorId)
+      .eq("project_id", projectId);
+    error = retry.error;
+  }
+
+  if (error && (isMissingOperatorDisplayNameColumn(error) || isMissingElevatorManualFullColumn(error))) {
+    const retry = await supabase
+      .from("elevators")
+      .update(stripElevatorManualFull(stripOperatorDisplayName(activationPatch)))
+      .eq("id", elevatorId)
+      .eq("project_id", projectId);
+    error = retry.error;
+  }
 
   if (error) {
     return { ok: false, message: error.message };
@@ -782,6 +870,37 @@ export async function activateOperatorElevator(
 
   revalidateAdminProject(projectId);
   return { ok: true, message: "Tablette operateur activee.", elevatorId };
+}
+
+export async function setElevatorManualFull(projectId: string, elevatorId: string, manualFull: boolean) {
+  const supabase = await createClient();
+
+  if (!supabase) {
+    return { ok: true, message: manualFull ? "Mode demo: cabine marquee pleine." : "Mode demo: cabine remise disponible." };
+  }
+
+  if (!isUuid(projectId) || !isUuid(elevatorId)) {
+    return staleIdsAction();
+  }
+
+  const { error } = await supabase
+    .from("elevators")
+    .update({ manual_full: manualFull })
+    .eq("id", elevatorId)
+    .eq("project_id", projectId);
+
+  if (error) {
+    if (isMissingElevatorManualFullColumn(error)) {
+      return {
+        ok: false,
+        message: "Colonne manual_full absente. Executez le SQL supabase/elevator-manual-full.sql.",
+      };
+    }
+    return { ok: false, message: error.message };
+  }
+
+  revalidateAdminProject(projectId);
+  return { ok: true, message: manualFull ? "Cabine marquee pleine." : "Cabine remise disponible." };
 }
 
 export async function heartbeatOperatorElevator(projectId: string, elevatorId: string, sessionId: string) {
@@ -799,31 +918,22 @@ export async function heartbeatOperatorElevator(projectId: string, elevatorId: s
     operator_session_heartbeat_at: new Date().toISOString(),
   };
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (user) {
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("first_name,last_name,email")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (prof) {
-      const name = operatorPublicDisplayName(prof);
-      if (name != null) {
-        patch.operator_display_name = name;
-      }
-    }
-  }
-
-  const { error } = await supabase
+  let { error } = await supabase
     .from("elevators")
     .update(patch)
     .eq("id", elevatorId)
     .eq("project_id", projectId)
     .eq("operator_session_id", sessionId);
+
+  if (error && isMissingOperatorDisplayNameColumn(error)) {
+    const retry = await supabase
+      .from("elevators")
+      .update(stripOperatorDisplayName(patch))
+      .eq("id", elevatorId)
+      .eq("project_id", projectId)
+      .eq("operator_session_id", sessionId);
+    error = retry.error;
+  }
 
   if (error) {
     return { ok: false, message: error.message };
@@ -843,17 +953,46 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
     return staleIdsAction();
   }
 
-  const { error } = await supabase
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { ok: false, message: "Connexion operateur requise." };
+  }
+
+  let releaseResult = await supabase
     .from("elevators")
     .update({
       ...TABLET_SESSION_FIELDS_CLEAR,
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId)
-    .eq("operator_session_id", sessionId);
+    .select("id")
+    .maybeSingle();
+
+  if (releaseResult.error && isMissingOperatorDisplayNameColumn(releaseResult.error)) {
+    releaseResult = await supabase
+      .from("elevators")
+      .update(stripOperatorDisplayName({ ...TABLET_SESSION_FIELDS_CLEAR }))
+      .eq("id", elevatorId)
+      .eq("project_id", projectId)
+      .select("id")
+      .maybeSingle();
+  }
+
+  const { data: updated, error } = releaseResult;
 
   if (error) {
     return { ok: false, message: error.message };
+  }
+
+  if (!updated) {
+    return {
+      ok: false,
+      message:
+        "Impossible de liberer la tablette. Cabine introuvable ou acces refuse.",
+    };
   }
 
   await cancelActiveProjectRequestsIfNoLiveOperators(supabase, projectId);
@@ -887,13 +1026,22 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
     return { ok: false, message: "Aucune session tablette a nettoyer sur cet elevateur." };
   }
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from("elevators")
     .update({
       ...TABLET_SESSION_FIELDS_CLEAR,
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId);
+
+  if (error && isMissingOperatorDisplayNameColumn(error)) {
+    const retry = await supabase
+      .from("elevators")
+      .update(stripOperatorDisplayName({ ...TABLET_SESSION_FIELDS_CLEAR }))
+      .eq("id", elevatorId)
+      .eq("project_id", projectId);
+    error = retry.error;
+  }
 
   if (error) {
     return { ok: false, message: error.message };
@@ -923,20 +1071,21 @@ export async function createPassengerRequest(formData: FormData) {
   let elevators: Elevator[] = [];
   let activeRequests: HoistRequest[] = [];
   let serviceTz = DEFAULT_PROJECT_TIMEZONE;
+  let capacityEnabled = true;
 
   if (supabase) {
     if (!isUuid(projectId) || !isUuid(fromFloorId) || !isUuid(toFloorId)) {
       return { ok: false, message: "Lien ou chantier invalide. Utilisez le QR du chantier." };
     }
 
-    const [{ data: dbFloors }, { data: projectRow }, { data: dbElevators }, { data: dbRequests }] = await Promise.all([
+    const [floorsResult, projectResult, elevatorsResult, requestsResult] = await Promise.all([
       supabase
         .from("floors")
         .select("id,project_id,label,sort_order,qr_token,access_code,active")
         .eq("project_id", projectId),
       supabase
         .from("projects")
-        .select("service_timezone,priorities_enabled")
+        .select("service_timezone,priorities_enabled,capacity_enabled")
         .eq("id", projectId)
         .eq("active", true)
         .is("archived_at", null)
@@ -949,6 +1098,22 @@ export async function createPassengerRequest(formData: FormData) {
         .in("status", ["pending", "assigned", "arriving", "boarded"]),
     ]);
 
+    let projectRow = projectResult.data;
+    if (isMissingCapacityEnabledColumn(projectResult.error)) {
+      const legacyProject = await supabase
+        .from("projects")
+        .select("service_timezone,priorities_enabled")
+        .eq("id", projectId)
+        .eq("active", true)
+        .is("archived_at", null)
+        .maybeSingle();
+      projectRow = legacyProject.data ? { ...legacyProject.data, capacity_enabled: true } : null;
+    }
+
+    const dbFloors = floorsResult.data;
+    const dbElevators = elevatorsResult.data;
+    const dbRequests = requestsResult.data;
+
     projectFloors = (dbFloors ?? []) as Floor[];
     fromFloor = dbFloors?.find((floor) => floor.id === fromFloorId) ?? fromFloor;
     toFloor = dbFloors?.find((floor) => floor.id === toFloorId) ?? toFloor;
@@ -959,6 +1124,7 @@ export async function createPassengerRequest(formData: FormData) {
 
     serviceTz = projectRow.service_timezone ?? DEFAULT_PROJECT_TIMEZONE;
     prioritiesAllowed = projectRow.priorities_enabled !== false;
+    capacityEnabled = projectRow.capacity_enabled !== false;
     elevators = (dbElevators ?? []) as Elevator[];
     activeRequests = (dbRequests ?? []) as HoistRequest[];
   }
@@ -1014,9 +1180,14 @@ export async function createPassengerRequest(formData: FormData) {
     };
   }
 
-  const payloads: Array<typeof payload & { elevator_id: string | null }> = [];
+  const payloads: Array<
+    typeof payload & {
+      elevator_id: string | null;
+      id: string;
+    }
+  > = [];
+  let syntheticReservations: HoistRequest[] = [];
   let remainingPassengers = passengerCount;
-  let syntheticSequence = 0;
 
   while (remainingPassengers > 0) {
     const assignment = assignRequestToBestElevator({
@@ -1030,15 +1201,46 @@ export async function createPassengerRequest(formData: FormData) {
       },
       elevators,
       floors: projectFloors,
-      requests: activeRequests,
+      requests: [...activeRequests, ...syntheticReservations],
       prioritiesEnabled: prioritiesAllowed,
+      capacityEnabled,
     });
-    const assignedElevator = elevators.find((elevator) => elevator.id === assignment.elevatorId);
-    const chunkSize = assignedElevator ? Math.min(remainingPassengers, assignedElevator.capacity) : remainingPassengers;
+
+    if (!assignment.elevatorId) {
+      if (syntheticReservations.length > 0) {
+        syntheticReservations = [];
+        continue;
+      }
+      return {
+        ok: false,
+        message:
+          "Aucun ascenseur en ligne n’a assez de places libres pour votre groupe pour le moment. Réessayez dans quelques minutes.",
+      };
+    }
+
+    const chunkSize =
+      !capacityEnabled
+        ? remainingPassengers
+        : assignment.assignableChunk != null && assignment.assignableChunk > 0
+        ? assignment.assignableChunk
+        : Math.min(
+            remainingPassengers,
+            Number(elevators.find((e) => e.id === assignment.elevatorId)?.capacity ?? remainingPassengers),
+          );
+
+    if (chunkSize < 1) {
+      return {
+        ok: false,
+        message:
+          "Capacité ascenseur insuffisante pour poursuivre le fractionnement du groupe. Réessayez plus tard ou contactez le chantier.",
+      };
+    }
+
     const remainingAfterChunk = Math.max(0, remainingPassengers - chunkSize);
     const splitRequired = passengerCount > chunkSize || remainingAfterChunk > 0;
     const nextPayload = {
       ...payload,
+      id: randomUUID(),
       elevator_id: assignment.elevatorId,
       passenger_count: chunkSize,
       remaining_passenger_count: remainingAfterChunk,
@@ -1050,35 +1252,28 @@ export async function createPassengerRequest(formData: FormData) {
 
     payloads.push(nextPayload);
 
-    activeRequests.push({
-      id: `synthetic-${syntheticSequence}`,
+    syntheticReservations.push({
       ...nextPayload,
-      sequence_number: Number.MAX_SAFE_INTEGER - syntheticSequence,
+      sequence_number: Number.MAX_SAFE_INTEGER - payloads.length,
       created_at: payload.wait_started_at,
       updated_at: payload.wait_started_at,
       completed_at: null,
     });
 
-    syntheticSequence += 1;
     remainingPassengers = remainingAfterChunk;
-
-    if (!assignedElevator) {
-      break;
-    }
   }
 
-  const { data, error } = await supabase
-    .from("requests")
-    .insert(payloads)
-    .select("id,status,wait_started_at,from_floor_id,to_floor_id,passenger_count,elevator_id,split_required,remaining_passenger_count");
+  /* Sans `.select()` : PostgREST n’a pas besoin du droit SELECT sur requests après INSERT — sinon les passagers
+   * anonymes (pas profile projet) voient une erreur RLS sur RETURNING, surtout avec plusieurs lignes (split). */
+  const { error } = await supabase.from("requests").insert(payloads);
 
   if (error) {
     return { ok: false, message: error.message };
   }
 
-  const firstRequest = data?.[0];
+  const firstRow = payloads[0];
 
-  if (!firstRequest) {
+  if (!firstRow) {
     return { ok: false, message: "La demande n'a pas pu etre creee." };
   }
 
@@ -1086,11 +1281,11 @@ export async function createPassengerRequest(formData: FormData) {
   return {
     ok: true,
     message: "Demande envoyee.",
-    requestId: firstRequest.id as string,
-    status: firstRequest.status as RequestStatus,
-    waitStartedAt: firstRequest.wait_started_at as string,
-    fromFloorId: firstRequest.from_floor_id as string,
-    toFloorId: firstRequest.to_floor_id as string,
+    requestId: firstRow.id,
+    status: firstRow.status,
+    waitStartedAt: firstRow.wait_started_at,
+    fromFloorId: firstRow.from_floor_id,
+    toFloorId: firstRow.to_floor_id,
     passengerCount,
   };
 }
@@ -1278,7 +1473,16 @@ export async function updateRequestStatus(
   requestId: string,
   status: RequestStatus,
   message?: string,
-  options?: { assignElevatorId?: string },
+  options?: {
+    assignElevatorId?: string;
+    cancelRelatedSplit?: {
+      projectId: string;
+      fromFloorId: string;
+      toFloorId: string;
+      waitStartedAt: string;
+      originalPassengerCount: number;
+    };
+  },
 ) {
   const supabase = await createClient();
 
@@ -1300,18 +1504,18 @@ export async function updateRequestStatus(
     options?.assignElevatorId &&
     isUuid(options.assignElevatorId)
   ) {
-    const { data: existing } = await supabase
+    const { data: beforeRequest } = await supabase
       .from("requests")
       .select("elevator_id, project_id")
       .eq("id", requestId)
-      .single();
+      .maybeSingle();
 
-    if (existing?.elevator_id == null && existing?.project_id) {
+    if (beforeRequest?.elevator_id == null && beforeRequest?.project_id) {
       const { data: lift } = await supabase
         .from("elevators")
         .select("id")
         .eq("id", options.assignElevatorId)
-        .eq("project_id", existing.project_id as string)
+        .eq("project_id", beforeRequest.project_id as string)
         .maybeSingle();
 
       if (lift) {
@@ -1324,10 +1528,39 @@ export async function updateRequestStatus(
     updates.completed_at = new Date().toISOString();
   }
 
-  const { error } = await supabase.from("requests").update(updates).eq("id", requestId);
+  if (status === "cancelled") {
+    updates.completed_at = new Date().toISOString();
+  }
+
+  const { data: updatedRequest, error } = await supabase
+    .from("requests")
+    .update(updates)
+    .eq("id", requestId)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     return { ok: false, message: error.message };
+  }
+  if (!updatedRequest) {
+    return { ok: false, message: "Impossible de mettre a jour cette demande." };
+  }
+
+  if (status === "cancelled" && options?.cancelRelatedSplit) {
+    const group = options.cancelRelatedSplit;
+    const { error: relatedError } = await supabase
+      .from("requests")
+      .update(updates)
+      .eq("project_id", group.projectId)
+      .eq("from_floor_id", group.fromFloorId)
+      .eq("to_floor_id", group.toFloorId)
+      .eq("wait_started_at", group.waitStartedAt)
+      .eq("original_passenger_count", group.originalPassengerCount)
+      .in("status", REQUESTS_OPEN_DURING_SERVICE);
+
+    if (relatedError) {
+      return { ok: false, message: relatedError.message };
+    }
   }
 
   await syncElevatorWithRequestStatus(supabase, requestId, status);
@@ -1363,13 +1596,18 @@ export async function assignRequestElevator(requestId: string, elevatorId: strin
     .eq("id", requestId)
     .single();
 
-  const { error } = await supabase
+  const { data: updatedRequest, error } = await supabase
     .from("requests")
     .update({ elevator_id: elevatorId || null, updated_at: new Date().toISOString() })
-    .eq("id", requestId);
+    .eq("id", requestId)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     return { ok: false, message: error.message };
+  }
+  if (!updatedRequest) {
+    return { ok: false, message: "Impossible de reassigner cette demande." };
   }
 
   const projectId = before?.project_id as string | undefined;
@@ -1413,7 +1651,8 @@ export async function clearElevatorActiveRequests(projectId: string, elevatorId:
     })
     .eq("project_id", projectId)
     .eq("elevator_id", elevatorId)
-    .in("status", REQUESTS_OPEN_DURING_SERVICE);
+    .in("status", REQUESTS_OPEN_DURING_SERVICE)
+    .select("id");
 
   if (error) {
     return { ok: false, message: error.message };

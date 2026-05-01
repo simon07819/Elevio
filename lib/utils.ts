@@ -105,6 +105,11 @@ export function makeQrUrl(origin: string, projectId: string, floorToken: string)
   )}&floorToken=${encodeURIComponent(floorToken)}`;
 }
 
+/** URL publique de l’app (sans slash final). À définir en prod pour les QR codes (`NEXT_PUBLIC_APP_URL`). */
+export function getConfiguredPublicAppUrl(): string {
+  return (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/$/, "");
+}
+
 export function estimateArrivalWindow({
   currentElevatorSortOrder,
   passengerFloorSortOrder,

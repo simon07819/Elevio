@@ -2,17 +2,16 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Clock, Loader2, Send, ShieldAlert, Users, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Send, ShieldAlert, Users, XCircle } from "lucide-react";
 import { createPassengerRequest, resumePassengerRequest, updateRequestStatus } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeToTable, unsubscribe, type ElevatorRealtimePayload } from "@/lib/realtime";
-import { estimateArrivalWindow, formatFloorLabel, formatPostgresTimeToAmPm } from "@/lib/utils";
-import { demoElevator, demoProject } from "@/lib/demoData";
+import { formatFloorLabel } from "@/lib/utils";
+import { demoProject } from "@/lib/demoData";
 import type { Elevator, Floor, HoistRequest, Project, RequestStatus } from "@/types/hoist";
 import {
   analyzePassengerDispatch,
   passengerDispatchOperatorSummaries,
-  uniqueServiceHourRanges,
   DEFAULT_PROJECT_TIMEZONE,
 } from "@/lib/operatorDispatchAvailability";
 import {
@@ -32,6 +31,10 @@ type SubmittedRequest = {
   toFloorId: string;
   passengerCount: number;
 };
+
+const PASSENGER_ELEVATORS_SELECT =
+  "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_display_name,operator_session_heartbeat_at,service_start_time,service_end_time,manual_full";
+const PASSENGER_ACTIVE_REQUEST_POLL_MS = 500;
 
 function isTerminalPassengerRequestStatus(status: RequestStatus): boolean {
   return status === "completed" || status === "cancelled";
@@ -72,7 +75,12 @@ export function RequestForm({
   const [message, setMessage] = useState<string | null>(null);
   const [submittedRequest, setSubmittedRequest] = useState<SubmittedRequest | null>(null);
   const [liveElevators, setLiveElevators] = useState(elevators);
+  const [dispatchSyncReady, setDispatchSyncReady] = useState(() => {
+    const tz = project.service_timezone ?? DEFAULT_PROJECT_TIMEZONE;
+    return analyzePassengerDispatch({ elevators, timeZone: tz }).canDispatch;
+  });
   const [passengerResumeReady, setPassengerResumeReady] = useState(false);
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const { t } = useLanguage();
@@ -80,30 +88,17 @@ export function RequestForm({
   const liveDispatch = useMemo(() => {
     const tz = project.service_timezone ?? DEFAULT_PROJECT_TIMEZONE;
     const analysis = analyzePassengerDispatch({ elevators: liveElevators, timeZone: tz });
-    const hourRanges = uniqueServiceHourRanges(liveElevators.filter((elevator) => elevator.active !== false));
     return {
       canDispatch: analysis.canDispatch,
       blockReason: analysis.blockReason,
-      hourRanges,
       dispatchOperators: analysis.canDispatch
         ? passengerDispatchOperatorSummaries(analysis.dispatchableElevators, tz)
         : [],
     };
   }, [liveElevators, project.service_timezone]);
-  const currentElevatorFloor = floors.find((floor) => floor.id === demoElevator.current_floor_id);
-  const estimatedArrival = estimateArrivalWindow({
-    currentElevatorSortOrder: currentElevatorFloor?.sort_order ?? currentFloor.sort_order,
-    passengerFloorSortOrder: currentFloor.sort_order,
-    pendingRequestsAhead: 0,
-  });
 
+  const dispatchResolving = !dispatchSyncReady && !liveDispatch.canDispatch;
   const dispatchBlocked = !liveDispatch.canDispatch;
-  const serviceHoursLabel =
-    liveDispatch.hourRanges.length > 0
-      ? liveDispatch.hourRanges
-          .map((r) => `${formatPostgresTimeToAmPm(r.start)}–${formatPostgresTimeToAmPm(r.end)}`)
-          .join(", ")
-      : `${formatPostgresTimeToAmPm("07:00")}–${formatPostgresTimeToAmPm("15:00")}`;
 
   useEffect(() => {
     const id = window.setTimeout(() => setLiveElevators(elevators), 0);
@@ -112,6 +107,27 @@ export function RequestForm({
 
   useEffect(() => {
     const client = createClient();
+
+    async function syncElevators() {
+      if (!client) {
+        setDispatchSyncReady(true);
+        return;
+      }
+      const { data } = await client
+        .from("elevators")
+        .select(PASSENGER_ELEVATORS_SELECT)
+        .eq("project_id", project.id)
+        .eq("active", true);
+
+      if (data) {
+        setLiveElevators(data as Elevator[]);
+      }
+      setDispatchSyncReady(true);
+    }
+
+    void syncElevators();
+    const pollId = window.setInterval(syncElevators, 2_000);
+
     const channel = subscribeToTable<ElevatorRealtimePayload>({
       client,
       table: "elevators",
@@ -130,7 +146,10 @@ export function RequestForm({
       },
     });
 
-    return () => unsubscribe(client, channel);
+    return () => {
+      window.clearInterval(pollId);
+      unsubscribe(client, channel);
+    };
   }, [project.id]);
 
   useEffect(() => {
@@ -255,6 +274,7 @@ export function RequestForm({
             clearPassengerPendingRequest(project.id, currentFloor.qr_token, requestIdTracked);
             setSubmittedRequest(null);
             setMessage(requestInvalidatedMessage(next, t));
+            router.replace("/");
             return;
           }
           setSubmittedRequest((current) => current && { ...current, status: next });
@@ -286,6 +306,7 @@ export function RequestForm({
         clearPassengerPendingRequest(project.id, currentFloor.qr_token, trackedRequestId);
         setSubmittedRequest(null);
         setMessage(requestInvalidatedMessage(snap.status, t));
+        router.replace("/");
         return;
       }
       setSubmittedRequest((prev) =>
@@ -300,7 +321,7 @@ export function RequestForm({
       );
     }
 
-    const intervalId = window.setInterval(() => void pollOnce(), 15_000);
+    const intervalId = window.setInterval(() => void pollOnce(), PASSENGER_ACTIVE_REQUEST_POLL_MS);
     void pollOnce();
     return () => window.clearInterval(intervalId);
   }, [submittedRequest?.requestId, project.id, currentFloor.qr_token, router, t]);
@@ -318,9 +339,18 @@ export function RequestForm({
     const tripToFloor = floors.find((floor) => floor.id === submittedRequest.toFloorId);
     const canCancel = submittedRequest.status !== "boarded" && submittedRequest.status !== "completed";
     const submittedRequestId = submittedRequest.requestId;
+    const submittedRequestSnapshot = submittedRequest;
 
     async function cancelAndReset() {
-      const result = await updateRequestStatus(submittedRequestId, "cancelled", t("request.cancelNoteByPassenger"));
+      const result = await updateRequestStatus(submittedRequestId, "cancelled", t("request.cancelNoteByPassenger"), {
+        cancelRelatedSplit: {
+          projectId: project.id,
+          fromFloorId: submittedRequestSnapshot.fromFloorId,
+          toFloorId: submittedRequestSnapshot.toFloorId,
+          waitStartedAt: submittedRequestSnapshot.waitStartedAt,
+          originalPassengerCount: submittedRequestSnapshot.passengerCount,
+        },
+      });
       if (result.ok) {
         clearPassengerPendingRequest(project.id, currentFloor.qr_token, submittedRequestId);
         setSubmittedRequest(null);
@@ -363,31 +393,6 @@ export function RequestForm({
               {submittedRequest.passengerCount} {t("common.passengers").toLowerCase()}
             </p>
           </div>
-
-          <div
-            className={
-              liveDispatch.canDispatch
-                ? "rounded-[1.5rem] bg-yellow-300 p-4 text-slate-950"
-                : "rounded-[1.5rem] bg-slate-100 p-4 text-slate-700"
-            }
-          >
-            <div className="flex items-center gap-3">
-              {liveDispatch.canDispatch ? <Clock size={28} /> : <ShieldAlert size={28} />}
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] opacity-70">{t("request.eta")}</p>
-                <p className="text-xl font-black">
-                  {liveDispatch.canDispatch
-                    ? t("eta.label", { min: estimatedArrival.min, max: estimatedArrival.max })
-                    : t("request.dispatchNoOperator")}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">{t("common.status")}</p>
-            <p className="mt-1 text-2xl font-black">{t(`status.${submittedRequest.status}` as const)}</p>
-          </div>
         </div>
 
         {canCancel ? (
@@ -418,7 +423,12 @@ export function RequestForm({
 
   return (
     <>
-      {liveDispatch.canDispatch ? (
+      {dispatchResolving ? (
+        <div className="flex shrink-0 items-center gap-3 rounded-[1.25rem] border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700">
+          <Loader2 className="size-5 animate-spin text-slate-400" aria-hidden />
+          {t("request.resumeLoading")}
+        </div>
+      ) : liveDispatch.canDispatch ? (
         <div className="shrink-0 rounded-[1.25rem] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-950">
           {liveDispatch.dispatchOperators.length > 0 ? (
             <ul className="list-none space-y-3 leading-snug">
@@ -438,15 +448,22 @@ export function RequestForm({
                         <p>
                           <span className="font-black">{name}</span> {t("request.dispatchOperatorOnlineStatus")}
                         </p>
+                        <p className="mt-1 text-[13px] font-bold leading-snug opacity-90">
+                          {t("request.dispatchOperatorHours", { hours: op.hoursRange })}
+                        </p>
                         <p className="mt-1.5 text-[13px] font-bold leading-snug opacity-95">
                           {t("request.dispatchOutsideScheduleExplainer")}
                         </p>
                       </>
                     ) : (
-                      <p>
-                        <span className="font-black">{name}</span>{" "}
-                        <span className="font-bold opacity-90">({op.hoursRange})</span>
-                      </p>
+                      <>
+                        <p>
+                          <span className="font-black">{name}</span> {t("request.dispatchOperatorOnlineStatus")}
+                        </p>
+                        <p className="mt-1 text-[13px] font-bold leading-snug opacity-90">
+                          {t("request.dispatchOperatorHours", { hours: op.hoursRange })}
+                        </p>
+                      </>
                     )}
                   </li>
                 );
@@ -455,7 +472,7 @@ export function RequestForm({
           ) : (
             <p>
               <span className="font-black">{t("request.dispatchOperatorFallback")}</span>{" "}
-              <span className="font-bold opacity-90">({serviceHoursLabel})</span>
+              {t("request.dispatchOperatorOnlineStatus")}
             </p>
           )}
         </div>
@@ -467,26 +484,53 @@ export function RequestForm({
 
       <form
         action={(formData) => {
+          if (isSubmittingRequest || submittedRequest) {
+            return;
+          }
+          setIsSubmittingRequest(true);
           startTransition(async () => {
-            const result = await createPassengerRequest(formData);
-            setMessage(result.message);
-            if (result.ok && result.requestId) {
-              savePassengerPendingRequest(project.id, currentFloor.qr_token, {
-                requestId: result.requestId,
-                waitStartedAt: result.waitStartedAt ?? new Date().toISOString(),
-                fromFloorId: result.fromFloorId ?? currentFloor.id,
-                toFloorId: result.toFloorId ?? destinationId,
-                passengerCount: result.passengerCount ?? passengerCount,
-                status: result.status ?? "pending",
-              });
-              setSubmittedRequest({
-                requestId: result.requestId,
-                status: result.status ?? "pending",
-                waitStartedAt: result.waitStartedAt ?? new Date().toISOString(),
-                fromFloorId: result.fromFloorId ?? currentFloor.id,
-                toFloorId: result.toFloorId ?? destinationId,
-                passengerCount: result.passengerCount ?? passengerCount,
-              });
+            try {
+              const raw = window.localStorage.getItem(passengerPendingRequestStorageKey(project.id, currentFloor.qr_token));
+              const existing = loadPassengerPendingSnapshot(raw);
+              if (existing && shouldRestoreSubmittedFromSnapshot(existing.status ?? "pending")) {
+                setSubmittedRequest({
+                  requestId: existing.requestId,
+                  status: existing.status ?? "pending",
+                  waitStartedAt: existing.waitStartedAt,
+                  fromFloorId: existing.fromFloorId,
+                  toFloorId: existing.toFloorId,
+                  passengerCount: existing.passengerCount,
+                });
+                setDestinationId(existing.toFloorId);
+                setMessage(t("request.sentBody"));
+                return;
+              }
+              if (existing) {
+                clearPassengerPendingRequest(project.id, currentFloor.qr_token, existing.requestId);
+              }
+
+              const result = await createPassengerRequest(formData);
+              setMessage(result.message);
+              if (result.ok && result.requestId) {
+                savePassengerPendingRequest(project.id, currentFloor.qr_token, {
+                  requestId: result.requestId,
+                  waitStartedAt: result.waitStartedAt ?? new Date().toISOString(),
+                  fromFloorId: result.fromFloorId ?? currentFloor.id,
+                  toFloorId: result.toFloorId ?? destinationId,
+                  passengerCount: result.passengerCount ?? passengerCount,
+                  status: result.status ?? "pending",
+                });
+                setSubmittedRequest({
+                  requestId: result.requestId,
+                  status: result.status ?? "pending",
+                  waitStartedAt: result.waitStartedAt ?? new Date().toISOString(),
+                  fromFloorId: result.fromFloorId ?? currentFloor.id,
+                  toFloorId: result.toFloorId ?? destinationId,
+                  passengerCount: result.passengerCount ?? passengerCount,
+                });
+              }
+            } finally {
+              setIsSubmittingRequest(false);
             }
           });
         }}
@@ -582,11 +626,11 @@ export function RequestForm({
 
         <button
           type="submit"
-          disabled={isPending || dispatchBlocked}
+          disabled={isPending || isSubmittingRequest || dispatchBlocked}
           className="touch-target mt-3 flex w-full items-center justify-center gap-3 rounded-[1.35rem] bg-slate-950 px-5 py-4 text-lg font-black text-white shadow-xl transition active:scale-[0.99] disabled:opacity-60"
         >
           <Send size={22} />
-          {isPending ? t("request.sending") : t("request.submit")}
+          {isPending || isSubmittingRequest ? t("request.sending") : t("request.submit")}
         </button>
 
         {message && (

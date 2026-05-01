@@ -66,8 +66,12 @@ export function subscribeToTable<T>({
     return null;
   }
 
+  const channelId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const channel = client
-    .channel(`realtime:${table}:${filter ?? "all"}`)
+    .channel(`realtime:${table}:${filter ?? "all"}:${channelId}`)
     .on(
       "postgres_changes",
       {
