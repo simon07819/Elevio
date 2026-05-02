@@ -8,6 +8,8 @@ const root = process.cwd();
 test("la page demande passager ne rend pas le lien Scanner un code QR dans le header", () => {
   const shell = readFileSync(join(root, "components/PassengerRequestShell.tsx"), "utf8");
 
+  assert.match(shell, /BrandLogo/);
+  assert.match(shell, /LanguageSwitcher/);
   assert.equal(shell.includes("scan.start"), false);
   assert.equal(shell.includes("Scanner un code QR"), false);
   assert.equal(shell.includes("href=\"/\""), false);
