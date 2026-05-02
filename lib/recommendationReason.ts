@@ -35,7 +35,17 @@ export function formatDispatchRecommendationReason(
       const people = fr
         ? `${detail.passengerCount} personne(s) vers ${detail.destinationLabel}`
         : `${detail.passengerCount} ${detail.passengerCount === 1 ? "person" : "people"} to ${detail.destinationLabel}`;
-      return `${prefix} : ${people}.${prio}`;
+      // Lister les autres ramassages planifiés du même cycle pour que l'opérateur ne lise
+      // pas « vers ${destinationLabel} » comme « prochain arrêt » alors que ce n'est que la
+      // destination du passager. Étages dans l'ordre de visite.
+      const upcoming = detail.upcomingPickupLabels ?? [];
+      const upcomingLine =
+        upcoming.length > 0
+          ? fr
+            ? ` Ramassages prévus en chemin : ${upcoming.join(", ")}.`
+            : ` Planned pickups en route: ${upcoming.join(", ")}.`
+          : "";
+      return `${prefix} : ${people}.${upcomingLine}${prio}`;
     }
     case "pickup_fallback":
       return fr

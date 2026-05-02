@@ -172,6 +172,8 @@ export type DispatchRecommendationReason =
       passengerCount: number;
       destinationLabel: string;
       priority: boolean;
+      /** Étages d'autres ramassages planifiés dans le même cycle, dans l'ordre du trajet. */
+      upcomingPickupLabels?: string[];
     }
   | { kind: "pickup_fallback"; passengerCount: number };
 

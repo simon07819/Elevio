@@ -392,7 +392,31 @@ function pickupReasonDetail(
   currentSort: number,
   prioritiesEnabled: boolean,
   floors: Floor[],
+  /** Autres demandes de ramassage du même cycle (autres paliers que la cible courante). */
+  otherUpcomingPickups: DispatchRequest[] = [],
+  travelDirection: Direction = "idle",
 ): DispatchRecommendationReason {
+  // Liste des étages distincts à ramasser après celui-ci, triés dans l'ordre du trajet,
+  // pour que l'opérateur sache que « vers 16 » est la destination du passager et pas le
+  // prochain arrêt direct.
+  const targetSort = Number(request.from_sort_order);
+  const upcomingLabels = (() => {
+    const distinctSorts = new Set<number>();
+    for (const other of otherUpcomingPickups) {
+      const s = Number(other.from_sort_order);
+      if (s !== targetSort) {
+        distinctSorts.add(s);
+      }
+    }
+    const sorted = [...distinctSorts].sort((a, b) =>
+      travelDirection === "down" ? b - a : a - b,
+    );
+    return sorted.map((s) => {
+      const floor = floors.find((f) => Number(f.sort_order) === s);
+      return floor ? formatFloorLabel(floor) : floorLabelForSortOrder(s);
+    });
+  })();
+
   return {
     kind: "pickup",
     atCurrentFloor: request.from_sort_order === currentSort,
@@ -400,6 +424,7 @@ function pickupReasonDetail(
     passengerCount: request.passenger_count,
     destinationLabel: floorLabel(floors, request.to_floor_id, request.to_sort_order),
     priority: prioritiesEnabled && request.priority,
+    upcomingPickupLabels: upcomingLabels.length > 0 ? upcomingLabels : undefined,
   };
 }
 
@@ -529,7 +554,17 @@ export function computeNextOperatorAction({
       );
       const primary = atFloor[0];
       if (primary) {
-        const reasonDetail = pickupReasonDetail(primary, currentSort, prioritiesEnabled, projectFloors);
+        const otherUpcoming = directionPool.filter(
+          (r) => Number(r.from_sort_order) !== Number(primary.from_sort_order),
+        );
+        const reasonDetail = pickupReasonDetail(
+          primary,
+          currentSort,
+          prioritiesEnabled,
+          projectFloors,
+          otherUpcoming,
+          travelDirection,
+        );
         return {
           action: "pickup",
           nextFloor: resolveFloorEntity(projectFloors, primary.from_sort_order),
@@ -649,7 +684,23 @@ export function computeNextOperatorAction({
     };
   }
 
-  const idlePickupDetail = pickupReasonDetail(idlePrimary, currentSort, prioritiesEnabled, projectFloors);
+  // Lister les autres ramassages prévus dans le cycle (autres paliers du pool directionnel)
+  // pour que la raison ne donne pas l'illusion d'un trajet direct vers la destination du
+  // premier passager.
+  const idleOtherUpcoming = (useChantierOrderForFirstPickup ? idlePriorityPool : idleDirectionPool).filter(
+    (r) => Number(r.from_sort_order) !== Number(idlePrimary.from_sort_order),
+  );
+  const idleTravelDirection: Direction = directionToward(currentSort, idlePrimary.from_sort_order);
+  const idlePickupDetail = pickupReasonDetail(
+    idlePrimary,
+    currentSort,
+    prioritiesEnabled,
+    projectFloors,
+    idleOtherUpcoming,
+    // Pour le tri des étages d'avenir, utiliser la direction du trajet effectif (la phase
+    // d'idle peut pointer "up" même quand on descend physiquement vers le palier de pickup).
+    idlePhaseDirection !== "idle" ? idlePhaseDirection : idleTravelDirection,
+  );
 
   return {
     action: "pickup",
@@ -660,7 +711,7 @@ export function computeNextOperatorAction({
     reason: formatDispatchRecommendationReason(idlePickupDetail, "fr", ""),
     requestsToPickup: idleAtFloor,
     requestsToDropoff: [],
-    suggestedDirection: directionToward(currentSort, idlePrimary.from_sort_order),
+    suggestedDirection: idleTravelDirection,
     capacityWarnings: warnings,
   };
 }
