@@ -18,7 +18,10 @@ as $$
     from requests r
     where r.project_id = p_project_id
       and r.passenger_device_key = p_device_key
-      and r.status in ('pending', 'assigned', 'arriving', 'boarded')
+      -- Bloque seulement les demandes qui attendent encore un ramassage.
+      -- Une demande "boarded" ne doit pas empecher un nouveau scan apres que le
+      -- passager a quitte l'ascenseur, meme si la sync de depose arrive en retard.
+      and r.status in ('pending', 'assigned', 'arriving')
   );
 $$;
 

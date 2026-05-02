@@ -35,3 +35,12 @@ test("ramasser notifie instantanement le passager de retourner au scan", () => {
   assert.match(form, /PASSENGER_BROADCAST_REQUEST_BOARDED/);
   assert.match(form, /router\.replace\("\/"\)/);
 });
+
+test("la protection anti-double-demande ne bloque pas une demande deja ramassee", () => {
+  const guard = readFileSync(join(root, "supabase/passenger-device-open-request-guard.sql"), "utf8");
+  const schema = readFileSync(join(root, "supabase/schema.sql"), "utf8");
+
+  assert.match(guard, /r\.status in \('pending', 'assigned', 'arriving'\)/);
+  assert.doesNotMatch(guard, /'boarded'\)/);
+  assert.match(schema, /r\.status in \('pending', 'assigned', 'arriving'\)/);
+});
