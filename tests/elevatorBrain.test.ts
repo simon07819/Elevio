@@ -500,8 +500,8 @@ test("sans passager a bord, une direction stale ne force pas une montee inutile"
 });
 
 test("cabine vide avec appels P1 et RDC vers le haut commence par P1 puis ramasse RDC en chemin", () => {
-  const p1Pickup = request("r16", "p1", "8", { elevator_id: "e1", sequence_number: 2 });
-  const rdcPickup = request("r17", "rdc", "16", { elevator_id: "e1", sequence_number: 1 });
+  const p1Pickup = request("r16", "p1", "8", { elevator_id: "e1", sequence_number: 1 });
+  const rdcPickup = request("r17", "rdc", "16", { elevator_id: "e1", sequence_number: 2 });
   const first = computeNextOperatorAction({
     elevator: elevator("e1", "rdc", "idle"),
     assignedRequests: enrichDispatchRequests([rdcPickup, p1Pickup], floors),
@@ -535,9 +535,24 @@ test("cabine vide avec appels P1 et RDC vers le haut commence par P1 puis ramass
   assert.equal(second.nextFloor?.id, "rdc");
 });
 
+test("cabine vide : ordre chantier — etage 5 avant P1 quand la demande 5 vers le haut est creee en premier", () => {
+  const fiveFirst = request("r70", "5", "14", { elevator_id: "e1", sequence_number: 1 });
+  const p1Second = request("r71", "p1", "13", { elevator_id: "e1", sequence_number: 2 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc", "idle"),
+    assignedRequests: enrichDispatchRequests([p1Second, fiveFirst], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(action.primaryPickupRequestId, "r70");
+  assert.equal(action.nextFloor?.id, "5");
+});
+
 test("cabine vide avec appels au-dessus vers le bas commence par le plus haut pickup", () => {
-  const lower = request("r18", "5", "rdc", { elevator_id: "e1", sequence_number: 1 });
-  const higher = request("r19", "8", "p1", { elevator_id: "e1", sequence_number: 2 });
+  const lower = request("r18", "5", "rdc", { elevator_id: "e1", sequence_number: 2 });
+  const higher = request("r19", "8", "p1", { elevator_id: "e1", sequence_number: 1 });
   const action = computeNextOperatorAction({
     elevator: elevator("e1", "5", "idle"),
     assignedRequests: enrichDispatchRequests([lower, higher], floors),
@@ -550,9 +565,24 @@ test("cabine vide avec appels au-dessus vers le bas commence par le plus haut pi
   assert.equal(action.nextFloor?.id, "8");
 });
 
+test("cabine en bas : deux haltes vers le bas — le plus haut d'abord meme si le dossier liste un palier plus bas en premier", () => {
+  const lowerAtDossierFirst = request("r80", "8", "rdc", { elevator_id: "e1", sequence_number: 1 });
+  const higherAtDossierSecond = request("r81", "14", "rdc", { elevator_id: "e1", sequence_number: 2 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc", "idle"),
+    assignedRequests: enrichDispatchRequests([lowerAtDossierFirst, higherAtDossierSecond], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(action.primaryPickupRequestId, "r81");
+  assert.equal(action.nextFloor?.id, "14");
+});
+
 test("cabine vide : montée commence par le palier le plus bas puis collecte en montant", () => {
-  const near = request("r51", "2", "5", { elevator_id: "e1", sequence_number: 10 });
-  const far = request("r52", "5", "8", { elevator_id: "e1", sequence_number: 1 });
+  const near = request("r51", "2", "5", { elevator_id: "e1", sequence_number: 1 });
+  const far = request("r52", "5", "8", { elevator_id: "e1", sequence_number: 2 });
   const action = computeNextOperatorAction({
     elevator: elevator("e1", "rdc"),
     assignedRequests: enrichDispatchRequests([far, near], floors),
@@ -566,8 +596,8 @@ test("cabine vide : montée commence par le palier le plus bas puis collecte en 
 });
 
 test("cabine vide : descente commence par le palier le plus haut puis collecte en descendant", () => {
-  const higherBelow = request("r53", "5", "rdc", { elevator_id: "e1", sequence_number: 2 });
-  const lowerBelow = request("r54", "2", "rdc", { elevator_id: "e1", sequence_number: 1 });
+  const higherBelow = request("r53", "5", "rdc", { elevator_id: "e1", sequence_number: 1 });
+  const lowerBelow = request("r54", "2", "rdc", { elevator_id: "e1", sequence_number: 2 });
   const action = computeNextOperatorAction({
     elevator: elevator("e1", "8", "idle"),
     assignedRequests: enrichDispatchRequests([lowerBelow, higherBelow], floors),
@@ -580,8 +610,8 @@ test("cabine vide : descente commence par le palier le plus haut puis collecte e
 });
 
 test("cabine au-dessus de haltes montée : cible le plus bas (P1) avant RDC", () => {
-  const rdcUp = request("r60", "rdc", "16", { elevator_id: "e1", sequence_number: 1 });
-  const p1Up = request("r61", "p1", "8", { elevator_id: "e1", sequence_number: 2 });
+  const rdcUp = request("r60", "rdc", "16", { elevator_id: "e1", sequence_number: 2 });
+  const p1Up = request("r61", "p1", "8", { elevator_id: "e1", sequence_number: 1 });
   const action = computeNextOperatorAction({
     elevator: elevator("e1", "8", "idle"),
     assignedRequests: enrichDispatchRequests([rdcUp, p1Up], floors),

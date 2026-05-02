@@ -551,6 +551,7 @@ export function computeNextOperatorAction({
       ? openRequests.filter((request) => request.passenger_count <= remainingCapacity && request.passenger_count <= elevator.capacity)
       : openRequests;
   const idlePriorityPool = filterPriorityPickupPool(idleCapacityOk, prioritiesEnabled);
+
   const wave = noAwayBoardedDestinations ? collectivePickupWave(currentSort, idlePriorityPool) : null;
   const idlePhaseDirection = wave
     ? wave.direction
@@ -569,7 +570,18 @@ export function computeNextOperatorAction({
     idleResolvePhase = "idle";
     idleDirectionPool = idlePriorityPool;
   }
-  const idleTargetFloor = wave?.targetFloor ?? resolvePickupFloorSCAN(currentSort, idleResolvePhase, idleDirectionPool);
+  /** Ordre chantier : min `sequence_number` dans la vague courante (montée uniquement).
+   * En descente, la vague impose déjà max(palier départ) — le plus haut d’abord, puis on descend ; ne pas forcer un palier plus bas à cause du dossier. */
+  const chantierLead =
+    noAwayBoardedDestinations && idleDirectionPool.length > 0
+      ? [...idleDirectionPool].sort((a, b) => a.sequence_number - b.sequence_number)[0]
+      : null;
+  const useChantierOrderForFirstPickup = chantierLead !== null && idlePhaseDirection === "up";
+
+  const idleTargetFloorFromScan = wave?.targetFloor ?? resolvePickupFloorSCAN(currentSort, idleResolvePhase, idleDirectionPool);
+  const idleTargetFloor = useChantierOrderForFirstPickup
+    ? Number(chantierLead!.from_sort_order)
+    : idleTargetFloorFromScan;
   const warnings = openRequests.flatMap((request) =>
     capacityWarnings(request, elevator.capacity, remainingCapacity, capacityEnabled),
   );
@@ -592,7 +604,9 @@ export function computeNextOperatorAction({
   }
 
   const idleAtFloor = sortPickupsAtFloor(
-    idleDirectionPool.filter((r) => Number(r.from_sort_order) === Number(idleTargetFloor)),
+    (useChantierOrderForFirstPickup ? idlePriorityPool : idleDirectionPool).filter(
+      (r) => Number(r.from_sort_order) === Number(idleTargetFloor),
+    ),
   );
   const idlePrimary = idleAtFloor[0];
   if (!idlePrimary) {
