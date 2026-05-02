@@ -602,6 +602,30 @@ test("avec passagers en descente : ignore les appels montée sur le segment", ()
   assert.equal(action.primaryPickupRequestId, null);
 });
 
+test("avec passager vers 16 : ramasse une demande en chemin avant la depose", () => {
+  const onboard = request("r63", "p1", "16", { elevator_id: "e1", status: "boarded" });
+  const midPickup = request("r64", "5", "16", { elevator_id: "e1", sequence_number: 1 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "p1", "up", { current_load: 1 }),
+    assignedRequests: enrichDispatchRequests([midPickup], floors),
+    onboardPassengers: enrichDispatchRequests([onboard], floors).map((r) => ({
+      requestId: r.id,
+      from_floor_id: r.from_floor_id,
+      to_floor_id: r.to_floor_id,
+      from_sort_order: r.from_sort_order,
+      to_sort_order: r.to_sort_order,
+      passenger_count: r.passenger_count,
+    })),
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(action.action, "pickup");
+  assert.equal(action.nextFloor?.id, "5");
+  assert.equal(action.primaryPickupRequestId, "r64");
+  assert.equal(action.requestsToDropoff.length, 0);
+});
+
 test("cabine vide : direction DB encore « up » ne bloque pas les appels en descente (sync retardée)", () => {
   const downLeg = request("r62", "4", "rdc", { elevator_id: "e1", sequence_number: 1 });
   const action = computeNextOperatorAction({

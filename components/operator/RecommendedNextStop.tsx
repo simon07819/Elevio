@@ -50,8 +50,9 @@ export function RecommendedNextStop({
       ? formatDispatchRecommendationReason(recommendation.reasonDetail, locale, recommendation.reason)
       : "";
 
+  const hasRecommendedPickup = recommendation.requestsToPickup.length > 0 || recommendation.primaryPickupRequestId !== null;
   const dropFloorId =
-    recommendation.nextFloor?.id ?? recommendation.requestsToDropoff[0]?.to_floor_id ?? "";
+    recommendation.requestsToDropoff[0]?.to_floor_id ?? (hasRecommendedPickup ? "" : recommendation.nextFloor?.id ?? "");
 
   const pendingDropoffs = useMemo(() => {
     return recommendation.requestsToDropoff.filter((p) => !completedDropoffIds.has(p.requestId));
@@ -63,15 +64,19 @@ export function RecommendedNextStop({
       return [...new Set(fromRecommendation)];
     }
 
+    if (hasRecommendedPickup || !dropFloorId) {
+      return [];
+    }
+
     const boardedAtTarget = actionRequests
-      .filter((request) => request.status === "boarded" && (!dropFloorId || request.to_floor_id === dropFloorId))
+      .filter((request) => request.status === "boarded" && request.to_floor_id === dropFloorId)
       .map((request) => request.id);
     if (boardedAtTarget.length > 0) {
       return [...new Set(boardedAtTarget)];
     }
 
-    return [...new Set(actionRequests.filter((request) => request.status === "boarded").map((request) => request.id))];
-  }, [actionRequests, dropFloorId, pendingDropoffs]);
+    return [];
+  }, [actionRequests, dropFloorId, hasRecommendedPickup, pendingDropoffs]);
 
   const actionRequest = useMemo(() => {
     const candidates = actionRequests.filter(
