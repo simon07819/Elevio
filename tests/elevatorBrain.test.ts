@@ -863,6 +863,37 @@ test("descente depuis 16 avec deux haltes (10 et 12) : le brain ramasse 12 avant
   assert.equal(action.primaryPickupRequestId, "r71");
 });
 
+test("ajout d'une 2e demande met à jour les ramassages prévus dans la raison", () => {
+  // r1 arrive seule : le message ne mentionne pas d'autres ramassages.
+  const r1 = request("rA", "p1", "16", { elevator_id: "e1", sequence_number: 1 });
+  const before = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc", "idle"),
+    assignedRequests: enrichDispatchRequests([r1], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(before.action, "pickup");
+  assert.equal(before.nextFloor?.id, "p1");
+  const beforeDetail = before.reasonDetail as { upcomingPickupLabels?: string[] } | undefined;
+  assert.equal(beforeDetail?.upcomingPickupLabels, undefined);
+
+  // r2 arrive ensuite (5 -> 14) : le brain doit mentionner « 5 » comme ramassage en chemin.
+  const r2 = request("rB", "5", "14", { elevator_id: "e1", sequence_number: 2 });
+  const after = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc", "idle"),
+    assignedRequests: enrichDispatchRequests([r1, r2], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(after.action, "pickup");
+  assert.equal(after.nextFloor?.id, "p1");
+  const afterDetail = after.reasonDetail as { upcomingPickupLabels?: string[] };
+  assert.deepEqual(afterDetail.upcomingPickupLabels, ["5"]);
+  assert.match(after.reason, /Ramassages prévus en chemin : 5/);
+});
+
 test("passager destination = palier courant : retourne dropoff (pas wait)", () => {
   const onboard = request("r73", "rdc", "8", { elevator_id: "e1", status: "boarded", sequence_number: 1 });
   const action = computeNextOperatorAction({
