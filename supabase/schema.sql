@@ -400,20 +400,11 @@ for select using (
 );
 
 create policy "admins read users" on users
-for select using (
-  (project_id is not null and is_project_member(project_id))
-  or is_superadmin()
-);
+for select using (project_id is null or is_project_member(project_id) or is_superadmin());
 
 create policy "admins manage users" on users
-for all using (
-  (project_id is not null and is_project_member(project_id))
-  or is_superadmin()
-)
-with check (
-  (project_id is not null and is_project_member(project_id))
-  or is_superadmin()
-);
+for all using (project_id is null or is_project_member(project_id) or is_superadmin())
+with check (project_id is null or is_project_member(project_id) or is_superadmin());
 
 create policy "admins read requests" on requests
 for select using (is_project_member(project_id) or is_superadmin());

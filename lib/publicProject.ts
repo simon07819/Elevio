@@ -34,40 +34,6 @@ function demoPassengerDispatch(): PassengerDispatchState {
   };
 }
 
-type PassengerLandingPayload = {
-  ok: true;
-  project: Project;
-  floor: Floor;
-  floors: Floor[];
-  elevators: Elevator[];
-};
-
-type PassengerLandingError = {
-  ok: false;
-  error: string;
-};
-
-// Returns null when the RPC is unavailable (not yet deployed) so callers can fall back to the
-// legacy direct-query path. Any structured `{ ok: false }` response is returned as-is so we can
-// distinguish "RPC says forbidden" from "RPC missing".
-async function fetchPassengerLanding(
-  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
-  floorToken: string,
-): Promise<PassengerLandingPayload | PassengerLandingError | null> {
-  const { data, error } = await supabase.rpc("passenger_landing", { p_floor_token: floorToken });
-  if (error) {
-    // 42883 = function does not exist (RPC not migrated yet) → caller falls back.
-    if (error.code === "PGRST202" || error.code === "42883" || /function .* does not exist/i.test(error.message)) {
-      return null;
-    }
-    return { ok: false, error: error.message };
-  }
-  if (!data || typeof data !== "object") {
-    return null;
-  }
-  return data as PassengerLandingPayload | PassengerLandingError;
-}
-
 export async function getPublicRequestContext({
   projectId,
   floorToken,
@@ -82,36 +48,6 @@ export async function getPublicRequestContext({
     return { project: demoProject, floors: demoFloors, currentFloor, elevators: [demoElevator], dispatch: demoPassengerDispatch() };
   }
 
-  // Preferred path: RPC scoped by floor token (no anon enumeration possible).
-  const landing = await fetchPassengerLanding(supabase, floorToken);
-  if (landing && landing.ok && landing.project.id === projectId) {
-    const project = { ...landing.project, capacity_enabled: landing.project.capacity_enabled ?? true } as Project;
-    const typedFloors = (landing.floors ?? []) as Floor[];
-    const typedElevators = (landing.elevators ?? []) as Elevator[];
-    const currentFloor = (landing.floor as Floor) ?? typedFloors.find((floor) => floor.qr_token === floorToken);
-    if (currentFloor && typedFloors.length > 0) {
-      const tz = project.service_timezone ?? DEFAULT_PROJECT_TIMEZONE;
-      const analysis = analyzePassengerDispatch({ elevators: typedElevators, timeZone: tz });
-      const hourRanges = uniqueServiceHourRanges(typedElevators.filter((e) => e.active !== false));
-      return {
-        project,
-        floors: typedFloors,
-        currentFloor,
-        elevators: typedElevators,
-        dispatch: {
-          canDispatch: analysis.canDispatch,
-          blockReason: analysis.blockReason,
-          hourRanges,
-          dispatchOperators: analysis.canDispatch
-            ? passengerDispatchOperatorSummaries(analysis.dispatchableElevators, tz)
-            : [],
-        },
-      };
-    }
-  }
-
-  // Legacy fallback: direct queries (relies on the public RLS policies, kept in place until the
-  // RPC migration is verified in production — see supabase/passenger-landing-rpc.sql).
   let projectQuery = (await supabase
     .from("projects")
     .select(PUBLIC_PROJECT_SELECT_WITH_CAPACITY)
