@@ -29,8 +29,8 @@ export function formatDispatchRecommendationReason(
           ? "Ramasser ici"
           : "Pick up here"
         : fr
-          ? "Ramasser en chemin"
-          : "Pick up en route";
+          ? `Ramasser a l'etage ${detail.pickupLabel}`
+          : `Pick up at floor ${detail.pickupLabel}`;
       const prio = detail.priority ? (fr ? " Priorité active." : " Active priority.") : "";
       const people = fr
         ? `${detail.passengerCount} personne(s) vers ${detail.destinationLabel}`

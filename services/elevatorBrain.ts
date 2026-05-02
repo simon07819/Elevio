@@ -170,6 +170,33 @@ function requestWouldTravelWithDirection(request: Pick<BrainRequest, "direction"
   return direction !== "idle" && request.direction === direction;
 }
 
+function requestFitsPlannedWaitingRoute({
+  request,
+  queue,
+  projectFloors,
+}: {
+  request: Pick<NewBrainRequest, "from_floor_id" | "to_floor_id" | "direction">;
+  queue: BrainRequest[];
+  projectFloors: Floor[];
+}): boolean {
+  const fromSort = floorSortOrder(projectFloors, request.from_floor_id);
+  const toSort = floorSortOrder(projectFloors, request.to_floor_id);
+  return queue.some((queued) => {
+    if (!WAITING_STATUSES.has(queued.status) || queued.direction !== request.direction) {
+      return false;
+    }
+    const queuedFrom = floorSortOrder(projectFloors, queued.from_floor_id);
+    const queuedTo = floorSortOrder(projectFloors, queued.to_floor_id);
+    if (request.direction === "up") {
+      return queuedFrom <= fromSort && fromSort <= queuedTo && fromSort <= toSort && toSort <= queuedTo;
+    }
+    if (request.direction === "down") {
+      return queuedFrom >= fromSort && fromSort >= queuedTo && fromSort >= toSort && toSort >= queuedTo;
+    }
+    return false;
+  });
+}
+
 function scoreElevatorForRequest({
   elevator,
   request,
@@ -195,9 +222,11 @@ function scoreElevatorForRequest({
   const shaftStops = hoistQueueToShaftRequests(queue as HoistRequest[], (floorId) => floorSortOrder(projectFloors, floorId))
     .flatMap((stop) => [stop.from_sort_order, stop.to_sort_order]);
   const routeLimit = routeLimitForElevator(currentSort, effectiveDirection, shaftStops);
-  const sameDirection = requestWouldTravelWithDirection(request, effectiveDirection);
-  const onRoute =
-    effectiveDirection === "idle"
+  const plannedRouteFit = requestFitsPlannedWaitingRoute({ request, queue, projectFloors });
+  const sameDirection = requestWouldTravelWithDirection(request, effectiveDirection) || plannedRouteFit;
+  const onRoute = plannedRouteFit
+    ? true
+    : effectiveDirection === "idle"
       ? fromSort === currentSort
       : sameDirection && isBetween(fromSort, currentSort, routeLimit);
   const computedLoad =
@@ -367,6 +396,7 @@ function pickupReasonDetail(
   return {
     kind: "pickup",
     atCurrentFloor: request.from_sort_order === currentSort,
+    pickupLabel: floorLabel(floors, request.from_floor_id, request.from_sort_order),
     passengerCount: request.passenger_count,
     destinationLabel: floorLabel(floors, request.to_floor_id, request.to_sort_order),
     priority: prioritiesEnabled && request.priority,

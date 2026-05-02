@@ -168,6 +168,7 @@ export type DispatchRecommendationReason =
   | {
       kind: "pickup";
       atCurrentFloor: boolean;
+      pickupLabel: string;
       passengerCount: number;
       destinationLabel: string;
       priority: boolean;

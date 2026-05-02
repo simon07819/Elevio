@@ -21,7 +21,9 @@ const floors: Floor[] = [
   floor("5-5", "5.5", 5.5),
   floor("6", "6", 6),
   floor("8", "8", 7),
+  floor("13", "13", 13),
   floor("16", "16", 15),
+  floor("17", "17", 17),
 ];
 
 function floor(id: string, label: string, sort_order: number): Floor {
@@ -326,6 +328,19 @@ test("deux ascenseurs: un en route sur le chemin bat un idle plus loin", () => {
   assert.equal(result.elevatorId, "moving");
 });
 
+test("dispatch: une demande 5 vers 13 rejoint la route planifiee P1 vers 17", () => {
+  const planned = request("r67", "p1", "17", { elevator_id: "route", sequence_number: 1 });
+  const result = computeBestElevatorForRequest({
+    newRequest: request("r68", "5", "13", { sequence_number: 2 }),
+    elevators: [elevator("route", "rdc", "idle"), elevator("other", "13", "idle")],
+    activeRequests: [planned],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(result.elevatorId, "route");
+});
+
 test("une demande plus ancienne n'est pas oubliee hors chemin", () => {
   const oldReq = request("r1", "1", "5", {
     elevator_id: "e1",
@@ -624,6 +639,81 @@ test("avec passager vers 16 : ramasse une demande en chemin avant la depose", ()
   assert.equal(action.nextFloor?.id, "5");
   assert.equal(action.primaryPickupRequestId, "r64");
   assert.equal(action.requestsToDropoff.length, 0);
+});
+
+test("sequence chantier: P1 vers 17 puis 5 vers 13 fait P1, 5, 13, 17", () => {
+  const firstPickup = request("r65", "p1", "17", { elevator_id: "e1", sequence_number: 1 });
+  const secondPickup = request("r66", "5", "13", { elevator_id: "e1", sequence_number: 2 });
+
+  const goToP1 = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc", "idle"),
+    assignedRequests: enrichDispatchRequests([firstPickup, secondPickup], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(goToP1.action, "pickup");
+  assert.equal(goToP1.nextFloor?.id, "p1");
+  assert.equal(goToP1.primaryPickupRequestId, "r65");
+
+  const goTo5 = computeNextOperatorAction({
+    elevator: elevator("e1", "p1", "up", { current_load: 1 }),
+    assignedRequests: enrichDispatchRequests([secondPickup], floors),
+    onboardPassengers: enrichDispatchRequests([{ ...firstPickup, status: "boarded" }], floors).map((r) => ({
+      requestId: r.id,
+      from_floor_id: r.from_floor_id,
+      to_floor_id: r.to_floor_id,
+      from_sort_order: r.from_sort_order,
+      to_sort_order: r.to_sort_order,
+      passenger_count: r.passenger_count,
+    })),
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(goTo5.action, "pickup");
+  assert.equal(goTo5.nextFloor?.id, "5");
+  assert.equal(goTo5.primaryPickupRequestId, "r66");
+
+  const goTo13 = computeNextOperatorAction({
+    elevator: elevator("e1", "5", "up", { current_load: 2 }),
+    assignedRequests: [],
+    onboardPassengers: enrichDispatchRequests([
+      { ...firstPickup, status: "boarded" },
+      { ...secondPickup, status: "boarded" },
+    ], floors).map((r) => ({
+      requestId: r.id,
+      from_floor_id: r.from_floor_id,
+      to_floor_id: r.to_floor_id,
+      from_sort_order: r.from_sort_order,
+      to_sort_order: r.to_sort_order,
+      passenger_count: r.passenger_count,
+    })),
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(goTo13.action, "dropoff");
+  assert.equal(goTo13.nextFloor?.id, "13");
+
+  const goTo17 = computeNextOperatorAction({
+    elevator: elevator("e1", "13", "up", { current_load: 1 }),
+    assignedRequests: [],
+    onboardPassengers: enrichDispatchRequests([{ ...firstPickup, status: "boarded" }], floors).map((r) => ({
+      requestId: r.id,
+      from_floor_id: r.from_floor_id,
+      to_floor_id: r.to_floor_id,
+      from_sort_order: r.from_sort_order,
+      to_sort_order: r.to_sort_order,
+      passenger_count: r.passenger_count,
+    })),
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(goTo17.action, "dropoff");
+  assert.equal(goTo17.nextFloor?.id, "17");
 });
 
 test("cabine vide : direction DB encore « up » ne bloque pas les appels en descente (sync retardée)", () => {
