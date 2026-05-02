@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { Ban, CheckCircle2, MapPin } from "lucide-react";
 import {
@@ -63,7 +63,6 @@ export function OperatorDashboard({
 }) {
   const { locale } = useLanguage();
   const [liveRequests, setLiveRequests] = useState(requests);
-  const liveRequestsRef = useRef(liveRequests);
   const [operatorActionError, setOperatorActionError] = useState<string | null>(null);
   const [isTogglingFull, setIsTogglingFull] = useState(false);
   const [manualFullOverride, setManualFullOverride] = useState<boolean | null>(null);
@@ -162,10 +161,6 @@ export function OperatorDashboard({
       window.clearInterval(id);
     };
   }, [elevator.id, projectId]);
-
-  useEffect(() => {
-    liveRequestsRef.current = liveRequests;
-  }, [liveRequests]);
 
   const floorById = useMemo(() => new Map(floors.map((floor) => [floor.id, floor])), [floors]);
   const elevatorRequests = useMemo(
@@ -293,63 +288,6 @@ export function OperatorDashboard({
     ...activeQueue.filter((request) => visibleRecommendedIds.has(request.id)),
     ...activeQueue.filter((request) => !visibleRecommendedIds.has(request.id)),
   ];
-
-  const computePickupsAfterDropoff = useCallback(
-    (completedDropoffIds: string[], dropFloorId: string): string[] => {
-      const dropFloor = floorById.get(dropFloorId);
-      if (!dropFloor) {
-        return [];
-      }
-      const nowIso = new Date().toISOString();
-      const snapshot = liveRequestsRef.current.map((request) =>
-        completedDropoffIds.includes(request.id)
-          ? {
-              ...request,
-              status: "completed" as const,
-              completed_at: nowIso,
-              updated_at: nowIso,
-            }
-          : request,
-      );
-      const elevatorReqs = snapshot.filter((request) => request.elevator_id === elevator.id);
-      const snapshotDispatch: DispatchRequest[] = elevatorReqs.map((request) => ({
-        ...request,
-        from_sort_order: floorById.get(request.from_floor_id)?.sort_order ?? 0,
-        to_sort_order: floorById.get(request.to_floor_id)?.sort_order ?? 0,
-      }));
-      const snapshotPassengers = elevatorReqs
-        .filter((request) => request.status === "boarded")
-        .map((request) => {
-          const from = floorById.get(request.from_floor_id);
-          const to = floorById.get(request.to_floor_id);
-          return {
-            requestId: request.id,
-            from_floor_id: request.from_floor_id,
-            to_floor_id: request.to_floor_id,
-            from_sort_order: from?.sort_order ?? 0,
-            to_sort_order: to?.sort_order ?? 0,
-            passenger_count: request.passenger_count,
-            boarded_at: request.updated_at,
-          };
-        });
-      const snapshotLoad = snapshotPassengers.reduce((sum, passenger) => sum + passenger.passenger_count, 0);
-      const manualFull = manualFullOverride ?? elevator.manual_full;
-      const rec = getRecommendedNextStop({
-        currentFloor: dropFloor,
-        direction: elevator.direction,
-        requests: snapshotDispatch,
-        capacity: elevator.capacity,
-        currentLoad: snapshotLoad,
-        activePassengers: snapshotPassengers,
-        floors,
-        prioritiesEnabled,
-        capacityEnabled,
-        manualFull: manualFull === true,
-      });
-      return rec.requestsToPickup.filter((request) => request.from_floor_id === dropFloorId).map((request) => request.id);
-    },
-    [capacityEnabled, elevator, floorById, floors, manualFullOverride, prioritiesEnabled],
-  );
 
   /** Pas de palier invente quand le cerveau dit pause. */
   const displayFloor = visibleRecommendation.nextFloor;
@@ -649,51 +587,35 @@ export function OperatorDashboard({
         recommendation={visibleRecommendation}
         actionRequests={actionRequests}
         operatorElevatorId={elevator.id}
-        hasActiveOperatorWork={hasOperatorWork}
-        manualFull={effectiveElevator.manual_full === true}
-        computePickupsAfterDropoff={computePickupsAfterDropoff}
-        onPickupSuccess={(requests) => {
-          if (requests.length === 0) {
-            return;
-          }
+        onPickupSuccess={(req) => {
           const now = new Date().toISOString();
           const client = createClient();
           if (client) {
-            broadcastPassengerRequestBoarded(
-              client,
-              projectId,
-              requests.map((request) => request.id),
-            );
+            broadcastPassengerRequestBoarded(client, projectId, [req.id]);
           }
-          for (const req of requests) {
-            rememberOptimisticRequest({
-              ...req,
-              status: "boarded",
-              updated_at: now,
-              elevator_id: req.elevator_id ?? elevator.id,
-            });
-          }
+          rememberOptimisticRequest({
+            ...req,
+            status: "boarded",
+            updated_at: now,
+            elevator_id: req.elevator_id ?? elevator.id,
+          });
           setLiveRequests((prev) => {
-            let next = prev;
-            for (const req of requests) {
-              next = next.map((r) =>
-                r.id === req.id
-                  ? {
-                      ...r,
-                      status: "boarded" as const,
-                      updated_at: now,
-                      elevator_id: r.elevator_id ?? elevator.id,
-                    }
-                  : r,
-              );
-            }
+            const next = prev.map((r) =>
+              r.id === req.id
+                ? {
+                    ...r,
+                    status: "boarded" as const,
+                    updated_at: now,
+                    elevator_id: r.elevator_id ?? elevator.id,
+                  }
+                : r,
+            );
             const boardedLoad = next
               .filter((r) => r.elevator_id === elevator.id && r.status === "boarded")
               .reduce((sum, r) => sum + r.passenger_count, 0);
-            const lead = requests[0];
             onElevatorPatch?.(elevator.id, {
-              current_floor_id: lead.from_floor_id,
-              direction: lead.direction,
+              current_floor_id: req.from_floor_id,
+              direction: req.direction,
               current_load: boardedLoad,
             });
             return next;
