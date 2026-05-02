@@ -22,6 +22,7 @@ const floors: Floor[] = [
   floor("6", "6", 6),
   floor("8", "8", 7),
   floor("13", "13", 13),
+  floor("14", "14", 14),
   floor("16", "16", 15),
   floor("17", "17", 17),
 ];
@@ -714,6 +715,81 @@ test("sequence chantier: P1 vers 17 puis 5 vers 13 fait P1, 5, 13, 17", () => {
 
   assert.equal(goTo17.action, "dropoff");
   assert.equal(goTo17.nextFloor?.id, "17");
+});
+
+test("sequence chantier: P1 vers 16 puis 4 vers 14 fait P1, 4, 14, 16", () => {
+  const firstPickup = request("r80", "p1", "16", { elevator_id: "e1", sequence_number: 1 });
+  const secondPickup = request("r81", "4", "14", { elevator_id: "e1", sequence_number: 2 });
+
+  const goToP1 = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc", "idle"),
+    assignedRequests: enrichDispatchRequests([firstPickup, secondPickup], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(goToP1.action, "pickup");
+  assert.equal(goToP1.nextFloor?.id, "p1");
+  assert.equal(goToP1.primaryPickupRequestId, "r80");
+
+  const goTo4 = computeNextOperatorAction({
+    elevator: elevator("e1", "p1", "up", { current_load: 1 }),
+    assignedRequests: enrichDispatchRequests([secondPickup], floors),
+    onboardPassengers: enrichDispatchRequests([{ ...firstPickup, status: "boarded" }], floors).map((r) => ({
+      requestId: r.id,
+      from_floor_id: r.from_floor_id,
+      to_floor_id: r.to_floor_id,
+      from_sort_order: r.from_sort_order,
+      to_sort_order: r.to_sort_order,
+      passenger_count: r.passenger_count,
+    })),
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(goTo4.action, "pickup");
+  assert.equal(goTo4.nextFloor?.id, "4");
+  assert.equal(goTo4.primaryPickupRequestId, "r81");
+
+  const goTo14 = computeNextOperatorAction({
+    elevator: elevator("e1", "4", "up", { current_load: 2 }),
+    assignedRequests: [],
+    onboardPassengers: enrichDispatchRequests([
+      { ...firstPickup, status: "boarded" },
+      { ...secondPickup, status: "boarded" },
+    ], floors).map((r) => ({
+      requestId: r.id,
+      from_floor_id: r.from_floor_id,
+      to_floor_id: r.to_floor_id,
+      from_sort_order: r.from_sort_order,
+      to_sort_order: r.to_sort_order,
+      passenger_count: r.passenger_count,
+    })),
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(goTo14.action, "dropoff");
+  assert.equal(goTo14.nextFloor?.id, "14");
+
+  const goTo16 = computeNextOperatorAction({
+    elevator: elevator("e1", "14", "up", { current_load: 1 }),
+    assignedRequests: [],
+    onboardPassengers: enrichDispatchRequests([{ ...firstPickup, status: "boarded" }], floors).map((r) => ({
+      requestId: r.id,
+      from_floor_id: r.from_floor_id,
+      to_floor_id: r.to_floor_id,
+      from_sort_order: r.from_sort_order,
+      to_sort_order: r.to_sort_order,
+      passenger_count: r.passenger_count,
+    })),
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(goTo16.action, "dropoff");
+  assert.equal(goTo16.nextFloor?.id, "16");
 });
 
 test("cabine vide : direction DB encore « up » ne bloque pas les appels en descente (sync retardée)", () => {

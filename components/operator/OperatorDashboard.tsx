@@ -231,7 +231,8 @@ export function OperatorDashboard({
       bRecommended - aRecommended ||
       (prioritiesEnabled ? Number(b.priority) - Number(a.priority) : 0) ||
       bCapacityValid - aCapacityValid ||
-      new Date(a.wait_started_at).getTime() - new Date(b.wait_started_at).getTime()
+      new Date(a.wait_started_at).getTime() - new Date(b.wait_started_at).getTime() ||
+      a.sequence_number - b.sequence_number
     );
   });
   const priorityCount = prioritiesEnabled ? enriched.filter((request) => request.priority).length : 0;
@@ -239,7 +240,11 @@ export function OperatorDashboard({
   const activeQueue = liveQueue.filter((request) => isOperatorMovementQueueStatus(request.status));
   const hasBoardedPassengers = liveActivePassengers.length > 0;
   const hasOperatorWork = activeQueue.length > 0 || hasBoardedPassengers;
-  const fallbackPickup = liveQueue.find((request) => isOperatorAwaitingPickup(request.status)) ?? null;
+  /** Aligné sur le cerveau : ordre chantier = sequence_number croissant (pas l’ordre DB / created_at). */
+  const fallbackPickup =
+    [...liveQueue]
+      .filter((request) => isOperatorAwaitingPickup(request.status))
+      .sort((a, b) => a.sequence_number - b.sequence_number)[0] ?? null;
   const fallbackPickupFloor = fallbackPickup ? floorById.get(fallbackPickup.from_floor_id) ?? null : null;
   const fallbackSuggestedDirection: Direction =
     fallbackPickupFloor && Number(fallbackPickupFloor.sort_order) > Number(currentFloor.sort_order)
