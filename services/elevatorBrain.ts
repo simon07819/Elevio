@@ -335,7 +335,7 @@ export function computeBestElevatorForRequest({
         a.score - b.score ||
         b.remainingCapacity - a.remainingCapacity ||
         b.assignableChunk - a.assignableChunk ||
-        a.elevatorName.localeCompare(b.elevatorName),
+        a.elevatorId.localeCompare(b.elevatorId),
     );
 
   const winner = candidates.find((candidate) => candidate.eligible) ?? null;
@@ -537,6 +537,27 @@ export function computeNextOperatorAction({
       requestsToPickup: [],
       requestsToDropoff: dropoffs,
       suggestedDirection: directionToward(currentSort, nextDropSort),
+      capacityWarnings: [],
+    };
+  }
+
+  /** Prochaine dépose SCAN absente alors que des passagers sont encore à bord : ils ont tous pour destination le palier courant (`pendingBoardedDestinations` les exclut). */
+  const debarkAtCurrentFloor = onboardPassengers.filter(
+    (passenger) => Number(passenger.to_sort_order) === Number(currentSort),
+  );
+  if (debarkAtCurrentFloor.length > 0) {
+    const passengers = debarkAtCurrentFloor.reduce((sum, passenger) => sum + passenger.passenger_count, 0);
+    const dropDetail: DispatchRecommendationReason = { kind: "dropoff_before_pickups", passengers };
+    return {
+      action: "dropoff",
+      nextFloor: resolveFloorEntity(projectFloors, currentSort),
+      nextFloorSortOrder: currentSort,
+      primaryPickupRequestId: null,
+      reasonDetail: dropDetail,
+      reason: formatDispatchRecommendationReason(dropDetail, "fr", ""),
+      requestsToPickup: [],
+      requestsToDropoff: debarkAtCurrentFloor,
+      suggestedDirection: "idle",
       capacityWarnings: [],
     };
   }

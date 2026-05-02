@@ -38,7 +38,12 @@ function floor(id: string, label: string, sort_order: number): Floor {
   };
 }
 
-function elevator(id: string, current_floor_id: string, direction: Direction = "idle", patch: Partial<Elevator> = {}): Elevator {
+function elevator(
+  id: string,
+  current_floor_id: string,
+  direction: Direction = "idle",
+  patch: Partial<Elevator> & { online?: boolean } = {},
+): Elevator & { online?: boolean } {
   return {
     id,
     project_id: "project",
@@ -729,4 +734,232 @@ test("cabine vide : direction DB encore « up » ne bloque pas les appels en des
   assert.equal(action.action, "pickup");
   assert.equal(action.primaryPickupRequestId, "r62");
   assert.equal(action.suggestedDirection, "down");
+});
+
+test("montée simple : dispatch et prochaine action vers le haut", () => {
+  const req = request("r70", "rdc", "3", { elevator_id: "e1" });
+  const assign = computeBestElevatorForRequest({
+    newRequest: req,
+    elevators: [elevator("e1", "rdc")],
+    activeRequests: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(assign.elevatorId, "e1");
+
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc"),
+    assignedRequests: enrichDispatchRequests([req], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(action.action, "pickup");
+  assert.equal(action.nextFloor?.id, "rdc");
+  assert.equal(action.suggestedDirection, "idle");
+  assert.equal(action.requestsToPickup[0]?.direction, "up");
+});
+
+test("descente simple : ramassage au palier courant, trajet vers le bas", () => {
+  const req = request("r71", "5", "rdc", { elevator_id: "e1" });
+  const assign = computeBestElevatorForRequest({
+    newRequest: req,
+    elevators: [elevator("e1", "5")],
+    activeRequests: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(assign.elevatorId, "e1");
+
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "5"),
+    assignedRequests: enrichDispatchRequests([req], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(action.action, "pickup");
+  assert.equal(action.nextFloor?.id, "5");
+  assert.equal(action.requestsToPickup[0]?.direction, "down");
+});
+
+test("respect de la capacité : la vague assignable ne dépasse ni la cabine ni les places restantes", () => {
+  const cap = 6;
+  const lift = elevator("e1", "rdc", "idle", { capacity: cap, current_load: 2 });
+  const result = computeBestElevatorForRequest({
+    newRequest: {
+      from_floor_id: "rdc",
+      to_floor_id: "5",
+      direction: "up",
+      passenger_count: 20,
+      priority: false,
+      wait_started_at: "2026-04-30T11:58:00.000Z",
+    },
+    elevators: [lift],
+    activeRequests: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(result.elevatorId, "e1");
+  assert.equal(result.assignableChunk, 4);
+});
+
+test("surplus de demandes : groupe plus nombreux que les places libres → chunk partiel", () => {
+  const result = computeBestElevatorForRequest({
+    newRequest: {
+      from_floor_id: "2",
+      to_floor_id: "rdc",
+      direction: "down",
+      passenger_count: 9,
+      priority: false,
+      wait_started_at: "2026-04-30T11:58:00.000Z",
+    },
+    elevators: [elevator("e1", "2", "idle", { capacity: 5, current_load: 2 })],
+    activeRequests: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(result.elevatorId, "e1");
+  assert.equal(result.assignableChunk, 3);
+  assert.ok(result.assignableChunk < 9);
+});
+
+test("surplus de demandes : aucun ascenseur disponible en ligne", () => {
+  const result = computeBestElevatorForRequest({
+    newRequest: request("r72", "rdc", "5"),
+    elevators: [
+      elevator("e1", "rdc", "idle", { online: false }),
+      elevator("e2", "1", "idle", { online: false }),
+    ],
+    activeRequests: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(result.elevatorId, null);
+});
+
+test("annulation : une demande annulée ne figure plus dans les ramassages ouverts", () => {
+  const cancelled = request("r73", "2", "5", {
+    elevator_id: "e1",
+    sequence_number: 1,
+    status: "cancelled",
+  });
+  const active = request("r74", "3", "6", { elevator_id: "e1", sequence_number: 2 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc"),
+    assignedRequests: enrichDispatchRequests([cancelled, active], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(action.primaryPickupRequestId, "r74");
+  assert.ok(!action.requestsToPickup.some((r) => r.id === "r73"));
+});
+
+test("ordre des demandes : à même étage et même priorité, le plus petit sequence_number passe en premier", () => {
+  const laterSeq = request("r75", "rdc", "4", { elevator_id: "e1", sequence_number: 50 });
+  const earlierSeq = request("r76", "rdc", "2", { elevator_id: "e1", sequence_number: 3 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc"),
+    assignedRequests: enrichDispatchRequests([laterSeq, earlierSeq], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(action.primaryPickupRequestId, "r76");
+});
+
+test("passagers à destination du palier courant : déposer sans retomber en attente vide", () => {
+  const onboard = request("r80", "rdc", "5", { elevator_id: "e1", status: "boarded" });
+  const enriched = enrichDispatchRequests([onboard], floors);
+  const onboardPassengers = enriched.map((r) => ({
+    requestId: r.id,
+    from_floor_id: r.from_floor_id,
+    to_floor_id: r.to_floor_id,
+    from_sort_order: r.from_sort_order,
+    to_sort_order: r.to_sort_order,
+    passenger_count: r.passenger_count,
+  }));
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "5"),
+    assignedRequests: [],
+    onboardPassengers,
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(action.action, "dropoff");
+  assert.equal(action.requestsToDropoff.length, 1);
+  assert.equal(action.requestsToDropoff[0]?.requestId, "r80");
+  assert.equal(action.nextFloor?.id, "5");
+  assert.equal(action.suggestedDirection, "idle");
+});
+
+test("palier de dépose cabine pleine puis capacité libérée : pickup au même palier", () => {
+  const onboard = request("b81", "rdc", "5", {
+    elevator_id: "e1",
+    status: "boarded",
+    passenger_count: 4,
+  });
+  const waiting = request("w81", "5", "8", { elevator_id: "e1", status: "assigned", passenger_count: 2 });
+  const onboardEnriched = enrichDispatchRequests([onboard], floors);
+  const assignedEnriched = enrichDispatchRequests([waiting], floors);
+  const passengers = onboardEnriched.map((r) => ({
+    requestId: r.id,
+    from_floor_id: r.from_floor_id,
+    to_floor_id: r.to_floor_id,
+    from_sort_order: r.from_sort_order,
+    to_sort_order: r.to_sort_order,
+    passenger_count: r.passenger_count,
+  }));
+
+  const first = computeNextOperatorAction({
+    elevator: elevator("e1", "5", "idle", { capacity: 4, current_load: 4 }),
+    assignedRequests: assignedEnriched,
+    onboardPassengers: passengers,
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(first.action, "dropoff");
+
+  const second = computeNextOperatorAction({
+    elevator: elevator("e1", "5", "idle", { capacity: 4, current_load: 0 }),
+    assignedRequests: assignedEnriched,
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(second.action, "pickup");
+  assert.equal(second.primaryPickupRequestId, "w81");
+  assert.ok(second.requestsToPickup.some((r) => r.id === "w81"));
+});
+
+test("manual_full : attente au palier courant sans dépose à bord → pas de pickup (idle_blocked)", () => {
+  const waiting = request("w82", "rdc", "5", { elevator_id: "e1", status: "assigned" });
+  const assignedEnriched = enrichDispatchRequests([waiting], floors);
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc", "idle", { manual_full: true }),
+    assignedRequests: assignedEnriched,
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(action.action, "wait");
+  assert.equal(action.reasonDetail?.kind, "idle_blocked");
+});
+
+test("plusieurs groupes au même palier : requestsToPickup inclut chaque demande éligible", () => {
+  const a = request("g1", "rdc", "5", { elevator_id: "e1", sequence_number: 1 });
+  const b = request("g2", "rdc", "5", { elevator_id: "e1", sequence_number: 2 });
+  const c = request("g3", "rdc", "5", { elevator_id: "e1", sequence_number: 3 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc"),
+    assignedRequests: enrichDispatchRequests([a, b, c], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(action.action, "pickup");
+  assert.equal(action.requestsToPickup.length, 3);
+  const pickupIds = new Set(action.requestsToPickup.map((r) => r.id));
+  assert.ok(pickupIds.has("g1") && pickupIds.has("g2") && pickupIds.has("g3"));
 });

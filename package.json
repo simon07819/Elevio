@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "tsc -p tsconfig.test.json && node --test .test-build/tests/*.test.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "simulate:hoist": "tsx scripts/simulate-hoist.ts"
   },
   "dependencies": {
     "@supabase/ssr": "latest",
@@ -32,6 +33,7 @@
     "eslint-config-next": "latest",
     "postcss": "latest",
     "tailwindcss": "latest",
+    "tsx": "latest",
     "typescript": "latest"
   }
 }

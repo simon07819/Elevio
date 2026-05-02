@@ -13,6 +13,7 @@
     "tests/**/*.ts",
     "services/elevatorBrain.ts",
     "lib/elevatorRouting.ts",
+    "lib/operatorPickupBatch.ts",
     "types/**/*.ts"
   ]
 }

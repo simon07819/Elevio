@@ -31,7 +31,7 @@ test("ramasser notifie instantanement le passager de retourner au scan", () => {
   const broadcast = readFileSync(join(root, "lib/passengerNotifyBroadcast.ts"), "utf8");
 
   assert.match(broadcast, /PASSENGER_BROADCAST_REQUEST_BOARDED/);
-  assert.match(dashboard, /broadcastPassengerRequestBoarded\(client,\s*projectId,\s*\[req\.id\]\)/);
+  assert.match(dashboard, /broadcastPassengerRequestBoarded\([\s\S]*requests\.map\(\(request\) => request\.id\)/);
   assert.match(form, /PASSENGER_BROADCAST_REQUEST_BOARDED/);
   assert.match(form, /router\.replace\("\/"\)/);
 });
