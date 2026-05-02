@@ -9,6 +9,7 @@ import { cancelPassengerRequestClient } from "@/lib/passengerCancelClient";
 import { resumePassengerRequestClient } from "@/lib/passengerResumeClient";
 import {
   PASSENGER_BROADCAST_QUEUE_CLEARED,
+  PASSENGER_BROADCAST_REQUEST_BOARDED,
   passengerProjectBroadcastChannel,
 } from "@/lib/passengerNotifyBroadcast";
 import { subscribeToTable, unsubscribe, type ElevatorRealtimePayload } from "@/lib/realtime";
@@ -313,6 +314,20 @@ export function RequestForm({
       .on(
         "broadcast",
         { event: PASSENGER_BROADCAST_QUEUE_CLEARED },
+        (msg: { payload?: { requestIds?: string[] } | string[] }) => {
+          const raw = msg.payload;
+          const ids = Array.isArray(raw) ? raw : raw?.requestIds;
+          if (!ids?.includes(rid)) {
+            return;
+          }
+          clearPassengerPendingRequest(project.id, rid);
+          setSubmittedRequest(null);
+          router.replace("/");
+        },
+      )
+      .on(
+        "broadcast",
+        { event: PASSENGER_BROADCAST_REQUEST_BOARDED },
         (msg: { payload?: { requestIds?: string[] } | string[] }) => {
           const raw = msg.payload;
           const ids = Array.isArray(raw) ? raw : raw?.requestIds;

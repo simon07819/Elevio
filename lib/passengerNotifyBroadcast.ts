@@ -4,6 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** Émis par l’opérateur après « Vider la liste » ; payload : IDs des demandes annulées. */
 export const PASSENGER_BROADCAST_QUEUE_CLEARED = "queue_cleared";
+/** Émis par l’opérateur dès « Ramasser » ; payload : IDs des demandes embarquées. */
+export const PASSENGER_BROADCAST_REQUEST_BOARDED = "request_boarded";
 
 export function passengerProjectBroadcastChannel(projectId: string) {
   return `proj:${projectId}:passengers`;
@@ -14,6 +16,19 @@ export function passengerProjectBroadcastChannel(projectId: string) {
  * Ne bloque pas l’UI — si ça échoue, le poll RPC reprend le relais.
  */
 export function broadcastPassengerQueueCleared(client: SupabaseClient, projectId: string, requestIds: string[]): void {
+  broadcastPassengerRequestIds(client, projectId, PASSENGER_BROADCAST_QUEUE_CLEARED, requestIds);
+}
+
+export function broadcastPassengerRequestBoarded(client: SupabaseClient, projectId: string, requestIds: string[]): void {
+  broadcastPassengerRequestIds(client, projectId, PASSENGER_BROADCAST_REQUEST_BOARDED, requestIds);
+}
+
+function broadcastPassengerRequestIds(
+  client: SupabaseClient,
+  projectId: string,
+  event: string,
+  requestIds: string[],
+): void {
   if (requestIds.length === 0) {
     return;
   }
@@ -36,7 +51,7 @@ export function broadcastPassengerQueueCleared(client: SupabaseClient, projectId
       });
       await channel.send({
         type: "broadcast",
-        event: PASSENGER_BROADCAST_QUEUE_CLEARED,
+        event,
         payload: { requestIds },
       });
     } catch {

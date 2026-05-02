@@ -24,3 +24,14 @@ test("annuler et recommencer tente le RPC puis un fallback serveur", () => {
   assert.match(cancelClient, /\.select\("id"\)/);
   assert.match(cancelClient, /!directRow \? \{ ok: false \}/);
 });
+
+test("ramasser notifie instantanement le passager de retourner au scan", () => {
+  const dashboard = readFileSync(join(root, "components/operator/OperatorDashboard.tsx"), "utf8");
+  const form = readFileSync(join(root, "components/RequestForm.tsx"), "utf8");
+  const broadcast = readFileSync(join(root, "lib/passengerNotifyBroadcast.ts"), "utf8");
+
+  assert.match(broadcast, /PASSENGER_BROADCAST_REQUEST_BOARDED/);
+  assert.match(dashboard, /broadcastPassengerRequestBoarded\(client,\s*projectId,\s*\[req\.id\]\)/);
+  assert.match(form, /PASSENGER_BROADCAST_REQUEST_BOARDED/);
+  assert.match(form, /router\.replace\("\/"\)/);
+});

@@ -10,7 +10,7 @@ import {
   enrichRequests,
 } from "@/lib/demoData";
 import { createClient } from "@/lib/supabase/client";
-import { broadcastPassengerQueueCleared } from "@/lib/passengerNotifyBroadcast";
+import { broadcastPassengerQueueCleared, broadcastPassengerRequestBoarded } from "@/lib/passengerNotifyBroadcast";
 import {
   bindRealtimeWithAuthSession,
   mergeOperatorPollRequest,
@@ -589,6 +589,10 @@ export function OperatorDashboard({
         operatorElevatorId={elevator.id}
         onPickupSuccess={(req) => {
           const now = new Date().toISOString();
+          const client = createClient();
+          if (client) {
+            broadcastPassengerRequestBoarded(client, projectId, [req.id]);
+          }
           rememberOptimisticRequest({
             ...req,
             status: "boarded",
