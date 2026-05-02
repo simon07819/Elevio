@@ -535,7 +535,9 @@ test("cabine vide avec appels P1 et RDC vers le haut commence par P1 puis ramass
   assert.equal(second.nextFloor?.id, "rdc");
 });
 
-test("cabine vide : ordre chantier — etage 5 avant P1 quand la demande 5 vers le haut est creee en premier", () => {
+test("cycle UP : SCAN priorise le palier le plus bas (P1) meme si la demande 5 est creee en premier", () => {
+  // Logique d'ascenseur : on descend chercher le pickup le plus bas pour faire un cycle
+  // montant propre, sinon il faudrait monter au 5 puis redescendre a P1 (demi-tour).
   const fiveFirst = request("r70", "5", "14", { elevator_id: "e1", sequence_number: 1 });
   const p1Second = request("r71", "p1", "13", { elevator_id: "e1", sequence_number: 2 });
   const action = computeNextOperatorAction({
@@ -546,8 +548,8 @@ test("cabine vide : ordre chantier — etage 5 avant P1 quand la demande 5 vers 
     nowMs: now,
   });
 
-  assert.equal(action.primaryPickupRequestId, "r70");
-  assert.equal(action.nextFloor?.id, "5");
+  assert.equal(action.primaryPickupRequestId, "r71");
+  assert.equal(action.nextFloor?.id, "p1");
 });
 
 test("cabine vide avec appels au-dessus vers le bas commence par le plus haut pickup", () => {
@@ -835,6 +837,22 @@ test("cabine vide : direction DB encore « up » ne bloque pas les appels en des
   assert.equal(action.action, "pickup");
   assert.equal(action.primaryPickupRequestId, "r62");
   assert.equal(action.suggestedDirection, "down");
+});
+
+test("cycle UP : 5→16 (créée 1ère) + P1→5 (créée 2e) → P1 d'abord (SCAN)", () => {
+  // L'utilisateur signale ce cas : aller chercher P1 d'abord pour faire P1 → 5 → 16 propre.
+  const r1 = request("rA", "5", "16", { elevator_id: "e1", sequence_number: 1 });
+  const r2 = request("rB", "p1", "5", { elevator_id: "e1", sequence_number: 2 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "rdc", "idle"),
+    assignedRequests: enrichDispatchRequests([r1, r2], floors),
+    onboardPassengers: [],
+    projectFloors: floors,
+    nowMs: now,
+  });
+  assert.equal(action.action, "pickup");
+  assert.equal(action.nextFloor?.id, "p1");
+  assert.equal(action.primaryPickupRequestId, "rB");
 });
 
 test("descente depuis 16 avec deux haltes (10 et 12) : le brain ramasse 12 avant 10", () => {

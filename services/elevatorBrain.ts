@@ -628,18 +628,12 @@ export function computeNextOperatorAction({
     idleResolvePhase = "idle";
     idleDirectionPool = idlePriorityPool;
   }
-  /** Ordre chantier : min `sequence_number` dans la vague courante (montée uniquement).
-   * En descente, la vague impose déjà max(palier départ) — le plus haut d’abord, puis on descend ; ne pas forcer un palier plus bas à cause du dossier. */
-  const chantierLead =
-    noAwayBoardedDestinations && idleDirectionPool.length > 0
-      ? [...idleDirectionPool].sort((a, b) => a.sequence_number - b.sequence_number)[0]
-      : null;
-  const useChantierOrderForFirstPickup = chantierLead !== null && idlePhaseDirection === "up";
-
-  const idleTargetFloorFromScan = wave?.targetFloor ?? resolvePickupFloorSCAN(currentSort, idleResolvePhase, idleDirectionPool);
-  const idleTargetFloor = useChantierOrderForFirstPickup
-    ? Number(chantierLead!.from_sort_order)
-    : idleTargetFloorFromScan;
+  // Logique SCAN d'ascenseur : en montée le 1er pickup est le palier le plus bas, en descente
+  // le plus haut. L'ordre d'arrivée (sequence_number) sert de tie-break entre demandes au même
+  // palier — pas pour forcer un détour. Sans ce SCAN strict, une demande créée en premier au
+  // 5 ferait sauter une demande créée en second à P1, donc l'ascenseur monterait à 5 puis
+  // devrait redescendre à P1 (demi-tour) au lieu d'un cycle propre P1 → 5 → 16.
+  const idleTargetFloor = wave?.targetFloor ?? resolvePickupFloorSCAN(currentSort, idleResolvePhase, idleDirectionPool);
   const warnings = openRequests.flatMap((request) =>
     capacityWarnings(request, elevator.capacity, remainingCapacity, capacityEnabled),
   );
@@ -662,9 +656,7 @@ export function computeNextOperatorAction({
   }
 
   const idleAtFloor = sortPickupsAtFloor(
-    (useChantierOrderForFirstPickup ? idlePriorityPool : idleDirectionPool).filter(
-      (r) => Number(r.from_sort_order) === Number(idleTargetFloor),
-    ),
+    idleDirectionPool.filter((r) => Number(r.from_sort_order) === Number(idleTargetFloor)),
   );
   const idlePrimary = idleAtFloor[0];
   if (!idlePrimary) {
@@ -687,7 +679,7 @@ export function computeNextOperatorAction({
   // Lister les autres ramassages prévus dans le cycle (autres paliers du pool directionnel)
   // pour que la raison ne donne pas l'illusion d'un trajet direct vers la destination du
   // premier passager.
-  const idleOtherUpcoming = (useChantierOrderForFirstPickup ? idlePriorityPool : idleDirectionPool).filter(
+  const idleOtherUpcoming = idleDirectionPool.filter(
     (r) => Number(r.from_sort_order) !== Number(idlePrimary.from_sort_order),
   );
   const idleTravelDirection: Direction = directionToward(currentSort, idlePrimary.from_sort_order);
