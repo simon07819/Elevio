@@ -836,3 +836,52 @@ test("cabine vide : direction DB encore « up » ne bloque pas les appels en des
   assert.equal(action.primaryPickupRequestId, "r62");
   assert.equal(action.suggestedDirection, "down");
 });
+
+test("descente depuis 16 avec deux haltes (10 et 12) : le brain ramasse 12 avant 10", () => {
+  const onboard = request("r70", "16", "3", { elevator_id: "e1", status: "boarded", sequence_number: 1 });
+  const pickAt12 = request("r71", "13", "rdc", { elevator_id: "e1", sequence_number: 3 });
+  const pickAt10 = request("r72", "8", "rdc", { elevator_id: "e1", sequence_number: 2 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "16", "down", { current_load: 1 }),
+    assignedRequests: enrichDispatchRequests([pickAt10, pickAt12], floors),
+    onboardPassengers: enrichDispatchRequests([onboard], floors).map((r) => ({
+      requestId: r.id,
+      from_floor_id: r.from_floor_id,
+      to_floor_id: r.to_floor_id,
+      from_sort_order: r.from_sort_order,
+      to_sort_order: r.to_sort_order,
+      passenger_count: r.passenger_count,
+    })),
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  // Le plus haut pickup en dessous (sort 13 = label "13") doit etre vise en premier — le brain ne
+  // retourne que le PROCHAIN arret, sinon l operateur saute le palier intermediaire.
+  assert.equal(action.action, "pickup");
+  assert.equal(action.nextFloor?.id, "13");
+  assert.equal(action.primaryPickupRequestId, "r71");
+});
+
+test("passager destination = palier courant : retourne dropoff (pas wait)", () => {
+  const onboard = request("r73", "rdc", "8", { elevator_id: "e1", status: "boarded", sequence_number: 1 });
+  const action = computeNextOperatorAction({
+    elevator: elevator("e1", "8", "up", { current_load: 1 }),
+    assignedRequests: [],
+    onboardPassengers: enrichDispatchRequests([onboard], floors).map((r) => ({
+      requestId: r.id,
+      from_floor_id: r.from_floor_id,
+      to_floor_id: r.to_floor_id,
+      from_sort_order: r.from_sort_order,
+      to_sort_order: r.to_sort_order,
+      passenger_count: r.passenger_count,
+    })),
+    projectFloors: floors,
+    nowMs: now,
+  });
+
+  assert.equal(action.action, "dropoff");
+  assert.equal(action.nextFloor?.id, "8");
+  assert.equal(action.requestsToDropoff.length, 1);
+  assert.equal(action.requestsToDropoff[0]?.requestId, "r73");
+});

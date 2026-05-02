@@ -485,6 +485,29 @@ export function computeNextOperatorAction({
   const serviceDirection = effectiveServiceDirection(currentSort, elevator.direction, onboardPassengers);
   const nextDropSort = nextBoardedDropoffSortOrder(currentSort, serviceDirection, onboardPassengers);
 
+  // Dépose au palier courant : si un passager à bord a sa destination = palier courant, on
+  // déclenche le dropoff immédiatement, sinon le brain part en idle/wait et l'UI ne propose
+  // pas le bouton « déposer » alors que l'opérateur est arrivé.
+  const dropoffsAtCurrent = onboardPassengers.filter(
+    (p) => Number(p.to_sort_order) === currentSort,
+  );
+  if (dropoffsAtCurrent.length > 0) {
+    const passengers = dropoffsAtCurrent.reduce((sum, p) => sum + p.passenger_count, 0);
+    const dropDetail: DispatchRecommendationReason = { kind: "dropoff_before_pickups", passengers };
+    return {
+      action: "dropoff",
+      nextFloor: resolveFloorEntity(projectFloors, currentSort),
+      nextFloorSortOrder: currentSort,
+      primaryPickupRequestId: null,
+      reasonDetail: dropDetail,
+      reason: formatDispatchRecommendationReason(dropDetail, "fr", ""),
+      requestsToPickup: [],
+      requestsToDropoff: dropoffsAtCurrent,
+      suggestedDirection: "idle",
+      capacityWarnings: [],
+    };
+  }
+
   if (nextDropSort !== null) {
     const travelDirection = directionToward(currentSort, nextDropSort);
     const geographic = openPickupsTowardNextDropoff(openRequests, currentSort, nextDropSort);

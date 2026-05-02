@@ -186,9 +186,11 @@ function comparePickupCandidates(a: PickupScanCandidate, b: PickupScanCandidate,
 
 /**
  * Prochain palier d’appel parmi des candidats capacité-OK :
- * d’abord les attentes au palier courant, sinon halte la plus loin dans `phaseDirection`
- * (plus haut au-dessus en montée, plus bas en dessous en descente). Si `phaseDirection`
- * est `idle`, palier le plus proche en distance absolue (tie-break séquence).
+ * d’abord les attentes au palier courant, sinon le palier le plus PROCHE dans `phaseDirection`
+ * (le plus bas au-dessus en montée, le plus haut en dessous en descente). Le cerveau ne sort
+ * qu’UN prochain arrêt à la fois — l’opérateur conduit jusque-là, ramasse, puis recalcule —
+ * donc viser le palier le plus éloigné ferait sauter les arrêts intermédiaires.
+ * Si `phaseDirection` est `idle`, palier le plus proche en distance absolue (tie-break séquence).
  */
 export function nearestEligiblePickupFloorSCAN(
   currentSortOrder: number,
@@ -211,7 +213,8 @@ export function nearestEligiblePickupFloorSCAN(
     if (eligible.length === 0) {
       return null;
     }
-    const targetSort = Math.max(...eligible.map((c) => Number(c.from_sort_order)));
+    // Plus proche au-dessus = le plus bas des candidats au-dessus.
+    const targetSort = Math.min(...eligible.map((c) => Number(c.from_sort_order)));
     return targetSort;
   }
 
@@ -220,7 +223,8 @@ export function nearestEligiblePickupFloorSCAN(
     if (eligible.length === 0) {
       return null;
     }
-    const targetSort = Math.min(...eligible.map((c) => Number(c.from_sort_order)));
+    // Plus proche en dessous = le plus haut des candidats en dessous.
+    const targetSort = Math.max(...eligible.map((c) => Number(c.from_sort_order)));
     return targetSort;
   }
 
