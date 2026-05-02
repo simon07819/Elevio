@@ -58,6 +58,24 @@ Sans variables Supabase, l'app fonctionne en mode demo avec les donnees locales 
 
 Si l application ou Supabase renvoie une erreur du type **column elevators.operator_tablet_label does not exist**, ouvrir **SQL Editor** et executer **`supabase/elevator-operator-tablet-label.sql`** (idempotent). Pour **column elevators.operator_display_name does not exist** ou **Could not find the 'operator_display_name' column of 'elevators' in the schema cache**, executer **`supabase/elevator-operator-display-name.sql`** (ajoute la colonne et envoie `reload schema` a PostgREST). Meme chose pour **column projects.priorities_enabled does not exist** avec **`supabase/project-priorities-enabled.sql`**. Pour que les passagers retrouvent leur demande apres fermeture de l app (QR / lien), executer **`supabase/passenger-resume-request-rpc.sql`** (fonction RPC `resume_passenger_request`). Pour les autres scripts `supabase/*.sql` hors `schema.sql` / `seed.sql`, executer le fichier correspondant aux fonctionnalites ajoutees apres la creation du projet.
 
+### Securite multi-compte (audit 2026-05)
+
+Deux migrations SQL doivent etre executees sur les bases existantes pour fermer des fuites
+identifiees lors de l audit :
+
+1. **`supabase/users-rls-tighten.sql`** (idempotent) — resserre la policy RLS sur la table
+   `users` pour qu une rangee `project_id NULL` ne soit plus visible aux admins d autres
+   comptes (seuls les superadmins).
+2. **`supabase/passenger-landing-rpc.sql`** (idempotent) — ajoute trois RPC SECURITY
+   DEFINER (`passenger_landing`, `passenger_floor_by_access_code`,
+   `passenger_elevator_snapshots`) qui permettent au code passager d acceder uniquement
+   aux donnees liees au QR scanne, au lieu de s appuyer sur des policies SELECT publiques
+   trop larges. **Etape 2 (drop des policies anon)** est commentee a la fin du fichier ;
+   ne l executer qu apres avoir verifie en staging que le code deploye utilise bien les
+   RPC.
+
+Ces deux fichiers sont egalement reflectes dans `schema.sql` pour les bases neuves.
+
 ### Auth admin
 
 Dans Supabase Dashboard, configurer:

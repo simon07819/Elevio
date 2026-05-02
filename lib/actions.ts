@@ -209,10 +209,28 @@ export async function updateProject(projectId: string, formData: FormData) {
     return staleIdsAction();
   }
 
-  let { error } = await supabase.from("projects").update(payload).eq("id", projectId);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { ok: false, message: "Connexion admin requise." };
+  }
+
+  // Defense-in-depth: filter on owner_id at the application layer in addition to RLS so a future
+  // RLS regression cannot allow cross-tenant project updates. Superadmins go through RLS.
+  let { error } = await supabase
+    .from("projects")
+    .update(payload)
+    .eq("id", projectId)
+    .eq("owner_id", user.id);
 
   if (isMissingCapacityEnabledColumn(error)) {
-    const retry = await supabase.from("projects").update(stripCapacityEnabled(payload)).eq("id", projectId);
+    const retry = await supabase
+      .from("projects")
+      .update(stripCapacityEnabled(payload))
+      .eq("id", projectId)
+      .eq("owner_id", user.id);
     error = retry.error;
   }
 
@@ -282,10 +300,19 @@ export async function archiveProject(projectId: string) {
     return staleIdsAction();
   }
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { ok: false, message: "Connexion admin requise." };
+  }
+
   const { error } = await supabase
     .from("projects")
     .update({ active: false, archived_at: new Date().toISOString() })
-    .eq("id", projectId);
+    .eq("id", projectId)
+    .eq("owner_id", user.id);
 
   if (error) {
     return { ok: false, message: error.message };
@@ -307,7 +334,19 @@ export async function deleteProject(projectId: string) {
     return staleIdsAction();
   }
 
-  const { error } = await supabase.from("projects").delete().eq("id", projectId);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { ok: false, message: "Connexion admin requise." };
+  }
+
+  const { error } = await supabase
+    .from("projects")
+    .delete()
+    .eq("id", projectId)
+    .eq("owner_id", user.id);
 
   if (error) {
     return { ok: false, message: error.message };
@@ -328,6 +367,7 @@ function revalidateAdminProject(projectId: string) {
 }
 
 const REQUESTS_OPEN_DURING_SERVICE: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"];
+const REQUESTS_OPEN_BEFORE_BOARDING: RequestStatus[] = ["pending", "assigned", "arriving"];
 
 async function cancelActiveProjectRequests(
   supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
@@ -1536,6 +1576,11 @@ export async function updateRequestStatus(
     updated_at: new Date().toISOString(),
   };
 
+  // Pickup race condition guard: when 2 operators tap "boarded" on the same request, only one
+  // should win. We push the assign+status mutation in a single conditional UPDATE that requires
+  // the row to still be unassigned and in an "open" status. If 0 rows update, another operator
+  // already claimed the pickup and we surface a clear error instead of silently overwriting.
+  let assignElevatorOnBoard: string | null = null;
   if (
     status === "boarded" &&
     options?.assignElevatorId &&
@@ -1547,7 +1592,7 @@ export async function updateRequestStatus(
       .eq("id", requestId)
       .maybeSingle();
 
-    if (beforeRequest?.elevator_id == null && beforeRequest?.project_id) {
+    if (beforeRequest?.project_id) {
       const { data: lift } = await supabase
         .from("elevators")
         .select("id")
@@ -1556,7 +1601,7 @@ export async function updateRequestStatus(
         .maybeSingle();
 
       if (lift) {
-        updates.elevator_id = options.assignElevatorId;
+        assignElevatorOnBoard = options.assignElevatorId;
       }
     }
   }
@@ -1569,17 +1614,40 @@ export async function updateRequestStatus(
     updates.completed_at = new Date().toISOString();
   }
 
-  const { data: updatedRequest, error } = await supabase
-    .from("requests")
-    .update(updates)
-    .eq("id", requestId)
-    .select("id")
-    .maybeSingle();
+  let updatedRows: { id: string }[] | null = null;
+  let updateError: { message: string } | null = null;
 
-  if (error) {
-    return { ok: false, message: error.message };
+  if (assignElevatorOnBoard) {
+    updates.elevator_id = assignElevatorOnBoard;
+    const { data, error } = await supabase
+      .from("requests")
+      .update(updates)
+      .eq("id", requestId)
+      .is("elevator_id", null)
+      .in("status", REQUESTS_OPEN_BEFORE_BOARDING)
+      .select("id");
+    updatedRows = (data as { id: string }[] | null) ?? null;
+    updateError = error;
+  } else {
+    const { data, error } = await supabase
+      .from("requests")
+      .update(updates)
+      .eq("id", requestId)
+      .select("id");
+    updatedRows = (data as { id: string }[] | null) ?? null;
+    updateError = error;
   }
-  if (!updatedRequest) {
+
+  if (updateError) {
+    return { ok: false, message: updateError.message };
+  }
+  if (!updatedRows || updatedRows.length === 0) {
+    if (assignElevatorOnBoard) {
+      return {
+        ok: false,
+        message: "Demande deja prise par un autre operateur.",
+      };
+    }
     return { ok: false, message: "Impossible de mettre a jour cette demande." };
   }
 

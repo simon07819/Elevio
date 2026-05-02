@@ -29,6 +29,28 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, path: requestPath(demoProject.id, floor.qr_token) });
   }
 
+  // Preferred path: SECURITY DEFINER RPC scoped to the access code (no anon enumeration of the
+  // full floors/projects tables).
+  const rpc = await supabase.rpc("passenger_floor_by_access_code", { p_code: code });
+  if (!rpc.error) {
+    const rows = (rpc.data as { project_id: string; qr_token: string }[] | null) ?? [];
+    const row = rows[0];
+    if (!row) {
+      return NextResponse.json({ ok: false, message: "Code introuvable." }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true, path: requestPath(row.project_id, row.qr_token) });
+  }
+
+  const rpcMissing =
+    rpc.error.code === "PGRST202" ||
+    rpc.error.code === "42883" ||
+    /function .* does not exist/i.test(rpc.error.message ?? "");
+
+  if (!rpcMissing) {
+    return NextResponse.json({ ok: false, message: rpc.error.message }, { status: 500 });
+  }
+
+  // Legacy fallback while the RPC migration has not been applied yet.
   const { data: floor } = await supabase
     .from("floors")
     .select("project_id,qr_token,access_code,active")
