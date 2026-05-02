@@ -1,7 +1,56 @@
 "use client";
 
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import type { Elevator, HoistRequest } from "@/types/hoist";
+import type { Elevator, HoistRequest, RequestStatus } from "@/types/hoist";
+
+const TERMINAL_REQUEST_STATUSES: RequestStatus[] = ["completed", "cancelled"];
+
+/** Fusionne une ligne du poll operateur avec l’état local : évite de réinjecter une ligne encore « ouverte » après annulation / fin côté realtime. */
+export function mergeOperatorPollRequest(existing: HoistRequest | undefined, incoming: HoistRequest): HoistRequest {
+  if (!existing) {
+    return incoming;
+  }
+  const existingTerminal = TERMINAL_REQUEST_STATUSES.includes(existing.status);
+  const incomingTerminal = TERMINAL_REQUEST_STATUSES.includes(incoming.status);
+  if (existingTerminal && !incomingTerminal) {
+    return existing;
+  }
+  if (!existingTerminal && incomingTerminal) {
+    return incoming;
+  }
+  return new Date(incoming.updated_at) >= new Date(existing.updated_at) ? incoming : existing;
+}
+
+/**
+ * Fusionne le prop `requests` (SSR / router.refresh) dans l’état live de la tablette.
+ * Sans ceci, un refresh avec données encore ouvertes écrase un « Vider la liste » optimiste pendant plusieurs secondes.
+ */
+export function mergeRequestsPropIntoLive(live: HoistRequest[], fromProps: HoistRequest[]): HoistRequest[] {
+  const ids = new Set<string>();
+  for (const row of live) {
+    ids.add(row.id);
+  }
+  for (const row of fromProps) {
+    ids.add(row.id);
+  }
+  const liveById = new Map(live.map((row) => [row.id, row]));
+  const propsById = new Map(fromProps.map((row) => [row.id, row]));
+  const out: HoistRequest[] = [];
+  for (const id of ids) {
+    const l = liveById.get(id);
+    const p = propsById.get(id);
+    if (!l) {
+      if (p) out.push(p);
+      continue;
+    }
+    if (!p) {
+      out.push(l);
+      continue;
+    }
+    out.push(mergeOperatorPollRequest(l, p));
+  }
+  return out.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
 
 type RealtimeHandler<T> = (payload: T) => void;
 

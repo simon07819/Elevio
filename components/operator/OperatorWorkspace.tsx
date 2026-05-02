@@ -1,8 +1,9 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { flushSync } from "react-dom";
 import { LockKeyhole, TabletSmartphone } from "lucide-react";
 import {
   activateOperatorElevator,
@@ -11,6 +12,10 @@ import {
 } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
 import { bindRealtimeWithAuthSession, subscribeToTable, type ElevatorRealtimePayload } from "@/lib/realtime";
+import {
+  OPERATOR_BROADCAST_ELEVATOR_SESSION_CLEARED,
+  operatorProjectBroadcastChannel,
+} from "@/lib/operatorNotifyBroadcast";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { formatFloorLabel } from "@/lib/utils";
 import { ServiceTimePicker } from "@/components/ServiceTimePicker";
@@ -132,6 +137,11 @@ export function OperatorWorkspace({
     updatedAt: Date.now(),
   }));
   const [locallyReleasedElevatorIds, setLocallyReleasedElevatorIds] = useState<Set<string>>(() => new Set());
+  const localElevatorsRef = useRef(localElevators);
+
+  useEffect(() => {
+    localElevatorsRef.current = localElevators;
+  }, [localElevators]);
 
   const effectiveNowMs = operatorClockMs || hydrationNowMs;
   const capacityEnabled = project.capacity_enabled !== false;
@@ -201,9 +211,29 @@ export function OperatorWorkspace({
             return;
           }
 
-          setLocalElevators((current) =>
-            mergeWithLocalClaim(current, [payload.new]),
-          );
+          const nid = payload.new;
+          const oldPartial = payload.old as Partial<Elevator> | undefined;
+          const oldSessionId = oldPartial?.operator_session_id;
+          const revokedThisTablet =
+            payload.eventType === "UPDATE" &&
+            nid.operator_session_id == null &&
+            Boolean(oldSessionId) &&
+            oldSessionId === sessionId &&
+            storedElevatorId(project.id) === nid.id;
+
+          if (revokedThisTablet) {
+            try {
+              window.localStorage.removeItem(elevatorStorageKey(project.id));
+            } catch {
+              /* ignore */
+            }
+            flushSync(() => {
+              setLocalSessionClaim({ elevatorId: null, updatedAt: Date.now() });
+              setSelectedElevatorId(null);
+            });
+          }
+
+          setLocalElevators((current) => mergeWithLocalClaim(current, [nid]));
         },
       }),
     );
@@ -217,18 +247,79 @@ export function OperatorWorkspace({
         .eq("project_id", project.id)
         .order("name", { ascending: true });
       if (cancelled || !data) return;
-      setLocalElevators((current) => mergeWithLocalClaim(current, data as Elevator[]));
+      const rows = data as Elevator[];
+      const current = localElevatorsRef.current;
+      for (const row of rows) {
+        if (activatingElevatorId === row.id || releasingElevatorId === row.id) {
+          continue;
+        }
+        const prev = current.find((e) => e.id === row.id);
+        if (
+          prev?.operator_session_id === sessionId &&
+          row.operator_session_id == null &&
+          storedElevatorId(project.id) === row.id
+        ) {
+          try {
+            window.localStorage.removeItem(elevatorStorageKey(project.id));
+          } catch {
+            /* ignore */
+          }
+          flushSync(() => {
+            setLocalSessionClaim({ elevatorId: null, updatedAt: Date.now() });
+            setSelectedElevatorId(null);
+          });
+          break;
+        }
+      }
+      setLocalElevators((c) => mergeWithLocalClaim(c, rows));
     }
 
     void syncElevators();
-    const poll = window.setInterval(syncElevators, 750);
+    const poll = window.setInterval(syncElevators, 250);
 
     return () => {
       cancelled = true;
       window.clearInterval(poll);
       cleanupRealtime();
     };
-  }, [mergeWithLocalClaim, project.id]);
+  }, [activatingElevatorId, mergeWithLocalClaim, project.id, releasingElevatorId, sessionId]);
+
+  useEffect(() => {
+    const client = createClient();
+    return bindRealtimeWithAuthSession(client, () => {
+      if (!client) {
+        return null;
+      }
+      const channel = client
+        .channel(operatorProjectBroadcastChannel(project.id))
+        .on(
+          "broadcast",
+          { event: OPERATOR_BROADCAST_ELEVATOR_SESSION_CLEARED },
+          (msg: { payload?: { elevatorId?: string } }) => {
+            const elevatorId = msg.payload?.elevatorId;
+            if (!elevatorId || typeof elevatorId !== "string") {
+              return;
+            }
+            if (storedElevatorId(project.id) === elevatorId) {
+              try {
+                window.localStorage.removeItem(elevatorStorageKey(project.id));
+              } catch {
+                /* ignore */
+              }
+              flushSync(() => {
+                setLocalSessionClaim({ elevatorId: null, updatedAt: Date.now() });
+                setSelectedElevatorId(null);
+              });
+            }
+            setLocalElevators((prev) =>
+              prev.map((e) => (e.id === elevatorId ? clearOperatorSessionFields(e) : e)),
+            );
+          },
+        )
+        .subscribe();
+      return channel;
+    });
+  }, [project.id]);
 
   useEffect(() => {
     const bump = () => router.refresh();

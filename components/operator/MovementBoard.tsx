@@ -1,9 +1,12 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Trash2, Users } from "lucide-react";
 import { formatFloorLabel, formatWaitTime } from "@/lib/utils";
 import { type EnrichedRequest, isOperatorMovementQueueStatus } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
+
+const MOVEMENT_PAGE_SIZE = 10;
 
 function MovementTable({
   title,
@@ -24,6 +27,13 @@ function MovementTable({
   const { t } = useLanguage();
   const tone = direction === "up" ? "bg-emerald-500 text-white" : "bg-red-500 text-white";
   const arrowTone = direction === "up" ? "text-emerald-600" : "text-red-500";
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(requests.length / MOVEMENT_PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const visibleRequests = useMemo(
+    () => requests.slice(safePage * MOVEMENT_PAGE_SIZE, safePage * MOVEMENT_PAGE_SIZE + MOVEMENT_PAGE_SIZE),
+    [requests, safePage],
+  );
 
   return (
     <section className="rounded-[1.5rem] bg-white p-3 text-slate-950 shadow-xl">
@@ -33,6 +43,11 @@ function MovementTable({
         </span>
         <h2 className="text-xl font-black">{title}</h2>
         <span className="rounded-lg bg-slate-100 px-3 py-1 text-sm font-black">{requests.length}</span>
+        {pageCount > 1 ? (
+          <span className="ml-auto rounded-lg bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
+            {safePage + 1}/{pageCount}
+          </span>
+        ) : null}
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-slate-100 p-2">
@@ -42,7 +57,7 @@ function MovementTable({
               {t("common.none")}
             </div>
           ) : (
-            requests.map((request) => (
+            visibleRequests.map((request) => (
               <div
                 key={request.id}
                 className={
@@ -56,11 +71,17 @@ function MovementTable({
                 }
               >
                 <div className="min-w-0">
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
+                      {request.status === "boarded" ? "Déposer" : "Ramasser"}
+                    </span>
                     <span className="truncate text-xl font-black tabular-nums text-slate-950">
                       {formatFloorLabel(request.from_floor)}
                     </span>
                     <Icon className={`shrink-0 ${arrowTone}`} size={19} strokeWidth={2.8} />
+                    <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
+                      vers
+                    </span>
                     <span className="truncate text-xl font-black tabular-nums text-slate-950">
                       {formatFloorLabel(request.to_floor)}
                     </span>
@@ -99,6 +120,29 @@ function MovementTable({
           )}
         </div>
       </div>
+      {pageCount > 1 ? (
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            disabled={safePage === 0}
+            onClick={() => setPage((current) => Math.max(0, current - 1))}
+            className="touch-target rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-slate-800 disabled:opacity-40"
+          >
+            Précédent
+          </button>
+          <span className="text-sm font-black text-slate-500">
+            {safePage * MOVEMENT_PAGE_SIZE + 1}-{Math.min(requests.length, (safePage + 1) * MOVEMENT_PAGE_SIZE)}
+          </span>
+          <button
+            type="button"
+            disabled={safePage >= pageCount - 1}
+            onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}
+            className="touch-target rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-slate-800 disabled:opacity-40"
+          >
+            Suivant
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

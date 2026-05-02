@@ -5,23 +5,43 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, Send, ShieldAlert, Users, XCircle } from "lucide-react";
 import { createPassengerRequest, resumePassengerRequest, updateRequestStatus } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
+import { cancelPassengerRequestClient } from "@/lib/passengerCancelClient";
+import { resumePassengerRequestClient } from "@/lib/passengerResumeClient";
+import {
+  PASSENGER_BROADCAST_QUEUE_CLEARED,
+  passengerProjectBroadcastChannel,
+} from "@/lib/passengerNotifyBroadcast";
 import { subscribeToTable, unsubscribe, type ElevatorRealtimePayload } from "@/lib/realtime";
 import { formatFloorLabel } from "@/lib/utils";
 import { demoProject } from "@/lib/demoData";
-import type { Elevator, Floor, HoistRequest, Project, RequestStatus } from "@/types/hoist";
+import type { Elevator, Floor, Project, RequestStatus } from "@/types/hoist";
 import {
   analyzePassengerDispatch,
   passengerDispatchOperatorSummaries,
   DEFAULT_PROJECT_TIMEZONE,
 } from "@/lib/operatorDispatchAvailability";
+import { maxPassengerPartySize } from "@/lib/passengerPartyLimits";
+import { getOrCreatePassengerDeviceKey } from "@/lib/passengerDeviceKey";
 import {
   clearPassengerPendingRequest,
-  loadPassengerPendingSnapshot,
-  passengerPendingRequestStorageKey,
+  qrTokenForFloorId,
+  passengerPendingSnapshotIndicatesTracking,
+  readPassengerPendingProjectScoped,
   savePassengerPendingRequest,
 } from "@/lib/passengerRequestPersistence";
 import { FloorSelector } from "@/components/FloorSelector";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
+
+async function fetchPassengerResumeSnapshot(projectId: string, floorQrToken: string, requestId: string) {
+  const client = createClient();
+  if (client) {
+    const fromBrowser = await resumePassengerRequestClient(projectId, floorQrToken, requestId);
+    if (fromBrowser.ok) {
+      return fromBrowser;
+    }
+  }
+  return resumePassengerRequest(projectId, floorQrToken, requestId);
+}
 
 type SubmittedRequest = {
   requestId: string;
@@ -34,7 +54,7 @@ type SubmittedRequest = {
 
 const PASSENGER_ELEVATORS_SELECT =
   "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_display_name,operator_session_heartbeat_at,service_start_time,service_end_time,manual_full";
-const PASSENGER_ACTIVE_REQUEST_POLL_MS = 500;
+const PASSENGER_ACTIVE_REQUEST_POLL_MS = 250;
 
 function isTerminalPassengerRequestStatus(status: RequestStatus): boolean {
   return status === "completed" || status === "cancelled";
@@ -58,11 +78,13 @@ export function RequestForm({
   floors,
   currentFloor,
   elevators,
+  onActivePassengerSessionChange,
 }: {
   project: Project;
   floors: Floor[];
   currentFloor: Floor;
   elevators: Elevator[];
+  onActivePassengerSessionChange?: (hideScanLink: boolean) => void;
 }) {
   const firstDestination = useMemo(
     () => floors.find((floor) => floor.id !== currentFloor.id && floor.active)?.id ?? "",
@@ -79,12 +101,21 @@ export function RequestForm({
     const tz = project.service_timezone ?? DEFAULT_PROJECT_TIMEZONE;
     return analyzePassengerDispatch({ elevators, timeZone: tz }).canDispatch;
   });
+  const [passengerDeviceKey, setPassengerDeviceKey] = useState(() =>
+    typeof window === "undefined" ? "" : getOrCreatePassengerDeviceKey(project.id),
+  );
   const [passengerResumeReady, setPassengerResumeReady] = useState(false);
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+  const [isCancellingRequest, setIsCancellingRequest] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const { t } = useLanguage();
   const prioritiesEnabled = project.priorities_enabled !== false;
+  const capacityEnabled = project.capacity_enabled !== false;
+  const passengerMax = useMemo(
+    () => maxPassengerPartySize(capacityEnabled, liveElevators),
+    [capacityEnabled, liveElevators],
+  );
   const liveDispatch = useMemo(() => {
     const tz = project.service_timezone ?? DEFAULT_PROJECT_TIMEZONE;
     const analysis = analyzePassengerDispatch({ elevators: liveElevators, timeZone: tz });
@@ -97,6 +128,20 @@ export function RequestForm({
     };
   }, [liveElevators, project.service_timezone]);
 
+  useEffect(() => {
+    const id = window.setTimeout(() => setPassengerDeviceKey(getOrCreatePassengerDeviceKey(project.id)), 0);
+    return () => window.clearTimeout(id);
+  }, [project.id]);
+
+  useEffect(() => {
+    if (!onActivePassengerSessionChange) return;
+    const snap = typeof window !== "undefined" ? readPassengerPendingProjectScoped(project.id) : null;
+    const resumeBlocking =
+      !passengerResumeReady && passengerPendingSnapshotIndicatesTracking(snap);
+    const hideScanLink = submittedRequest !== null || resumeBlocking;
+    onActivePassengerSessionChange(hideScanLink);
+  }, [submittedRequest, passengerResumeReady, project.id, onActivePassengerSessionChange]);
+
   const dispatchResolving = !dispatchSyncReady && !liveDispatch.canDispatch;
   const dispatchBlocked = !liveDispatch.canDispatch;
 
@@ -104,6 +149,16 @@ export function RequestForm({
     const id = window.setTimeout(() => setLiveElevators(elevators), 0);
     return () => window.clearTimeout(id);
   }, [elevators]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setPassengerCount((current) => {
+        const base = Number.isFinite(current) ? Math.floor(current) : 1;
+        return Math.min(Math.max(1, base), passengerMax);
+      });
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [passengerMax]);
 
   useEffect(() => {
     const client = createClient();
@@ -166,26 +221,16 @@ export function RequestForm({
     let cancelled = false;
 
     async function verifyStoredRequest() {
-      const raw =
-        typeof window !== "undefined"
-          ? window.localStorage.getItem(passengerPendingRequestStorageKey(project.id, currentFloor.qr_token))
-          : null;
+      const localSnap = readPassengerPendingProjectScoped(project.id);
 
-      if (!raw) {
-        setPassengerResumeReady(true);
-        return;
-      }
-
-      const localSnap = loadPassengerPendingSnapshot(raw);
       if (!localSnap) {
-        clearPassengerPendingRequest(project.id, currentFloor.qr_token);
         setPassengerResumeReady(true);
         return;
       }
 
       if (localSnap.requestId === "demo-local-request") {
         if (project.id !== demoProject.id) {
-          clearPassengerPendingRequest(project.id, currentFloor.qr_token, "demo-local-request");
+          clearPassengerPendingRequest(project.id, "demo-local-request");
         } else if (!cancelled) {
           setSubmittedRequest({
             requestId: localSnap.requestId,
@@ -201,24 +246,31 @@ export function RequestForm({
         return;
       }
 
-      const res = await resumePassengerRequest(project.id, currentFloor.qr_token, localSnap.requestId);
+      const originQr = qrTokenForFloorId(floors, localSnap.fromFloorId);
+      if (!originQr) {
+        clearPassengerPendingRequest(project.id);
+        if (!cancelled) setPassengerResumeReady(true);
+        return;
+      }
+
+      const res = await fetchPassengerResumeSnapshot(project.id, originQr, localSnap.requestId);
       if (cancelled) return;
 
       if (!res.ok || !res.snapshot) {
-        clearPassengerPendingRequest(project.id, currentFloor.qr_token);
+        clearPassengerPendingRequest(project.id);
         if (!cancelled) setPassengerResumeReady(true);
         return;
       }
 
       if (!shouldRestoreSubmittedFromSnapshot(res.snapshot.status)) {
-        clearPassengerPendingRequest(project.id, currentFloor.qr_token);
+        clearPassengerPendingRequest(project.id);
         setMessage(requestInvalidatedMessage(res.snapshot.status, t));
         if (!cancelled) setPassengerResumeReady(true);
         return;
       }
 
       const normalized: typeof res.snapshot = res.snapshot;
-      savePassengerPendingRequest(project.id, currentFloor.qr_token, {
+      savePassengerPendingRequest(project.id, {
         requestId: normalized.requestId,
         waitStartedAt: normalized.waitStartedAt,
         fromFloorId: normalized.fromFloorId,
@@ -247,63 +299,61 @@ export function RequestForm({
     return () => {
       cancelled = true;
     };
-  }, [project.id, currentFloor.qr_token, t]);
+  }, [project.id, floors, t]);
 
   useEffect(() => {
-    if (!submittedRequest || submittedRequest.requestId === "demo-local-request") {
+    const client = createClient();
+    const rid = submittedRequest?.requestId;
+    if (!client || !rid || rid === "demo-local-request") {
       return;
     }
 
-    const requestIdTracked = submittedRequest.requestId;
-
-    const client = createClient();
-    const channel = subscribeToTable<{ new: HoistRequest }>({
-      client,
-      table: "requests",
-      filter: `id=eq.${requestIdTracked}`,
-      onChange: (payload) => {
-        if (payload.new?.status) {
-          const next = payload.new.status as RequestStatus;
-          if (next === "boarded") {
-            clearPassengerPendingRequest(project.id, currentFloor.qr_token, requestIdTracked);
-            setSubmittedRequest(null);
-            router.replace("/");
+    const channel = client
+      .channel(passengerProjectBroadcastChannel(project.id))
+      .on(
+        "broadcast",
+        { event: PASSENGER_BROADCAST_QUEUE_CLEARED },
+        (msg: { payload?: { requestIds?: string[] } | string[] }) => {
+          const raw = msg.payload;
+          const ids = Array.isArray(raw) ? raw : raw?.requestIds;
+          if (!ids?.includes(rid)) {
             return;
           }
-          if (clearsPassengerPendingStorage(next)) {
-            clearPassengerPendingRequest(project.id, currentFloor.qr_token, requestIdTracked);
-            setSubmittedRequest(null);
-            setMessage(requestInvalidatedMessage(next, t));
-            router.replace("/");
-            return;
-          }
-          setSubmittedRequest((current) => current && { ...current, status: next });
-        }
-      },
-    });
+          clearPassengerPendingRequest(project.id, rid);
+          setSubmittedRequest(null);
+          router.replace("/");
+        },
+      );
 
-    return () => unsubscribe(client, channel);
-  }, [submittedRequest, project.id, currentFloor.qr_token, router, t]);
+    channel.subscribe();
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  }, [submittedRequest?.requestId, project.id, router]);
 
   useEffect(() => {
     const requestId = submittedRequest?.requestId;
-    if (!requestId || requestId === "demo-local-request") {
+    const fromFloorIdResolved = submittedRequest?.fromFloorId;
+    if (!requestId || requestId === "demo-local-request" || !fromFloorIdResolved) {
       return;
     }
     const trackedRequestId = requestId;
+    const trackedFromFloorId = fromFloorIdResolved;
 
     async function pollOnce() {
-      const res = await resumePassengerRequest(project.id, currentFloor.qr_token, trackedRequestId);
+      const originQr = qrTokenForFloorId(floors, trackedFromFloorId) ?? currentFloor.qr_token;
+      const res = await fetchPassengerResumeSnapshot(project.id, originQr, trackedRequestId);
       if (!res.ok || !res.snapshot) return;
       const snap = res.snapshot;
       if (snap.status === "boarded") {
-        clearPassengerPendingRequest(project.id, currentFloor.qr_token, trackedRequestId);
+        clearPassengerPendingRequest(project.id, trackedRequestId);
         setSubmittedRequest(null);
         router.replace("/");
         return;
       }
       if (clearsPassengerPendingStorage(snap.status)) {
-        clearPassengerPendingRequest(project.id, currentFloor.qr_token, trackedRequestId);
+        clearPassengerPendingRequest(project.id, trackedRequestId);
         setSubmittedRequest(null);
         setMessage(requestInvalidatedMessage(snap.status, t));
         router.replace("/");
@@ -323,8 +373,19 @@ export function RequestForm({
 
     const intervalId = window.setInterval(() => void pollOnce(), PASSENGER_ACTIVE_REQUEST_POLL_MS);
     void pollOnce();
-    return () => window.clearInterval(intervalId);
-  }, [submittedRequest?.requestId, project.id, currentFloor.qr_token, router, t]);
+
+    function onVisible() {
+      if (document.visibilityState === "visible") {
+        void pollOnce();
+      }
+    }
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [submittedRequest?.requestId, submittedRequest?.fromFloorId, project.id, floors, currentFloor.qr_token, router, t]);
 
   if (!passengerResumeReady) {
     return (
@@ -342,24 +403,58 @@ export function RequestForm({
     const submittedRequestSnapshot = submittedRequest;
 
     async function cancelAndReset() {
-      const result = await updateRequestStatus(submittedRequestId, "cancelled", t("request.cancelNoteByPassenger"), {
-        cancelRelatedSplit: {
-          projectId: project.id,
-          fromFloorId: submittedRequestSnapshot.fromFloorId,
-          toFloorId: submittedRequestSnapshot.toFloorId,
-          waitStartedAt: submittedRequestSnapshot.waitStartedAt,
-          originalPassengerCount: submittedRequestSnapshot.passengerCount,
-        },
-      });
-      if (result.ok) {
-        clearPassengerPendingRequest(project.id, currentFloor.qr_token, submittedRequestId);
-        setSubmittedRequest(null);
-        setMessage(t("request.cancelled"));
-        setPassengerCount(1);
-        setPriority(false);
-        setShowSpecialNeed(false);
-      } else {
-        setMessage(result.message);
+      if (isCancellingRequest) {
+        return;
+      }
+
+      try {
+        setIsCancellingRequest(true);
+        setMessage(null);
+        const note = t("request.cancelNoteByPassenger");
+        const originQr = qrTokenForFloorId(floors, submittedRequestSnapshot.fromFloorId) ?? currentFloor.qr_token;
+        const supabase = createClient();
+        if (supabase) {
+          const rpcResult = await cancelPassengerRequestClient(
+            project.id,
+            originQr,
+            submittedRequestId,
+            note,
+          );
+          if (rpcResult.ok) {
+            clearPassengerPendingRequest(project.id, submittedRequestId);
+            setSubmittedRequest(null);
+            setMessage(t("request.cancelled"));
+            setPassengerCount(1);
+            setPriority(false);
+            setShowSpecialNeed(false);
+            router.refresh();
+            return;
+          }
+        }
+
+        const result = await updateRequestStatus(submittedRequestId, "cancelled", note, {
+          cancelRelatedSplit: {
+            projectId: project.id,
+            fromFloorId: submittedRequestSnapshot.fromFloorId,
+            toFloorId: submittedRequestSnapshot.toFloorId,
+            waitStartedAt: submittedRequestSnapshot.waitStartedAt,
+            originalPassengerCount: submittedRequestSnapshot.passengerCount,
+          },
+        });
+        if (result.ok) {
+          clearPassengerPendingRequest(project.id, submittedRequestId);
+          setSubmittedRequest(null);
+          setMessage(t("request.cancelled"));
+          setPassengerCount(1);
+          setPriority(false);
+          setShowSpecialNeed(false);
+        } else {
+          setMessage(result.message || t("request.cancelFailed"));
+        }
+      } catch {
+        setMessage(t("request.cancelFailed"));
+      } finally {
+        setIsCancellingRequest(false);
       }
     }
 
@@ -398,17 +493,18 @@ export function RequestForm({
         {canCancel ? (
           <button
             type="button"
+            disabled={isCancellingRequest}
             onClick={cancelAndReset}
-            className="touch-target flex w-full items-center justify-center gap-2 rounded-[1.35rem] border-2 border-red-200 bg-red-50 px-5 py-4 text-lg font-black text-red-800"
+            className="touch-target flex w-full items-center justify-center gap-2 rounded-[1.35rem] border-2 border-red-200 bg-red-50 px-5 py-4 text-lg font-black text-red-800 disabled:opacity-60"
           >
             <XCircle size={22} />
-            {t("request.cancelRestart")}
+            {isCancellingRequest ? t("request.sending") : t("request.cancelRestart")}
           </button>
         ) : (
           <button
             type="button"
             onClick={() => {
-              clearPassengerPendingRequest(project.id, currentFloor.qr_token, submittedRequest.requestId);
+              clearPassengerPendingRequest(project.id, submittedRequest.requestId);
               setSubmittedRequest(null);
               setMessage(null);
             }}
@@ -490,8 +586,7 @@ export function RequestForm({
           setIsSubmittingRequest(true);
           startTransition(async () => {
             try {
-              const raw = window.localStorage.getItem(passengerPendingRequestStorageKey(project.id, currentFloor.qr_token));
-              const existing = loadPassengerPendingSnapshot(raw);
+              const existing = readPassengerPendingProjectScoped(project.id);
               if (existing && shouldRestoreSubmittedFromSnapshot(existing.status ?? "pending")) {
                 setSubmittedRequest({
                   requestId: existing.requestId,
@@ -506,13 +601,13 @@ export function RequestForm({
                 return;
               }
               if (existing) {
-                clearPassengerPendingRequest(project.id, currentFloor.qr_token, existing.requestId);
+                clearPassengerPendingRequest(project.id, existing.requestId);
               }
 
               const result = await createPassengerRequest(formData);
               setMessage(result.message);
               if (result.ok && result.requestId) {
-                savePassengerPendingRequest(project.id, currentFloor.qr_token, {
+                savePassengerPendingRequest(project.id, {
                   requestId: result.requestId,
                   waitStartedAt: result.waitStartedAt ?? new Date().toISOString(),
                   fromFloorId: result.fromFloorId ?? currentFloor.id,
@@ -537,6 +632,7 @@ export function RequestForm({
         className={`flex min-h-0 flex-1 flex-col gap-3${dispatchBlocked ? " pointer-events-none opacity-50" : ""}`}
       >
       <input type="hidden" name="projectId" value={project.id} />
+      <input type="hidden" name="passengerDeviceKey" value={passengerDeviceKey} />
       <input type="hidden" name="fromFloorId" value={currentFloor.id} />
       <input type="hidden" name="toFloorId" value={destinationId} />
 
@@ -574,19 +670,32 @@ export function RequestForm({
             <input
               name="passengerCount"
               type="number"
-              min="1"
+              min={1}
+              max={passengerMax}
               value={passengerCount}
-              onChange={(event) => setPassengerCount(Number(event.target.value))}
+              onChange={(event) => {
+                const raw = event.target.value;
+                if (raw === "") {
+                  setPassengerCount(1);
+                  return;
+                }
+                const next = Number(raw);
+                if (!Number.isFinite(next)) return;
+                setPassengerCount(Math.min(Math.max(1, Math.floor(next)), passengerMax));
+              }}
               className="h-14 w-full rounded-2xl border-2 border-slate-200 bg-white px-4 text-center text-3xl font-black text-slate-950 outline-none focus:border-yellow-300"
             />
             <button
               type="button"
-              onClick={() => setPassengerCount((value) => value + 1)}
+              onClick={() => setPassengerCount((value) => Math.min(passengerMax, value + 1))}
               className="touch-target size-14 rounded-2xl bg-yellow-300 text-3xl font-black text-slate-950 active:scale-95"
             >
               +
             </button>
           </div>
+          <p className="mt-1.5 text-center text-xs font-bold text-slate-500">
+            {t("request.passengerMaxHint", { max: passengerMax })}
+          </p>
         </label>
 
         {prioritiesEnabled ? (

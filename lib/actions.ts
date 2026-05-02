@@ -3,11 +3,21 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { demoFloors } from "@/lib/demoData";
+import { demoElevator, demoFloors, demoProject, demoProjects } from "@/lib/demoData";
+import { maxPassengerPartySize } from "@/lib/passengerPartyLimits";
 import { floorLabelForSortOrder, getDirection, isUuid } from "@/lib/utils";
 import { assignRequestToBestElevator } from "@/services/multiElevatorDispatch";
 import { elevatorDuplicateMessage } from "@/lib/elevatorMessages";
-import type { Direction, Elevator, Floor, HoistRequest, Project, RequestEventType, RequestStatus } from "@/types/hoist";
+import type {
+  Direction,
+  Elevator,
+  Floor,
+  HoistRequest,
+  PassengerResumeSnapshot,
+  Project,
+  RequestEventType,
+  RequestStatus,
+} from "@/types/hoist";
 
 import { elevatorHasOperatorTabletBinding, isOperatorTabletSessionStale } from "@/lib/operatorTablet";
 import {
@@ -17,6 +27,9 @@ import {
   parsePostgresTimeToMinutes,
   type DispatchBlockReason,
 } from "@/lib/operatorDispatchAvailability";
+
+const PASSENGER_DUPLICATE_OPEN_REQUEST_MSG =
+  "Vous avez déjà une demande en cours depuis cet appareil. Suivez votre demande ou attendez la fin du trajet avant d'en envoyer une autre.";
 
 function normalizeText(value: FormDataEntryValue | null) {
   const text = typeof value === "string" ? value.trim() : "";
@@ -1057,7 +1070,7 @@ export async function createPassengerRequest(formData: FormData) {
   const projectId = String(formData.get("projectId") ?? "");
   const fromFloorId = String(formData.get("fromFloorId") ?? "");
   const toFloorId = String(formData.get("toFloorId") ?? "");
-  const passengerCount = Number(formData.get("passengerCount") ?? 1);
+  const passengerCountRaw = Number(formData.get("passengerCount") ?? 1);
   const priorityRequested = formData.get("priority") === "on";
   const priorityReasonRaw = normalizeText(formData.get("priorityReason"));
   const note = normalizeText(formData.get("note"));
@@ -1127,7 +1140,22 @@ export async function createPassengerRequest(formData: FormData) {
     capacityEnabled = projectRow.capacity_enabled !== false;
     elevators = (dbElevators ?? []) as Elevator[];
     activeRequests = (dbRequests ?? []) as HoistRequest[];
+  } else {
+    const demoMatch = demoProjects.find((p) => p.id === projectId);
+    if (demoMatch) {
+      capacityEnabled = demoMatch.capacity_enabled !== false;
+      if (demoMatch.id === demoProject.id) {
+        elevators = [demoElevator];
+      }
+    }
   }
+
+  const maxParty = maxPassengerPartySize(capacityEnabled, elevators);
+  const passengerFloored = Number.isFinite(passengerCountRaw) ? Math.floor(passengerCountRaw) : NaN;
+  if (!Number.isFinite(passengerFloored) || passengerFloored < 1 || passengerFloored > maxParty) {
+    return { ok: false, message: `Nombre de passagers invalide (entre 1 et ${maxParty}).` };
+  }
+  const passengerCount = passengerFloored;
 
   const priority = prioritiesAllowed && priorityRequested;
   const priorityReason = priority ? priorityReasonRaw : null;
@@ -1147,6 +1175,19 @@ export async function createPassengerRequest(formData: FormData) {
     });
     if (!dispatchAnalysis.canDispatch) {
       return { ok: false, message: passengerDispatchBlockedMessage(dispatchAnalysis.blockReason) };
+    }
+  }
+
+  const passengerDeviceKeyRaw = String(formData.get("passengerDeviceKey") ?? "").trim();
+  const passengerDeviceKey = isUuid(passengerDeviceKeyRaw) ? passengerDeviceKeyRaw : null;
+
+  if (supabase && passengerDeviceKey) {
+    const { data: hasOpen, error: openRpcError } = await supabase.rpc("passenger_has_open_request", {
+      p_project_id: projectId,
+      p_device_key: passengerDeviceKey,
+    });
+    if (!openRpcError && Boolean(hasOpen)) {
+      return { ok: false, message: PASSENGER_DUPLICATE_OPEN_REQUEST_MSG };
     }
   }
 
@@ -1265,7 +1306,12 @@ export async function createPassengerRequest(formData: FormData) {
 
   /* Sans `.select()` : PostgREST n’a pas besoin du droit SELECT sur requests après INSERT — sinon les passagers
    * anonymes (pas profile projet) voient une erreur RLS sur RETURNING, surtout avec plusieurs lignes (split). */
-  const { error } = await supabase.from("requests").insert(payloads);
+  const rowsForInsert =
+    passengerDeviceKey != null
+      ? payloads.map((row) => ({ ...row, passenger_device_key: passengerDeviceKey }))
+      : payloads;
+
+  const { error } = await supabase.from("requests").insert(rowsForInsert);
 
   if (error) {
     return { ok: false, message: error.message };
@@ -1302,15 +1348,6 @@ const REQUEST_STATUS_VALUES: RequestStatus[] = [
 function coerceRequestStatus(value: string): RequestStatus | null {
   return REQUEST_STATUS_VALUES.includes(value as RequestStatus) ? (value as RequestStatus) : null;
 }
-
-export type PassengerResumeSnapshot = {
-  requestId: string;
-  status: RequestStatus;
-  waitStartedAt: string;
-  fromFloorId: string;
-  toFloorId: string;
-  passengerCount: number;
-};
 
 /** RPC `resume_passenger_request` : meme QR + id ; permet de rouvrir la demande sans session auth. */
 export async function resumePassengerRequest(

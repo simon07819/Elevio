@@ -10,6 +10,16 @@ export type RequestStatus =
   | "completed"
   | "cancelled";
 
+/** Snapshot RPC `resume_passenger_request` (QR + id de demande). */
+export type PassengerResumeSnapshot = {
+  requestId: string;
+  status: RequestStatus;
+  waitStartedAt: string;
+  fromFloorId: string;
+  toFloorId: string;
+  passengerCount: number;
+};
+
 /** Statuts affiches dans la file « mouvements » operateur jusqu’a la depose (inclut a bord). */
 export const OPERATOR_MOVEMENT_QUEUE_STATUSES = ["pending", "assigned", "arriving", "boarded"] as const;
 

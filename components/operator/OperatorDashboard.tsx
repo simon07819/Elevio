@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { MapPin } from "lucide-react";
-import { clearElevatorActiveRequests } from "@/lib/actions";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { Ban, CheckCircle2, MapPin } from "lucide-react";
 import {
   demoElevator,
   demoFloors,
@@ -10,9 +10,12 @@ import {
   enrichRequests,
 } from "@/lib/demoData";
 import { createClient } from "@/lib/supabase/client";
+import { broadcastPassengerQueueCleared } from "@/lib/passengerNotifyBroadcast";
 import {
   bindRealtimeWithAuthSession,
+  mergeOperatorPollRequest,
   mergeRealtimeRequest,
+  mergeRequestsPropIntoLive,
   subscribeToTable,
   type RequestRealtimePayload,
 } from "@/lib/realtime";
@@ -64,7 +67,7 @@ export function OperatorDashboard({
   const [isTogglingFull, setIsTogglingFull] = useState(false);
   const [manualFullOverride, setManualFullOverride] = useState<boolean | null>(null);
   const [cancelingRequestIds, setCancelingRequestIds] = useState<Set<string>>(() => new Set());
-  const [isClearing, startClearTransition] = useTransition();
+  const [isClearingQueue, setIsClearingQueue] = useState(false);
   const projectId = elevator.project_id;
   const manualFullDesiredRef = useRef<boolean | null>(null);
   const manualFullSyncingRef = useRef(false);
@@ -91,7 +94,7 @@ export function OperatorDashboard({
 
   useEffect(() => {
     const id = window.setTimeout(() => {
-      setLiveRequests(requests);
+      setLiveRequests((current) => mergeRequestsPropIntoLive(current, requests));
     }, 0);
     return () => window.clearTimeout(id);
   }, [requests]);
@@ -134,18 +137,25 @@ export function OperatorDashboard({
       if (cancelled || !data) return;
       setLiveRequests((current) => {
         const liveById = new Map((data as HoistRequest[]).map((request) => [request.id, applyOptimisticRequest(request)]));
-        return current
-          .filter(
-            (request) =>
-              request.elevator_id !== elevator.id ||
-              !OPERATOR_VISIBLE_REQUEST_STATUSES.includes(request.status as (typeof OPERATOR_VISIBLE_REQUEST_STATUSES)[number]),
-          )
-          .concat([...liveById.values()]);
+        const kept = current.filter(
+          (request) =>
+            request.elevator_id !== elevator.id ||
+            !OPERATOR_VISIBLE_REQUEST_STATUSES.includes(request.status as (typeof OPERATOR_VISIBLE_REQUEST_STATUSES)[number]),
+        );
+        const mergedById = new Map<string, HoistRequest>();
+        for (const row of kept) {
+          mergedById.set(row.id, row);
+        }
+        for (const [id, incoming] of liveById) {
+          const existing = mergedById.get(id);
+          mergedById.set(id, mergeOperatorPollRequest(existing, incoming));
+        }
+        return [...mergedById.values()];
       });
     }
 
     void syncRequests();
-    const id = window.setInterval(syncRequests, 750);
+    const id = window.setInterval(syncRequests, 400);
     return () => {
       cancelled = true;
       window.clearInterval(id);
@@ -293,28 +303,78 @@ export function OperatorDashboard({
       return;
     }
     const now = new Date().toISOString();
+    const clearedIds = liveRequests
+      .filter(
+        (request) =>
+          request.elevator_id === elevator.id &&
+          (request.status === "pending" ||
+            request.status === "assigned" ||
+            request.status === "arriving" ||
+            request.status === "boarded"),
+      )
+      .map((request) => request.id);
     const previousRequests = liveRequests;
-    setOperatorActionError(null);
-    setLiveRequests((current) =>
-      current.map((request) =>
-        request.elevator_id === elevator.id &&
-        (request.status === "pending" ||
-          request.status === "assigned" ||
-          request.status === "arriving" ||
-          request.status === "boarded")
-          ? { ...request, status: "cancelled" as const, completed_at: now, updated_at: now }
-          : request,
-      ),
-    );
+    flushSync(() => {
+      setOperatorActionError(null);
+      setLiveRequests((current) =>
+        current.map((request) =>
+          request.elevator_id === elevator.id &&
+          (request.status === "pending" ||
+            request.status === "assigned" ||
+            request.status === "arriving" ||
+            request.status === "boarded")
+            ? { ...request, status: "cancelled" as const, completed_at: now, updated_at: now }
+            : request,
+        ),
+      );
+    });
     onElevatorPatch?.(elevator.id, { current_load: 0, direction: "idle" });
 
-    startClearTransition(async () => {
-      const result = await clearElevatorActiveRequests(projectId, elevator.id);
-      if (!result.ok) {
-        setLiveRequests(previousRequests);
-        setOperatorActionError(result.message);
+    setIsClearingQueue(true);
+    void (async () => {
+      try {
+        const client = createClient();
+        if (!client) {
+          return;
+        }
+        const payload = {
+          status: "cancelled" as const,
+          completed_at: now,
+          updated_at: now,
+          note: "File videe par l'operateur.",
+        };
+
+        const [reqResult, elevResult] = await Promise.all([
+          client
+            .from("requests")
+            .update(payload)
+            .eq("project_id", projectId)
+            .eq("elevator_id", elevator.id)
+            .in("status", [...OPERATOR_VISIBLE_REQUEST_STATUSES]),
+          client
+            .from("elevators")
+            .update({ current_load: 0, direction: "idle" })
+            .eq("id", elevator.id)
+            .eq("project_id", projectId),
+        ]);
+
+        if (reqResult.error) {
+          setLiveRequests(previousRequests);
+          setOperatorActionError(reqResult.error.message);
+          return;
+        }
+
+        if (elevResult.error) {
+          setLiveRequests(previousRequests);
+          setOperatorActionError(elevResult.error.message);
+          return;
+        }
+
+        broadcastPassengerQueueCleared(client, projectId, clearedIds);
+      } finally {
+        setIsClearingQueue(false);
       }
-    });
+    })();
   }
 
   function cancelMovementRequest(request: EnrichedRequest) {
@@ -488,11 +548,35 @@ export function OperatorDashboard({
               <p className="mt-2 text-2xl font-black text-emerald-200">{remaining} <T k="operator.places" /></p>
               <p className="text-xs font-bold text-yellow-200">{capacityBlockedCount} <T k="operator.nextPass" /></p>
             </div>
-          ) : null}
+          ) : (
+            <div
+              className={
+                effectiveElevator.manual_full
+                  ? "rounded-3xl border border-red-400/40 bg-red-500/12 p-4"
+                  : "rounded-3xl border border-white/10 bg-white/8 p-4"
+              }
+            >
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400"><T k="operator.full" /></p>
+              <button
+                type="button"
+                aria-busy={isTogglingFull}
+                onClick={() => queueManualFullSync(!effectiveElevator.manual_full)}
+                className={
+                  effectiveElevator.manual_full
+                    ? "touch-target mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-300 px-4 py-4 text-sm font-black uppercase tracking-wide text-slate-950 shadow-[0_14px_34px_rgba(16,185,129,0.28)] active:scale-[0.99]"
+                    : "touch-target mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-red-500 px-4 py-4 text-sm font-black uppercase tracking-wide text-white shadow-[0_14px_34px_rgba(239,68,68,0.28)] active:scale-[0.99]"
+                }
+              >
+                {effectiveElevator.manual_full ? <CheckCircle2 size={20} /> : <Ban size={20} />}
+                {effectiveElevator.manual_full ? <T k="operator.resumePickup" /> : <T k="operator.full" />}
+              </button>
+            </div>
+          )}
         </div>
         {capacityEnabled ? (
           <CapacityPanel
             elevator={effectiveElevator}
+            showCapacityStats
             isTogglingFull={isTogglingFull}
             onToggleFull={queueManualFullSync}
           />
@@ -572,7 +656,7 @@ export function OperatorDashboard({
           </div>
           <button
             type="button"
-            disabled={isClearing || (activeQueue.length === 0 && liveActivePassengers.length === 0)}
+            disabled={isClearingQueue || (activeQueue.length === 0 && liveActivePassengers.length === 0)}
             onClick={clearVisibleQueue}
             className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-300 transition hover:bg-white/10 disabled:opacity-35"
           >

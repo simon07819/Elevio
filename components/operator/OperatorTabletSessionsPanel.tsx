@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { TabletSmartphone } from "lucide-react";
 import { adminDeactivateOperatorTablet } from "@/lib/actions";
+import { createClient } from "@/lib/supabase/client";
+import { broadcastOperatorElevatorSessionCleared } from "@/lib/operatorNotifyBroadcast";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { elevatorOperatorSessionAppearsLive } from "@/lib/operatorTablet";
 import { formatStoredTabletLabel } from "@/lib/deviceLabel";
@@ -68,6 +70,10 @@ export function OperatorTabletSessionsPanel({
         return;
       }
       onSessionCleared?.(elevatorId);
+      const client = createClient();
+      if (client) {
+        broadcastOperatorElevatorSessionCleared(client, projectId, elevatorId);
+      }
       router.refresh();
     });
   }
