@@ -78,7 +78,9 @@ export function mergeRealtimeRequest(current: HoistRequest[], payload: RequestRe
     return [nextRequest, ...current];
   }
 
-  return current.map((request) => (request.id === nextRequest.id ? nextRequest : request));
+  return current.map((request) =>
+    request.id === nextRequest.id ? mergeOperatorPollRequest(request, nextRequest) : request,
+  );
 }
 
 /**
