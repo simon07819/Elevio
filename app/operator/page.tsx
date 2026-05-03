@@ -6,6 +6,8 @@ import { OperatorWorkspace } from "@/components/operator/OperatorWorkspace";
 import { getCurrentProfile, requireOperator } from "@/lib/auth";
 import { getAdminProjectData } from "@/lib/adminProject";
 import { getProjects } from "@/lib/projects";
+import { isProjectConfigured } from "@/lib/projectConfig";
+import { ShieldAlert } from "lucide-react";
 import type { Project } from "@/types/hoist";
 
 function pickOperatorProject(projects: Project[]): Project | undefined {
@@ -28,35 +30,35 @@ export default async function OperatorPage() {
   const project = pickOperatorProject(projects);
   const data = project ? await getAdminProjectData(project.id) : null;
 
+  const configured = project ? isProjectConfigured(project, data?.floors.length ?? 0, data?.elevators.length ?? 0) : false;
+
   return (
     <main className="relative z-10 flex min-h-dvh flex-col bg-slate-950 px-4 pt-2 pb-4 text-white sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-7xl flex-1 pb-3">
-        {loadError ? (
+        {!configured ? (
+          <div className="flex flex-col items-center justify-center gap-4 py-20">
+            <ShieldAlert className="size-16 text-amber-400" />
+            <h2 className="text-2xl font-black"><T k="project.configRequired" /></h2>
+            <p className="max-w-md text-center text-sm font-bold text-slate-300"><T k="project.configRequiredBody" /></p>
+          </div>
+        ) : loadError ? (
           <div className="rounded-3xl border border-red-400/40 bg-red-500/10 p-5 text-red-100">
             <T k="operator.loadProjectsError" values={{ detail: loadError }} />
           </div>
-        ) : !project ? (
-          <div className="rounded-3xl border border-white/10 bg-white/8 p-5 text-white">
-            <T k="operator.noProjectAccess" />
-          </div>
-        ) : data && data.elevators.length > 0 ? (
+        ) : (
           <OperatorWorkspace
-            project={project}
-            floors={data.floors}
-            elevators={data.elevators}
-            requests={data.requests}
+            project={project!}
+            floors={data!.floors}
+            elevators={data!.elevators}
+            requests={data!.requests}
             operatorDisplayName={operatorDisplayName}
             hydrationNowMs={0}
           />
-        ) : (
-          <div className="rounded-3xl border border-white/10 bg-white/8 p-5 text-white">
-            <T k="operator.noElevatorsConfigured" />
-          </div>
         )}
       </div>
       <footer className="mx-auto mt-auto flex w-full max-w-7xl shrink-0 items-center justify-between gap-4 rounded-3xl border border-white/10 bg-white/8 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div>
-          <BrandLogo size="sm" priority />
+          <BrandLogo size="sm" priority clickable />
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <AppNavigation compact />

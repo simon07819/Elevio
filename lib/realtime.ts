@@ -3,7 +3,7 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import type { Elevator, HoistRequest, RequestStatus } from "@/types/hoist";
 
-const TERMINAL_REQUEST_STATUSES: RequestStatus[] = ["completed", "cancelled"];
+export const TERMINAL_REQUEST_STATUSES: RequestStatus[] = ["completed", "cancelled"];
 
 /** Fusionne une ligne du poll operateur avec l’état local : évite de réinjecter une ligne encore « ouverte » après annulation / fin côté realtime. */
 export function mergeOperatorPollRequest(existing: HoistRequest | undefined, incoming: HoistRequest): HoistRequest {
@@ -40,7 +40,12 @@ export function mergeRequestsPropIntoLive(live: HoistRequest[], fromProps: Hoist
     const l = liveById.get(id);
     const p = propsById.get(id);
     if (!l) {
-      if (p) out.push(p);
+      if (p) {
+        // Never inject a new terminal request from props (completed/cancelled from stale SSR).
+        if (!TERMINAL_REQUEST_STATUSES.includes(p.status)) {
+          out.push(p);
+        }
+      }
       continue;
     }
     if (!p) {
@@ -72,7 +77,14 @@ export function mergeRealtimeRequest(current: HoistRequest[], payload: RequestRe
   }
 
   const nextRequest = payload.new;
+
+  // Never inject a terminal request that isn't already tracked locally.
+  const isTerminal = TERMINAL_REQUEST_STATUSES.includes(nextRequest.status);
   const exists = current.some((request) => request.id === nextRequest.id);
+
+  if (!exists && isTerminal) {
+    return current;
+  }
 
   if (!exists) {
     return [nextRequest, ...current];
@@ -90,6 +102,10 @@ export function mergeRealtimeRequest(current: HoistRequest[], payload: RequestRe
 export function mergeServerRequestsWithLive(previous: HoistRequest[], server: HoistRequest[]): HoistRequest[] {
   const merged = new Map<string, HoistRequest>();
   for (const row of server) {
+    // Skip new terminal requests from server data (completed/cancelled)
+    if (!previous.some((p) => p.id === row.id) && TERMINAL_REQUEST_STATUSES.includes(row.status)) {
+      continue;
+    }
     merged.set(row.id, row);
   }
   for (const row of previous) {

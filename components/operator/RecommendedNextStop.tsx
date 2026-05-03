@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { DoorOpen, Pause, TriangleAlert, UserCheck } from "lucide-react";
+import { Ban, DoorOpen, Pause, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatDispatchRecommendationReason } from "@/lib/recommendationReason";
@@ -55,7 +55,7 @@ export function RecommendedNextStop({
   );
 
   const idleBlockedMessage =
-    recommendation.reasonDetail?.kind === "idle_blocked"
+    recommendation.reasonDetail?.kind === "idle_blocked" || recommendation.reasonDetail?.kind === "idle_manual_full"
       ? formatDispatchRecommendationReason(recommendation.reasonDetail, locale, recommendation.reason)
       : "";
 
@@ -144,6 +144,11 @@ export function RecommendedNextStop({
         {t("operator.pickup")}
       </span>
     </button>
+  ) : recommendation.reasonDetail?.kind === "idle_manual_full" ? (
+    <div className="flex min-h-36 w-full flex-col items-center justify-center gap-3 rounded-3xl border border-red-400/35 bg-red-950/45 px-5 py-6 text-center shadow-inner ring-2 ring-red-400/15">
+      <Ban size={34} strokeWidth={2.6} className="shrink-0 text-red-200" aria-hidden />
+      <span className="max-w-md text-sm font-bold leading-snug text-red-50">{idleBlockedMessage}</span>
+    </div>
   ) : recommendation.reasonDetail?.kind === "idle_blocked" ? (
     <button
       type="button"

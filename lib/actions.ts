@@ -1139,6 +1139,9 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
     .from("elevators")
     .update({
       ...TABLET_SESSION_FIELDS_CLEAR,
+      current_load: 0,
+      direction: "idle",
+      manual_full: false,
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId);
@@ -1146,7 +1149,23 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
   if (error && isMissingOperatorDisplayNameColumn(error)) {
     const retry = await supabase
       .from("elevators")
-      .update(stripOperatorDisplayName({ ...TABLET_SESSION_FIELDS_CLEAR }))
+      .update(stripOperatorDisplayName({ ...TABLET_SESSION_FIELDS_CLEAR, current_load: 0, direction: "idle", manual_full: false }))
+      .eq("id", elevatorId)
+      .eq("project_id", projectId);
+    error = retry.error;
+  }
+  if (error && isMissingElevatorManualFullColumn(error)) {
+    const retry = await supabase
+      .from("elevators")
+      .update(stripElevatorManualFull({ ...TABLET_SESSION_FIELDS_CLEAR, current_load: 0, direction: "idle" }))
+      .eq("id", elevatorId)
+      .eq("project_id", projectId);
+    error = retry.error;
+  }
+  if (error && (isMissingOperatorDisplayNameColumn(error) || isMissingElevatorManualFullColumn(error))) {
+    const retry = await supabase
+      .from("elevators")
+      .update(stripElevatorManualFull(stripOperatorDisplayName({ ...TABLET_SESSION_FIELDS_CLEAR, current_load: 0, direction: "idle" })))
       .eq("id", elevatorId)
       .eq("project_id", projectId);
     error = retry.error;
@@ -1156,9 +1175,10 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
     return { ok: false, message: error.message };
   }
 
+  await reassignOrphanedRequestsToActiveOperator(supabase, projectId, elevatorId);
   await cancelActiveProjectRequestsIfNoLiveOperators(supabase, projectId);
   revalidateAdminProject(projectId);
-  return { ok: true, message: "Tablette desactivee. L’operateur devra reactiver depuis son appareil." };
+  return { ok: true, message: "Tablette desactivee. L'operateur devra reactiver depuis son appareil." };
 }
 
 export async function createPassengerRequest(formData: FormData) {
