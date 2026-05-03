@@ -14,8 +14,10 @@ import { createClient } from "@/lib/supabase/client";
 import { bindRealtimeWithAuthSession, subscribeToTable, type ElevatorRealtimePayload } from "@/lib/realtime";
 import {
   OPERATOR_BROADCAST_ELEVATOR_SESSION_CLEARED,
+  broadcastOperatorElevatorSessionCleared,
   operatorProjectBroadcastChannel,
 } from "@/lib/operatorNotifyBroadcast";
+import { broadcastPassengerQueueCleared } from "@/lib/passengerNotifyBroadcast";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { formatFloorLabel } from "@/lib/utils";
 import { ServiceTimePicker } from "@/components/ServiceTimePicker";
@@ -559,6 +561,22 @@ export function OperatorWorkspace({
                 : item,
             ),
           );
+        } else {
+          // Broadcast release to other operators always.
+          // Broadcast to passengers only if no other operator is available
+          // (otherwise requests were reassigned — passenger should NOT be reset).
+          const client = createClient();
+          if (client) {
+            broadcastOperatorElevatorSessionCleared(client, project.id, releasingElevator.id);
+            if (!result.hasOtherOperator) {
+              const releasedRequestIds = requests
+                .filter((r) => r.elevator_id === releasingElevator.id && r.status !== "completed" && r.status !== "cancelled")
+                .map((r) => r.id);
+              if (releasedRequestIds.length > 0) {
+                broadcastPassengerQueueCleared(client, project.id, releasedRequestIds);
+              }
+            }
+          }
         }
       } catch {
         const rollbackMs = Date.parse(new Date().toISOString());
