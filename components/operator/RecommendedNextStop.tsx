@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { DoorOpen, Pause, TriangleAlert, UserCheck } from "lucide-react";
+import { Ban, DoorOpen, Pause, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatDispatchRecommendationReason } from "@/lib/recommendationReason";
@@ -55,7 +55,7 @@ export function RecommendedNextStop({
   );
 
   const idleBlockedMessage =
-    recommendation.reasonDetail?.kind === "idle_blocked"
+    recommendation.reasonDetail?.kind === "idle_blocked" || recommendation.reasonDetail?.kind === "idle_manual_full"
       ? formatDispatchRecommendationReason(recommendation.reasonDetail, locale, recommendation.reason)
       : "";
 
@@ -117,10 +117,24 @@ export function RecommendedNextStop({
   }, [actionRequests, pendingPickupIds, recommendation.primaryPickupRequestId]);
 
   const showDropoff = dropoffIds.length > 0 && dropFloorId !== "";
+  const sameFloorPickup = showDropoff && actionRequest !== null && recommendation.requestsToPickup.length > 0;
   const showPickup = !showDropoff && actionRequest !== null;
   const showPrimaryAction = showDropoff || showPickup;
 
-  const actionButton = showDropoff ? (
+  const actionButton = sameFloorPickup ? (
+    <button
+      type="button"
+      onClick={dropoffAndPickup}
+      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-300 to-sky-300 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(16,185,129,0.32)] ring-4 ring-emerald-100/30 transition active:scale-[0.98]"
+    >
+      <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.55),transparent)] opacity-70 motion-safe:animate-[action-shine_1.45s_ease-in-out_infinite]" />
+      <span className="relative flex w-full items-center justify-center gap-4 text-3xl font-black uppercase tracking-wide">
+        <DoorOpen size={36} strokeWidth={2.8} />
+        {t("operator.dropoffAndPickup")}
+        <UserCheck size={36} strokeWidth={2.8} />
+      </span>
+    </button>
+  ) : showDropoff ? (
     <button
       type="button"
       onClick={dropoff}
@@ -144,6 +158,11 @@ export function RecommendedNextStop({
         {t("operator.pickup")}
       </span>
     </button>
+  ) : recommendation.reasonDetail?.kind === "idle_manual_full" ? (
+    <div className="flex min-h-36 w-full flex-col items-center justify-center gap-3 rounded-3xl border border-red-400/35 bg-red-950/45 px-5 py-6 text-center shadow-inner ring-2 ring-red-400/15">
+      <Ban size={34} strokeWidth={2.6} className="shrink-0 text-red-200" aria-hidden />
+      <span className="max-w-md text-sm font-bold leading-snug text-red-50">{idleBlockedMessage}</span>
+    </div>
   ) : recommendation.reasonDetail?.kind === "idle_blocked" ? (
     <button
       type="button"
@@ -163,6 +182,14 @@ export function RecommendedNextStop({
       <span className="text-3xl font-black uppercase tracking-wide">{t("operator.pause")}</span>
     </button>
   );
+
+  function dropoffAndPickup() {
+    dropoff();
+    // Pickup will be triggered on next render after dropoff clears,
+    // OR we can trigger it immediately since the dropoff is optimistic.
+    if (!actionRequest) return;
+    pickup();
+  }
 
   function pickup() {
     if (!actionRequest) {

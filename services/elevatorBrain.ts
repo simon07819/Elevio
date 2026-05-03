@@ -4,6 +4,7 @@ import {
   estimateFloorsToReachPickup,
   hoistQueueToActivePassengersBoarded,
   hoistQueueToShaftRequests,
+  inferredDirectionFromQueue,
   inferPickupPhaseDirection,
   isBetween,
   nearestEligiblePickupFloorSCAN,
@@ -218,7 +219,7 @@ function scoreElevatorForRequest({
   const currentSort = Number(elevator.current_sort_order ?? floorSortOrder(projectFloors, elevator.current_floor_id));
   const fromSort = requestPickupSort(request, projectFloors);
   const boarded = boardedForQueue(queue, projectFloors);
-  const effectiveDirection = effectiveServiceDirection(currentSort, elevator.direction, boarded);
+  const effectiveDirection = inferredDirectionFromQueue(currentSort, elevator.direction, boarded, queue as unknown as Array<{ from_sort_order: number; to_sort_order: number; status: string }>);
   const shaftStops = hoistQueueToShaftRequests(queue as HoistRequest[], (floorId) => floorSortOrder(projectFloors, floorId))
     .flatMap((stop) => [stop.from_sort_order, stop.to_sort_order]);
   const routeLimit = routeLimitForElevator(currentSort, effectiveDirection, shaftStops);
@@ -536,14 +537,21 @@ export function computeNextOperatorAction({
   if (dropoffsAtCurrent.length > 0) {
     const passengers = dropoffsAtCurrent.reduce((sum, p) => sum + p.passenger_count, 0);
     const dropDetail: DispatchRecommendationReason = { kind: "dropoff_before_pickups", passengers };
+    // Check for same-floor pickups that can be combined with the dropoff.
+    // When pickup and dropoff cross at the same floor, the operator should see both actions.
+    const sameFloorPickups = !manualFull
+      ? openRequests.filter((r) => Number(r.from_sort_order) === currentSort)
+      : [];
+    const fittedSameFloor = fitRequestsToCapacity(sortPickupsAtFloor(sameFloorPickups), remainingCapacity);
+    const primaryPickup = fittedSameFloor[0] ?? null;
     return {
       action: "dropoff",
       nextFloor: resolveFloorEntity(projectFloors, currentSort),
       nextFloorSortOrder: currentSort,
-      primaryPickupRequestId: null,
+      primaryPickupRequestId: primaryPickup?.id ?? null,
       reasonDetail: dropDetail,
       reason: formatDispatchRecommendationReason(dropDetail, "fr", ""),
-      requestsToPickup: [],
+      requestsToPickup: fittedSameFloor,
       requestsToDropoff: dropoffsAtCurrent,
       suggestedDirection: "idle",
       capacityWarnings: [],
@@ -553,11 +561,11 @@ export function computeNextOperatorAction({
   if (nextDropSort !== null) {
     const travelDirection = directionToward(currentSort, nextDropSort);
     const geographic = openPickupsTowardNextDropoff(openRequests, currentSort, nextDropSort);
+    // Include ALL geographic requests in pool, even those exceeding capacity.
+    // Capacity filtering only applies to fitRequestsToCapacity (how many board), not floor selection.
     const capacityOkAtPickup = manualFull
       ? []
-      : capacityEnabled
-        ? geographic.filter((request) => request.passenger_count <= remainingCapacity && request.passenger_count <= elevator.capacity)
-        : geographic;
+      : geographic;
     const priorityPool = filterPriorityPickupPool(capacityOkAtPickup, prioritiesEnabled);
     const directionPool =
       travelDirection === "idle"
@@ -633,9 +641,7 @@ export function computeNextOperatorAction({
   const noAwayBoardedDestinations = pendingBoardedDestinations(currentSort, onboardPassengers).length === 0;
   const idleCapacityOk = manualFull
     ? []
-    : capacityEnabled
-      ? openRequests.filter((request) => request.passenger_count <= remainingCapacity && request.passenger_count <= elevator.capacity)
-      : openRequests;
+    : openRequests;
   const idlePriorityPool = filterPriorityPickupPool(idleCapacityOk, prioritiesEnabled);
 
   const wave = noAwayBoardedDestinations ? collectivePickupWave(currentSort, idlePriorityPool) : null;
@@ -667,8 +673,14 @@ export function computeNextOperatorAction({
   );
 
   if (idleTargetFloor === null) {
-    const waitDetail: DispatchRecommendationReason =
-      openRequests.length === 0 ? { kind: "idle_empty" } : { kind: "idle_blocked" };
+    let waitDetail: DispatchRecommendationReason;
+    if (openRequests.length === 0) {
+      waitDetail = { kind: "idle_empty" };
+    } else if (manualFull) {
+      waitDetail = { kind: "idle_manual_full" };
+    } else {
+      waitDetail = { kind: "idle_blocked" };
+    }
     return {
       action: "wait",
       nextFloor: null,
@@ -688,8 +700,14 @@ export function computeNextOperatorAction({
   );
   const idlePrimary = idleAtFloor[0];
   if (!idlePrimary) {
-    const waitDetail: DispatchRecommendationReason =
-      openRequests.length === 0 ? { kind: "idle_empty" } : { kind: "idle_blocked" };
+    let waitDetail: DispatchRecommendationReason;
+    if (openRequests.length === 0) {
+      waitDetail = { kind: "idle_empty" };
+    } else if (manualFull) {
+      waitDetail = { kind: "idle_manual_full" };
+    } else {
+      waitDetail = { kind: "idle_blocked" };
+    }
     return {
       action: "wait",
       nextFloor: null,
