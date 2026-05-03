@@ -9,6 +9,7 @@ const navItems = [
   { href: "/operator", label: "nav.operator" },
   { href: "/admin", label: "nav.admin" },
   { href: "/admin/profile", label: "nav.profile" },
+  { href: "/support", label: "nav.support" },
 ] satisfies Array<{ href: string; label: TranslationKey }>;
 
 export function AppNavigation({ compact = false }: { compact?: boolean }) {
