@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { DoorOpen, Pause, TriangleAlert, UserCheck } from "lucide-react";
+import { Ban, DoorOpen, Pause, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatDispatchRecommendationReason } from "@/lib/recommendationReason";
@@ -56,6 +56,11 @@ export function RecommendedNextStop({
 
   const idleBlockedMessage =
     recommendation.reasonDetail?.kind === "idle_blocked"
+      ? formatDispatchRecommendationReason(recommendation.reasonDetail, locale, recommendation.reason)
+      : "";
+
+  const idleManualFullMessage =
+    recommendation.reasonDetail?.kind === "idle_manual_full"
       ? formatDispatchRecommendationReason(recommendation.reasonDetail, locale, recommendation.reason)
       : "";
 
@@ -116,7 +121,11 @@ export function RecommendedNextStop({
     return primary ?? null;
   }, [actionRequests, pendingPickupIds, recommendation.primaryPickupRequestId]);
 
-  const showDropoff = dropoffIds.length > 0 && dropFloorId !== "";
+  // When idle_manual_full AND boarded passengers exist, the brain returns
+  // dropoff_before_pickups. But if the brain ever returns idle_manual_full
+  // with boarded passengers (edge case), we still want the dropoff button.
+  const hasBoardedPassengers = actionRequests.some((r) => r.status === "boarded");
+  const showDropoff = (dropoffIds.length > 0 && dropFloorId !== "") || (recommendation.reasonDetail?.kind === "idle_manual_full" && hasBoardedPassengers);
   const showPickup = !showDropoff && actionRequest !== null;
   const showPrimaryAction = showDropoff || showPickup;
 
@@ -143,6 +152,15 @@ export function RecommendedNextStop({
         <UserCheck size={38} strokeWidth={2.8} />
         {t("operator.pickup")}
       </span>
+    </button>
+  ) : recommendation.reasonDetail?.kind === "idle_manual_full" ? (
+    <button
+      type="button"
+      disabled
+      className="touch-target flex min-h-36 w-full cursor-not-allowed flex-col items-center justify-center gap-3 rounded-3xl border border-red-400/35 bg-red-950/45 px-5 py-6 text-center text-red-50 shadow-inner ring-2 ring-red-400/15"
+    >
+      <Ban size={34} strokeWidth={2.6} className="shrink-0 text-red-200" aria-hidden />
+      <span className="max-w-md text-sm font-bold leading-snug">{idleManualFullMessage}</span>
     </button>
   ) : recommendation.reasonDetail?.kind === "idle_blocked" ? (
     <button
@@ -259,6 +277,12 @@ export function RecommendedNextStop({
       {showPrimaryAction && reasonLine.trim() ? (
         <p className="mb-3 rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-center text-base font-bold leading-snug text-slate-100">
           {reasonLine}
+        </p>
+      ) : null}
+      {showDropoff && recommendation.reasonDetail?.kind === "idle_manual_full" && idleManualFullMessage ? (
+        <p className="mb-3 rounded-2xl border border-red-400/25 bg-red-950/40 px-4 py-3 text-center text-sm font-bold leading-snug text-red-100">
+          <Ban size={16} className="mr-1 inline-block align-text-bottom" />
+          {idleManualFullMessage}
         </p>
       ) : null}
       {actionButton}

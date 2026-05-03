@@ -19,6 +19,10 @@ export function formatDispatchRecommendationReason(
       return fr
         ? "Cabine pleine ou groupe trop grand : déposer d'abord, ou attendre une autre cabine disponible."
         : "Cabin full or group too large: drop off passengers first, or wait for another available hoist.";
+    case "idle_manual_full":
+      return fr
+        ? "Mode PLEIN actif : ramassages bloqués. Déposer les passagers embarqués, puis reprendre pour réactiver les ramassages."
+        : "FULL mode active: pickups blocked. Drop off onboard passengers, then resume to re-enable pickups.";
     case "dropoff_before_pickups":
       return fr
         ? `Déposer ${detail.passengers} personne(s) avant de reprendre les appels paliers.`

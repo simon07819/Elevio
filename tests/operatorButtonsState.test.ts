@@ -24,8 +24,8 @@ const MOVEMENT = readFileSync(join(root, "components/operator/MovementBoard.tsx"
 // ---------------------------------------------------------------------------
 // 1. Dropoff button shows when boarded passengers exist (not hidden by idle)
 // ---------------------------------------------------------------------------
-test("buttons state: showDropoff depends on dropoffIds and dropFloorId", () => {
-  assert.match(RECOMMENDED, /const showDropoff = dropoffIds\.length > 0 && dropFloorId !== ""/);
+test("buttons state: showDropoff depends on dropoffIds and dropFloorId, with manual_full override", () => {
+  assert.match(RECOMMENDED, /const showDropoff = \(dropoffIds\.length > 0 && dropFloorId !== ""\)|idle_manual_full.*hasBoardedPassengers/);
 });
 
 // ---------------------------------------------------------------------------
