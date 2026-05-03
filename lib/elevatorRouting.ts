@@ -25,6 +25,8 @@ export function pendingBoardedDestinations(currentSortOrder: number, activePasse
 
 /**
  * Direction de service pour SCAN : état ascenseur si renseigné, sinon inférence depuis les déposes à bord.
+ * Si la direction DB ne correspond à aucune dépose ahead (turnaround ou stale), on infère
+ * la vraie direction depuis les passagers à bord au lieu de trust la valeur obsolète.
  */
 export function effectiveServiceDirection(
   currentSortOrder: number,
@@ -32,7 +34,26 @@ export function effectiveServiceDirection(
   activePassengers: ActivePassenger[],
 ): Direction {
   if (elevatorDirection !== "idle") {
-    return elevatorDirection;
+    const pending = pendingBoardedDestinations(currentSortOrder, activePassengers);
+    if (pending.length === 0) {
+      return elevatorDirection;
+    }
+    const cur = Number(currentSortOrder);
+    const ahead = elevatorDirection === "up"
+      ? pending.filter((t) => t > cur)
+      : pending.filter((t) => t < cur);
+    if (ahead.length > 0) {
+      return elevatorDirection;
+    }
+    // No dropoffs ahead in DB direction → turnaround: infer from passengers
+    const above = pending.filter((t) => t > cur);
+    const below = pending.filter((t) => t < cur);
+    if (above.length > 0 && below.length === 0) return "up";
+    if (below.length > 0 && above.length === 0) return "down";
+    const nearest = pending.reduce((best, t) =>
+      Math.abs(t - cur) < Math.abs(best - cur) ? t : best,
+    );
+    return nearest > cur ? "up" : nearest < cur ? "down" : elevatorDirection;
   }
   const pending = pendingBoardedDestinations(currentSortOrder, activePassengers);
   if (pending.length === 0) {
