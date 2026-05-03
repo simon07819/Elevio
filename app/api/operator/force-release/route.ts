@@ -76,12 +76,65 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Cabine introuvable." }, { status: 404 });
   }
 
-  // Also reset load and direction
-  await supabase
+  // Reset elevator state — ghost load/direction/manual_full causes PAUSE on next session.
+  const stateReset = { current_load: 0, direction: "idle" };
+  const fullReset = { ...stateReset, manual_full: false };
+  const resetResult = await supabase
     .from("elevators")
-    .update({ current_load: 0, direction: "idle" })
+    .update(fullReset)
     .eq("id", elevatorId)
     .eq("project_id", projectId);
+  if (resetResult.error) {
+    await supabase
+      .from("elevators")
+      .update(stateReset)
+      .eq("id", elevatorId)
+      .eq("project_id", projectId);
+  }
+
+  // Reassign orphaned requests (including boarded) to other active operators
+  const ORPHAN_REASSIGN_STATUSES = ["pending", "assigned", "arriving", "boarded"];
+  const { data: orphans } = await supabase
+    .from("requests")
+    .select("id")
+    .eq("project_id", projectId)
+    .eq("elevator_id", elevatorId)
+    .in("status", ORPHAN_REASSIGN_STATUSES);
+
+  if (orphans && orphans.length > 0) {
+    // Check if there's another live operator
+    const { data: liveElevators } = await supabase
+      .from("elevators")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("active", true)
+      .not("operator_session_id", "is", null)
+      .neq("id", elevatorId);
+
+    if (liveElevators && liveElevators.length > 0) {
+      // Unassign from this elevator so the dispatch engine can reassign
+      await supabase
+        .from("requests")
+        .update({ elevator_id: null, updated_at: new Date().toISOString() })
+        .eq("project_id", projectId)
+        .eq("elevator_id", elevatorId)
+        .in("status", ORPHAN_REASSIGN_STATUSES);
+    } else {
+      // No other operator — cancel the orphaned requests
+      const now = new Date().toISOString();
+      await supabase
+        .from("requests")
+        .update({
+          status: "cancelled",
+          completed_at: now,
+          updated_at: now,
+          note: "Annulee automatiquement : aucun operateur disponible.",
+        })
+        .eq("project_id", projectId)
+        .eq("elevator_id", elevatorId)
+        .in("status", ORPHAN_REASSIGN_STATUSES);
+    }
+  }
 
   return NextResponse.json({ ok: true, message: "Session force-liberee." });
 }

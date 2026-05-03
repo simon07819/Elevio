@@ -167,7 +167,8 @@ export function OperatorDashboard({
         const kept = current.filter(
           (request) =>
             request.elevator_id !== elevator.id ||
-            !OPERATOR_VISIBLE_REQUEST_STATUSES.includes(request.status as (typeof OPERATOR_VISIBLE_REQUEST_STATUSES)[number]),
+            !OPERATOR_VISIBLE_REQUEST_STATUSES.includes(request.status as (typeof OPERATOR_VISIBLE_REQUEST_STATUSES)[number]) ||
+            optimisticRequestsRef.current.has(request.id),
         );
         const mergedById = new Map<string, HoistRequest>();
         for (const row of kept) {
@@ -313,6 +314,43 @@ export function OperatorDashboard({
         ? "down"
         : "idle";
   let visibleRecommendation = recommendation;
+  // ── PAUSE INTERDICT ──────────────────────────────────────────────────────
+  // If the brain returns "wait" (PAUSE) but we have boarded passengers on the
+  // elevator, the brain MUST show a dropoff action instead.  This can happen
+  // when the elevator direction / current_floor_id from the server is stale
+  // (not yet updated by syncElevatorWithRequestStatus), causing the brain's
+  // pendingBoardedDestinations() to return empty and the idle branch to fire.
+  // Guard: boarded passengers = active work = NEVER PAUSE.
+  if (!recommendation.nextFloor && recommendation.requestsToDropoff.length === 0 && hasBoardedPassengers) {
+    const currentSort = Number(currentFloor.sort_order);
+    const sortedPassengers = [...liveActivePassengers].sort((a, b) =>
+      Math.abs(Number(a.to_sort_order) - currentSort) -
+      Math.abs(Number(b.to_sort_order) - currentSort),
+    );
+    const nearest = sortedPassengers[0];
+    const dropSort = Number(nearest.to_sort_order);
+    const dropFloor = floors.find((f) => Number(f.sort_order) === dropSort) ?? currentFloor;
+    const dropoffs = liveActivePassengers.filter((p) => Number(p.to_sort_order) === dropSort);
+    const passengers = dropoffs.reduce((s, p) => s + p.passenger_count, 0);
+    const dropDetail: { kind: "dropoff_before_pickups"; passengers: number } = {
+      kind: "dropoff_before_pickups",
+      passengers,
+    };
+    const travelDir: Direction =
+      dropSort > currentSort ? "up" : dropSort < currentSort ? "down" : "idle";
+    visibleRecommendation = {
+      ...recommendation,
+      nextFloor: dropFloor,
+      nextFloorSortOrder: Number(dropFloor.sort_order),
+      primaryPickupRequestId: null,
+      reasonDetail: dropDetail,
+      reason: formatDispatchRecommendationReason(dropDetail, locale, ""),
+      requestsToPickup: [],
+      requestsToDropoff: dropoffs,
+      suggestedDirection: travelDir,
+      capacityWarnings: [],
+    };
+  }
   if (!hasOperatorWork) {
     const idleDetail = { kind: "idle_empty" as const };
     visibleRecommendation = {
@@ -725,20 +763,25 @@ export function OperatorDashboard({
           });
         }}
         onPickupConfirmed={(req) => {
-          // Use persistent broadcast channel (already subscribed) for near-instant delivery.
+          // Broadcast passenger pickup confirmation via pre-subscribed channel
+          // for near-instant delivery (already subscribed → no subscribe wait).
           const ref = broadcastChannelRef.current;
+          let sentViaPreSubbed = false;
           if (ref?.ready && ref.channel && typeof (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send === "function") {
             void (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send({
               type: "broadcast",
               event: "request_boarded",
               payload: { requestIds: [req.id] },
             });
-          } else {
-            // Fallback: create a one-shot channel (slower but still works)
-            const client = createClient();
-            if (client) {
-              broadcastPassengerRequestBoarded(client, projectId, [req.id]);
-            }
+            sentViaPreSubbed = true;
+          }
+          // Belt-and-suspenders: ALSO send via one-shot channel as backup.
+          // The pre-subscribed channel is fast but might miss if the passenger
+          // just refreshed or the channel subscription lapsed. The one-shot
+          // channel creates a fresh subscribe (500ms–5s) but is more reliable.
+          const client = createClient();
+          if (client) {
+            broadcastPassengerRequestBoarded(client, projectId, [req.id]);
           }
         }}
         onDropoffSuccess={({ requestIds, dropFloorId }) => {

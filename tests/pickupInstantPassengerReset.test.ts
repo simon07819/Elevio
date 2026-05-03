@@ -32,8 +32,10 @@ test("pickup-reset: passenger broadcast channel pre-subscribed on mount", () => 
 test("pickup-reset: broadcast effect uses pre-subscribed channel when ready", () => {
   const form = readFileSync(join(root, "components/RequestForm.tsx"), "utf8");
   assert.match(form, /passengerBroadcastRef\.current/, "ref checked in broadcast effect");
-  assert.match(form, /preSubbed\?\.ready/, "ready flag checked before using pre-subscribed channel");
-  assert.match(form, /!preSubbed\?\.ready/, "fallback subscribe only when not pre-subscribed");
+  assert.match(form, /preSubbed\?\.channel && preSubbed\.ready|preSubbed\.ready/, "ready flag checked before using pre-subscribed channel");
+  // Handlers are registered at mount time on the pre-subscribed channel
+  // using requestIdRef — the submittedRequest effect is now a fallback only
+  assert.match(form, /requestIdRef/, "requestIdRef tracks current request ID for mount-time handlers");
 });
 
 test("pickup-reset: request_boarded handler clears storage and redirects to QR", () => {

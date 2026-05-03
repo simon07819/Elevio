@@ -329,6 +329,20 @@ function revalidateAdminProject(projectId: string) {
 
 const REQUESTS_OPEN_DURING_SERVICE: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"];
 
+/** Legal forward-only status transitions. Terminal statuses (completed, cancelled) have no outgoing edges. */
+const LEGAL_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
+  pending: ["assigned", "boarded", "cancelled"],
+  assigned: ["arriving", "boarded", "pending", "cancelled"],
+  arriving: ["boarded", "pending", "cancelled"],
+  boarded: ["completed", "cancelled"],
+  completed: [],
+  cancelled: [],
+};
+
+function isLegalTransition(from: RequestStatus, to: RequestStatus): boolean {
+  return LEGAL_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
 async function cancelActiveProjectRequests(
   supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
   projectId: string,
@@ -373,8 +387,8 @@ async function cancelActiveProjectRequestsIfNoLiveOperators(
   }
 }
 
-/** Statuts orphelins : demandes actives non embarquées, réassignables. */
-const ORPHAN_REASSIGN_STATUSES: RequestStatus[] = ["pending", "assigned", "arriving"];
+/** Statuts orphelins : demandes actives incluant boarded — un autre opérateur peut déposer les passagers embarqués. */
+const ORPHAN_REASSIGN_STATUSES: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"];
 
 /**
  * Réassigne les demandes orphelines (assignées à l'ascenseur libéré, non boarded)
@@ -1104,6 +1118,15 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
   }
 
   const hasOtherOperator = await reassignOrphanedRequestsToActiveOperator(supabase, projectId, elevatorId);
+  // Reset elevator state on release — ghost load/direction causes PAUSE on next session.
+  const stateReset: Record<string, unknown> = { current_load: 0, direction: "idle" };
+  // Try including manual_full; if the column doesn't exist yet, the update still succeeds for the other fields.
+  const fullReset = { ...stateReset, manual_full: false };
+  const resetResult = await supabase.from("elevators").update(fullReset).eq("id", elevatorId).eq("project_id", projectId);
+  if (resetResult.error) {
+    // Fallback without manual_full (missing column)
+    await supabase.from("elevators").update(stateReset).eq("id", elevatorId).eq("project_id", projectId);
+  }
   await cancelActiveProjectRequestsIfNoLiveOperators(supabase, projectId);
   revalidateAdminProject(projectId);
   return { ok: true as const, message: "Tablette operateur liberee.", hasOtherOperator };
@@ -1156,6 +1179,15 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
     return { ok: false, message: error.message };
   }
 
+  // Reassign orphaned requests (including boarded) before canceling
+  await reassignOrphanedRequestsToActiveOperator(supabase, projectId, elevatorId);
+  // Reset elevator state — ghost load/direction/manual_full causes PAUSE on next session.
+  const stateReset: Record<string, unknown> = { current_load: 0, direction: "idle" };
+  const fullReset = { ...stateReset, manual_full: false };
+  const resetResult = await supabase.from("elevators").update(fullReset).eq("id", elevatorId).eq("project_id", projectId);
+  if (resetResult.error) {
+    await supabase.from("elevators").update(stateReset).eq("id", elevatorId).eq("project_id", projectId);
+  }
   await cancelActiveProjectRequestsIfNoLiveOperators(supabase, projectId);
   revalidateAdminProject(projectId);
   return { ok: true, message: "Tablette desactivee. L’operateur devra reactiver depuis son appareil." };
@@ -1625,6 +1657,19 @@ export async function updateRequestStatus(
 
   if (!isUuid(requestId)) {
     return staleIdsAction();
+  }
+
+  // Enforce legal forward-only status transitions.
+  // Terminal statuses (completed, cancelled) must never escape.
+  // Backward transitions (e.g. completed→pending) are rejected.
+  const { data: currentRequest } = await supabase
+    .from("requests")
+    .select("status")
+    .eq("id", requestId)
+    .maybeSingle();
+  const currentStatus = (currentRequest?.status ?? "") as RequestStatus;
+  if (currentStatus && !isLegalTransition(currentStatus, status)) {
+    return { ok: false, message: `Transition ${currentStatus}→${status} non autorisee.` };
   }
 
   const updates: Record<string, unknown> = {
