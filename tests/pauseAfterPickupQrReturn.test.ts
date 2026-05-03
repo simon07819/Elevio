@@ -42,8 +42,8 @@ const root = process.cwd();
 test("pause-interdict: guard exists when hasBoardedPassengers and brain shows wait", () => {
   const dash = readFileSync(join(root, "components/operator/OperatorDashboard.tsx"), "utf8");
   assert.match(dash, /hasBoardedPassengers/, "hasBoardedPassengers computed");
-  // Guard checks: no nextFloor + no dropoffs + has boarded passengers
-  assert.match(dash, /!recommendation\.nextFloor.*recommendation\.requestsToDropoff\.length === 0.*hasBoardedPassengers/s, "PAUSE INTERDICT guard condition");
+  // Guard checks: no nextFloor + no dropoffs + hasAnyBoardedWork (live + optimistic)
+  assert.match(dash, /!recommendation\.nextFloor.*recommendation\.requestsToDropoff.*hasAnyBoardedWork/s, "PAUSE INTERDICT guard condition");
   // Override sets nextFloor to dropoff destination
   assert.match(dash, /dropFloor/, "dropoff floor computed");
   assert.match(dash, /requestsToDropoff.*dropoffs/, "dropoffs set in override");

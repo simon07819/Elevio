@@ -98,6 +98,14 @@ export function OperatorDashboard({
     return { ...request, ...optimistic.request };
   }
 
+  /** Check if there are optimistic "boarded" requests (pickup just happened, server may not have confirmed yet). */
+  function hasOptimisticBoardedRequests(): boolean {
+    for (const entry of optimisticRequestsRef.current.values()) {
+      if (entry.request.status === "boarded" && Date.now() <= entry.expiresAt) return true;
+    }
+    return false;
+  }
+
   useEffect(() => {
     const id = window.setTimeout(() => {
       setLiveRequests((current) => mergeRequestsPropIntoLive(current, requests));
@@ -191,6 +199,22 @@ export function OperatorDashboard({
         }
         if (next.length === current.length && next.every((r, i) => r.id === current[i]?.id && r.status === current[i]?.status && r.elevator_id === current[i]?.elevator_id)) {
           return current;
+        }
+        // ── DEBUG: poll merge diagnostic ──
+        if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+          const prevBoarded = current.filter(r => r.elevator_id === elevator.id && r.status === "boarded");
+          const nextBoarded = next.filter(r => r.elevator_id === elevator.id && r.status === "boarded");
+          const dropped = prevBoarded.filter(pb => !nextBoarded.find(nb => nb.id === pb.id));
+          if (dropped.length > 0 || prevBoarded.length !== nextBoarded.length) {
+            console.warn("[POLL-MERGE] boarded changed", {
+              prevBoarded: prevBoarded.length,
+              nextBoarded: nextBoarded.length,
+              droppedIds: dropped.map(r => r.id),
+              pollDataLen: (data as HoistRequest[])?.length ?? 0,
+              optimisticCount: optimisticRequestsRef.current.size,
+              keptLen: kept.length,
+            });
+          }
         }
         return next;
       });
@@ -321,37 +345,82 @@ export function OperatorDashboard({
   // (not yet updated by syncElevatorWithRequestStatus), causing the brain's
   // pendingBoardedDestinations() to return empty and the idle branch to fire.
   // Guard: boarded passengers = active work = NEVER PAUSE.
-  if (!recommendation.nextFloor && recommendation.requestsToDropoff.length === 0 && hasBoardedPassengers) {
+  // Also check optimistic boarded: pickup just happened, poll/realtime may
+  // have overwritten with stale data before server confirmation.
+  const hasAnyBoardedWork = hasBoardedPassengers || hasOptimisticBoardedRequests();
+  if (!recommendation.nextFloor && recommendation.requestsToDropoff.length === 0 && hasAnyBoardedWork) {
+    const boardedSource = liveActivePassengers.length > 0 ? liveActivePassengers : (
+      // Reconstruct from optimistic requests if live state was overwritten
+      [...optimisticRequestsRef.current.values()]
+        .filter(e => e.request.status === "boarded" && Date.now() <= e.expiresAt)
+        .map(e => {
+          const r = e.request;
+          const from = floorById.get(r.from_floor_id);
+          const to = floorById.get(r.to_floor_id);
+          return {
+            requestId: r.id,
+            from_floor_id: r.from_floor_id,
+            to_floor_id: r.to_floor_id,
+            from_sort_order: from?.sort_order ?? 0,
+            to_sort_order: to?.sort_order ?? 0,
+            passenger_count: r.passenger_count,
+            boarded_at: r.updated_at,
+          };
+        })
+    );
     const currentSort = Number(currentFloor.sort_order);
-    const sortedPassengers = [...liveActivePassengers].sort((a, b) =>
+    const sortedPassengers = [...boardedSource].sort((a, b) =>
       Math.abs(Number(a.to_sort_order) - currentSort) -
       Math.abs(Number(b.to_sort_order) - currentSort),
     );
     const nearest = sortedPassengers[0];
-    const dropSort = Number(nearest.to_sort_order);
-    const dropFloor = floors.find((f) => Number(f.sort_order) === dropSort) ?? currentFloor;
-    const dropoffs = liveActivePassengers.filter((p) => Number(p.to_sort_order) === dropSort);
-    const passengers = dropoffs.reduce((s, p) => s + p.passenger_count, 0);
-    const dropDetail: { kind: "dropoff_before_pickups"; passengers: number } = {
-      kind: "dropoff_before_pickups",
-      passengers,
-    };
-    const travelDir: Direction =
-      dropSort > currentSort ? "up" : dropSort < currentSort ? "down" : "idle";
-    visibleRecommendation = {
-      ...recommendation,
-      nextFloor: dropFloor,
-      nextFloorSortOrder: Number(dropFloor.sort_order),
-      primaryPickupRequestId: null,
-      reasonDetail: dropDetail,
-      reason: formatDispatchRecommendationReason(dropDetail, locale, ""),
-      requestsToPickup: [],
-      requestsToDropoff: dropoffs,
-      suggestedDirection: travelDir,
-      capacityWarnings: [],
-    };
+    if (nearest) {
+      const dropSort = Number(nearest.to_sort_order);
+      const dropFloor = floors.find((f) => Number(f.sort_order) === dropSort) ?? currentFloor;
+      const dropoffs = boardedSource.filter((p) => Number(p.to_sort_order) === dropSort);
+      const passengers = dropoffs.reduce((s, p) => s + p.passenger_count, 0);
+      const dropDetail: { kind: "dropoff_before_pickups"; passengers: number } = {
+        kind: "dropoff_before_pickups",
+        passengers,
+      };
+      const travelDir: Direction =
+        dropSort > currentSort ? "up" : dropSort < currentSort ? "down" : "idle";
+      visibleRecommendation = {
+        ...recommendation,
+        nextFloor: dropFloor,
+        nextFloorSortOrder: Number(dropFloor.sort_order),
+        primaryPickupRequestId: null,
+        reasonDetail: dropDetail,
+        reason: formatDispatchRecommendationReason(dropDetail, locale, ""),
+        requestsToPickup: [],
+        requestsToDropoff: dropoffs,
+        suggestedDirection: travelDir,
+        capacityWarnings: [],
+      };
+    }
   }
-  if (!hasOperatorWork) {
+  // ── PAUSE INTERDICT (hasOperatorWork guard) ──────────────────────────────
+  // Also prevent idle_empty PAUSE when optimistic boarded requests exist
+  // but poll/realtime haven't caught up yet.
+  const realHasOperatorWork = activeQueue.length > 0 || hasAnyBoardedWork;
+  if (!realHasOperatorWork) {
+    // ── DEBUG: PAUSE diagnostic ────────────────────────────────────────────
+    if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+      console.warn("[PAUSE-DIAG]", {
+        reason: "idle_empty",
+        activeQueueLen: activeQueue.length,
+        hasBoardedPassengers,
+        hasOptimisticBoarded: hasOptimisticBoardedRequests(),
+        liveRequestsLen: liveRequests.filter(r => r.elevator_id === elevator.id).length,
+        liveRequestsStatuses: liveRequests.filter(r => r.elevator_id === elevator.id).map(r => r.status),
+        elevatorDir: elevator.direction,
+        elevatorLoad: elevator.current_load,
+        elevatorFloorId: elevator.current_floor_id,
+        sessionId: elevator.operator_session_id,
+        heartbeatAt: elevator.operator_session_heartbeat_at,
+        now: new Date().toISOString(),
+      });
+    }
     const idleDetail = { kind: "idle_empty" as const };
     visibleRecommendation = {
       ...recommendation,

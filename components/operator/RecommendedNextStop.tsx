@@ -117,10 +117,30 @@ export function RecommendedNextStop({
   }, [actionRequests, pendingPickupIds, recommendation.primaryPickupRequestId]);
 
   const showDropoff = dropoffIds.length > 0 && dropFloorId !== "";
+  // Combined: if dropoff floor equals pickup floor, show one button for both
+  const pickupAtDropFloor = showDropoff && actionRequest !== null &&
+    actionRequest.from_floor_id === dropFloorId;
   const showPickup = !showDropoff && actionRequest !== null;
+  const showCombined = showDropoff && pickupAtDropFloor;
   const showPrimaryAction = showDropoff || showPickup;
 
-  const actionButton = showDropoff ? (
+  const actionButton = showCombined ? (
+    <button
+      type="button"
+      onClick={dropoffAndPickup}
+      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(16,185,129,0.42)] ring-4 ring-teal-100/40 transition active:scale-[0.98]"
+    >
+      <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.55),transparent)] opacity-70 motion-safe:animate-[action-shine_1.45s_ease-in-out_infinite]" />
+      <span className="relative flex w-full flex-col items-center justify-center gap-1">
+        <span className="flex w-full items-center justify-center gap-4 text-4xl font-black uppercase tracking-wide">
+          <DoorOpen size={36} strokeWidth={2.8} />
+          <span>+</span>
+          <UserCheck size={36} strokeWidth={2.8} />
+        </span>
+        <span className="text-lg font-black uppercase tracking-wide">{t("operator.dropoffAndPickup")}</span>
+      </span>
+    </button>
+  ) : showDropoff ? (
     <button
       type="button"
       onClick={dropoff}
@@ -179,6 +199,19 @@ export function RecommendedNextStop({
 
     const targetRequest = actionRequest;
     setActionError(null);
+    // ── DEBUG: Ramasser diagnostic ──
+    if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+      console.log("[RAMASSER]", {
+        requestId,
+        fromFloor: targetRequest.from_floor_id,
+        toFloor: targetRequest.to_floor_id,
+        oldStatus: targetRequest.status,
+        newStatus: "boarded",
+        passengerCount: targetRequest.passenger_count,
+        operatorElevatorId,
+        timestamp: new Date().toISOString(),
+      });
+    }
     setPendingPickupIds((current) => new Set(current).add(requestId));
     onPickupSuccess?.(targetRequest);
 
@@ -256,6 +289,92 @@ export function RecommendedNextStop({
           for (const id of ids) next.delete(id);
           return next;
         });
+      });
+  }
+
+  function dropoffAndPickup() {
+    // Combined action: first dropoff, then pickup — one click for same-floor actions.
+    // Order: Déposer (dropoff) first, then Ramasser (pickup).
+    // Dropoff completes the boarded passengers; pickup boards the waiting ones.
+
+    // 1. Dropoff
+    const ids = dropoffIds;
+    if (ids.length === 0 || !dropFloorId) return;
+
+    setActionError(null);
+    setPendingDropoffIds((current) => {
+      const next = new Set(current);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+    setCompletedDropoffIds((current) => {
+      const next = new Set(current);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+    onDropoffSuccess?.({ requestIds: ids, dropFloorId });
+
+    // 2. Pickup — optimistically update immediately
+    const targetRequest = actionRequest;
+    if (targetRequest) {
+      const requestId = targetRequest.id;
+      setPendingPickupIds((current) => new Set(current).add(requestId));
+      onPickupSuccess?.(targetRequest);
+    }
+
+    // 3. Fire both server actions in parallel
+    const dropoffPromises = ids.map((requestId) => advanceRequestStatus(requestId, "completed"));
+    const pickupPromise = targetRequest
+      ? advanceRequestStatus(targetRequest.id, "boarded", { assignElevatorId: operatorElevatorId })
+      : Promise.resolve({ ok: true, message: "" });
+
+    void Promise.all([...dropoffPromises, pickupPromise])
+      .then((results) => {
+        // Check for dropoff failures
+        const dropoffResults = results.slice(0, ids.length);
+        const dropoffFailed = dropoffResults.find((result) => !result.ok);
+        if (dropoffFailed) {
+          setActionError(dropoffFailed.message);
+          setCompletedDropoffIds((current) => {
+            const next = new Set(current);
+            for (const id of ids) next.delete(id);
+            return next;
+          });
+          onDropoffFailure?.({ requestIds: ids });
+        }
+
+        // Check for pickup failure
+        const pickupResult = results[ids.length];
+        if (pickupResult && !pickupResult.ok) {
+          setActionError(pickupResult.message);
+          if (targetRequest) onPickupFailure?.(targetRequest);
+        } else if (pickupResult && pickupResult.ok && targetRequest) {
+          onPickupConfirmed?.(targetRequest);
+        }
+      })
+      .catch(() => {
+        setActionError("Action impossible. Verifiez la connexion et reessayez.");
+        setCompletedDropoffIds((current) => {
+          const next = new Set(current);
+          for (const id of ids) next.delete(id);
+          return next;
+        });
+        onDropoffFailure?.({ requestIds: ids });
+        if (targetRequest) onPickupFailure?.(targetRequest);
+      })
+      .finally(() => {
+        setPendingDropoffIds((current) => {
+          const next = new Set(current);
+          for (const id of ids) next.delete(id);
+          return next;
+        });
+        if (targetRequest) {
+          setPendingPickupIds((current) => {
+            const next = new Set(current);
+            next.delete(targetRequest.id);
+            return next;
+          });
+        }
       });
   }
 
