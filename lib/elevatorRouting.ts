@@ -74,6 +74,42 @@ export function effectiveServiceDirection(
   return nearest > cur ? "up" : nearest < cur ? "down" : "idle";
 }
 
+/**
+ * Infers service direction from assigned requests (pending pickup) + boarded passengers.
+ * Used by scoring to detect same-direction/on-route even before pickup.
+ */
+export function inferredDirectionFromQueue(
+  currentSortOrder: number,
+  elevatorDirection: Direction,
+  activePassengers: ActivePassenger[],
+  queuedRequests: Array<{ from_sort_order: number; to_sort_order: number; status: string }>,
+): Direction {
+  // First try existing logic with boarded passengers
+  const fromBoarded = effectiveServiceDirection(currentSortOrder, elevatorDirection, activePassengers);
+  if (fromBoarded !== "idle") return fromBoarded;
+
+  // If idle, infer from queued (assigned/pending) requests
+  const cur = Number(currentSortOrder);
+  const destinations: number[] = [];
+  for (const r of queuedRequests) {
+    if (r.status === "assigned" || r.status === "pending" || r.status === "arriving") {
+      const from = Number(r.from_sort_order);
+      const to = Number(r.to_sort_order);
+      if (to !== cur) destinations.push(to);
+      if (from !== cur) destinations.push(from);
+    }
+  }
+  if (destinations.length === 0) return "idle";
+  const above = destinations.filter((t) => t > cur);
+  const below = destinations.filter((t) => t < cur);
+  if (above.length > 0 && below.length === 0) return "up";
+  if (below.length > 0 && above.length === 0) return "down";
+  const nearest = destinations.reduce((best, t) =>
+    Math.abs(t - cur) < Math.abs(best - cur) ? t : best,
+  );
+  return nearest > cur ? "up" : nearest < cur ? "down" : "idle";
+}
+
 /** Prochain arrêt cabine (SCAN discret) dans le sens effectif, puis retournement. */
 export function nextBoardedDropoffSortOrder(
   currentSortOrder: number,

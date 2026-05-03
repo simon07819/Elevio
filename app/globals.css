@@ -265,6 +265,7 @@ textarea {
   .qr-print-sheet {
     width: 100%;
     min-height: 0 !important;
+    height: auto !important;
     background: white !important;
     color: #020617 !important;
   }
@@ -278,6 +279,8 @@ textarea {
   .qr-poster-grid {
     display: block !important;
     width: 100%;
+    min-height: 0 !important;
+    height: auto !important;
   }
 
   .qr-brand-footer-row {

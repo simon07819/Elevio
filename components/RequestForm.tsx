@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Clock, Loader2, Navigation, Send, ShieldAlert, UserCheck, Users, XCircle } from "lucide-react";
 import { createPassengerRequest, resumePassengerRequest, updateRequestStatus } from "@/lib/actions";
@@ -11,6 +11,7 @@ import { useNetworkStatus } from "@/lib/useNetworkStatus";
 import {
   PASSENGER_BROADCAST_QUEUE_CLEARED,
   PASSENGER_BROADCAST_REQUEST_BOARDED,
+  PASSENGER_BROADCAST_REQUEST_CANCELLED,
   passengerProjectBroadcastChannel,
 } from "@/lib/passengerNotifyBroadcast";
 import { subscribeToTable, unsubscribe, type ElevatorRealtimePayload } from "@/lib/realtime";
@@ -123,6 +124,22 @@ export function RequestForm({
   const { t } = useLanguage();
   const prioritiesEnabled = project.priorities_enabled !== false;
   const capacityEnabled = project.capacity_enabled !== false;
+  // Pre-subscribed passenger broadcast channel for instant QR reset on pickup.
+  const passengerBroadcastRef = useRef<{ channel: unknown; ready: boolean } | null>(null);
+  useEffect(() => {
+    const client = createClient();
+    if (!client) return;
+    const ch = client.channel(passengerProjectBroadcastChannel(project.id));
+    const ref = { channel: ch, ready: false };
+    ch.subscribe((status: string) => {
+      if (status === "SUBSCRIBED") ref.ready = true;
+    });
+    passengerBroadcastRef.current = ref;
+    return () => {
+      client.removeChannel(ch);
+      passengerBroadcastRef.current = null;
+    };
+  }, [project.id]);
   const passengerMax = useMemo(
     () => maxPassengerPartySize(capacityEnabled, liveElevators),
     [capacityEnabled, liveElevators],
@@ -319,8 +336,14 @@ export function RequestForm({
       return;
     }
 
-    const channel = client
-      .channel(passengerProjectBroadcastChannel(project.id))
+    // Use pre-subscribed channel for instant delivery (already subscribed).
+    // If not available, fall back to creating a new channel.
+    const preSubbed = passengerBroadcastRef.current;
+    const channel = (preSubbed?.channel && preSubbed.ready)
+      ? preSubbed.channel as ReturnType<typeof client.channel>
+      : client.channel(passengerProjectBroadcastChannel(project.id));
+
+    const unsub = channel
       .on(
         "broadcast",
         { event: PASSENGER_BROADCAST_QUEUE_CLEARED },
@@ -330,7 +353,6 @@ export function RequestForm({
           if (!ids?.includes(rid)) {
             return;
           }
-          // Operator cleared queue — passenger stays in flow, can select a new floor
           clearPassengerPendingRequest(project.id, rid);
           setSubmittedRequest(null);
           setMessage(t("request.cancelled"));
@@ -349,12 +371,32 @@ export function RequestForm({
           setSubmittedRequest(null);
           router.replace("/");
         },
+      )
+      .on(
+        "broadcast",
+        { event: PASSENGER_BROADCAST_REQUEST_CANCELLED },
+        (msg: { payload?: { requestIds?: string[] } | string[] }) => {
+          const raw = msg.payload;
+          const ids = Array.isArray(raw) ? raw : raw?.requestIds;
+          if (!ids?.includes(rid)) {
+            return;
+          }
+          clearPassengerPendingRequest(project.id, rid);
+          setSubmittedRequest(null);
+          setMessage(t("request.cancelledByOperator"));
+        },
       );
 
-    channel.subscribe();
+    // Only subscribe if using a new channel (pre-subscribed is already listening)
+    if (!preSubbed?.ready) {
+      channel.subscribe();
+    }
 
     return () => {
-      client.removeChannel(channel);
+      // Only remove channel if we created it (not the pre-subscribed one)
+      if (!preSubbed?.ready) {
+        client.removeChannel(channel);
+      }
     };
   }, [submittedRequest?.requestId, project.id, router]);
 
@@ -536,6 +578,9 @@ export function RequestForm({
                         ? t("request.statusBoarded")
                         : t("request.statusPending")}
             </h2>
+            {liveDispatch.canDispatch && submittedRequest.status === "pending" && (
+              <p className="mt-3 text-base font-bold leading-7">{t("request.sentBody")}</p>
+            )}
           </div>
 
           <div className="rounded-[1.5rem] border-2 border-slate-100 bg-slate-50 p-4">

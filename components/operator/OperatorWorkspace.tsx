@@ -14,7 +14,9 @@ import { createClient } from "@/lib/supabase/client";
 import { bindRealtimeWithAuthSession, subscribeToTable, type ElevatorRealtimePayload } from "@/lib/realtime";
 import {
   OPERATOR_BROADCAST_ELEVATOR_SESSION_CLEARED,
+  OPERATOR_BROADCAST_ELEVATOR_SESSION_ACTIVATED,
   broadcastOperatorElevatorSessionCleared,
+  broadcastOperatorElevatorSessionActivated,
   operatorProjectBroadcastChannel,
 } from "@/lib/operatorNotifyBroadcast";
 import { broadcastPassengerQueueCleared } from "@/lib/passengerNotifyBroadcast";
@@ -153,6 +155,30 @@ export function OperatorWorkspace({
   const mergeWithLocalClaim = useCallback(
     (current: Elevator[], incoming: Elevator[]) => {
       let merged = mergeElevatorRows(current, incoming);
+
+      // Invalidate stale local claim: if the server shows our claimed elevator
+      // with a different session (or null), our claim is stale — clear it immediately.
+      // This prevents iPad B from re-injecting a ghost session after iPad A released.
+      if (localClaimActive && localSessionClaim.elevatorId) {
+        const claimed = merged.find((e) => e.id === localSessionClaim.elevatorId);
+        if (claimed && claimed.operator_session_id && claimed.operator_session_id !== sessionId) {
+          // Another session owns this elevator — our claim is stale, invalidate immediately
+          try { window.localStorage.removeItem(elevatorStorageKey(project.id)); } catch { /* ignore */ }
+          // Use flushSync to clear claim before the next render uses stale data
+          flushSync(() => {
+            setLocalSessionClaim({ elevatorId: null, updatedAt: Date.now() });
+            setSelectedElevatorId(null);
+          });
+          // Re-merge without the now-invalid claim
+          return merged;
+        }
+        if (claimed && !claimed.operator_session_id && !locallyReleasedElevatorIds.has(claimed.id)) {
+          // Server shows no session on our claimed elevator, and we didn't just release it.
+          // Only inject our claim if we're in the 15-second activation window.
+          // This covers the legitimate optimistic activation case.
+        }
+      }
+
       if (locallyReleasedElevatorIds.size > 0) {
         merged = merged.map((elevator) =>
           locallyReleasedElevatorIds.has(elevator.id) && elevator.operator_session_id === sessionId
@@ -180,7 +206,7 @@ export function OperatorWorkspace({
   );
 
   useEffect(() => {
-    const id = window.setInterval(() => setOperatorClockMs(Date.now()), 15_000);
+    const id = window.setInterval(() => setOperatorClockMs(Date.now()), 5_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -318,6 +344,30 @@ export function OperatorWorkspace({
             );
           },
         )
+        .on(
+          "broadcast",
+          { event: OPERATOR_BROADCAST_ELEVATOR_SESSION_ACTIVATED },
+          (msg: { payload?: { elevatorId?: string } }) => {
+            const elevatorId = msg.payload?.elevatorId;
+            if (!elevatorId || typeof elevatorId !== "string") {
+              return;
+            }
+            // Force an immediate refetch to get the latest session data
+            // (the broadcast only carries elevatorId — we need the full row from the server)
+            void (async () => {
+              if (!client) return;
+              const { data } = await client
+                .from("elevators")
+                .select("*")
+                .eq("id", elevatorId)
+                .eq("project_id", project.id)
+                .maybeSingle();
+              if (data) {
+                setLocalElevators((current) => mergeWithLocalClaim(current, [data as Elevator]));
+              }
+            })();
+          },
+        )
         .subscribe();
       return channel;
     });
@@ -390,6 +440,7 @@ export function OperatorWorkspace({
     window.localStorage.setItem(elevatorStorageKey(project.id), elevator.id);
     setSelectedElevatorId(elevator.id);
     setLocalSessionClaim({ elevatorId: elevator.id, updatedAt: nowMs });
+    setOperatorClockMs(nowMs);
     setLocallyReleasedElevatorIds((current) => {
       if (!current.has(elevator.id)) return current;
       const next = new Set(current);
@@ -451,6 +502,10 @@ export function OperatorWorkspace({
           operatorDisplayName,
         );
         setMessage(result.ok ? null : result.message);
+        if (result.ok) {
+          const client = createClient();
+          if (client) broadcastOperatorElevatorSessionActivated(client, project.id, elevator.id);
+        }
 
         if (!result.ok) {
           const rollbackMs = Date.parse(new Date().toISOString());
@@ -514,6 +569,7 @@ export function OperatorWorkspace({
     setLocalSessionClaim({ elevatorId: null, updatedAt: releaseMs });
     setLocallyReleasedElevatorIds((current) => new Set(current).add(releasingElevator.id));
     setMessage(null);
+    setOperatorClockMs(Date.now());
     setReleasingElevatorId(releasingElevator.id);
     setLocalElevators((current) =>
       current.map((item) =>
@@ -701,7 +757,10 @@ export function OperatorWorkspace({
             const heartbeatStale = isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at, effectiveNowMs);
             const lockActive = heldByOtherSession && !heartbeatStale;
             const locked = lockActive;
+            // After release, our own stale session should show "Activer", not "Reprendre"
+            const justReleased = locallyReleasedElevatorIds.has(elevator.id);
             const staleOtherBinding =
+              !justReleased &&
               heldByOtherSession &&
               heartbeatStale &&
               elevatorHasOperatorTabletBinding(elevator);
@@ -742,9 +801,38 @@ export function OperatorWorkspace({
                 </div>
 
                 {staleOtherBinding ? (
-                  <p className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-50">
-                    {t("operator.sessionInactiveHint")}
-                  </p>
+                  <>
+                    <p className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-50">
+                      {t("operator.sessionInactiveHint")}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch("/api/operator/force-release", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ projectId: project.id, elevatorId: elevator.id }),
+                          });
+                          if (res.ok) {
+                            setLocalElevators((prev) =>
+                              prev.map((e) => (e.id === elevator.id ? clearOperatorSessionFields(e) : e)),
+                            );
+                            const client = createClient();
+                            if (client) broadcastOperatorElevatorSessionCleared(client, project.id, elevator.id);
+                            setMessage(t("operator.releaseSuccess"));
+                          } else {
+                            setMessage(t("operator.releaseFailed"));
+                          }
+                        } catch {
+                          setMessage(t("operator.releaseFailed"));
+                        }
+                      }}
+                      className="mt-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-black text-red-200 hover:bg-red-500/20"
+                    >
+                      {t("operator.forceRelease")}
+                    </button>
+                  </>
                 ) : null}
 
                 <label className="mt-4 grid gap-2 text-sm font-black text-slate-200">
