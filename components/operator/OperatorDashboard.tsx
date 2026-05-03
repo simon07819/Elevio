@@ -10,7 +10,7 @@ import {
   enrichRequests,
 } from "@/lib/demoData";
 import { createClient } from "@/lib/supabase/client";
-import { broadcastPassengerQueueCleared, broadcastPassengerRequestBoarded } from "@/lib/passengerNotifyBroadcast";
+import { broadcastPassengerQueueCleared, broadcastPassengerRequestBoarded, passengerProjectBroadcastChannel } from "@/lib/passengerNotifyBroadcast";
 import {
   bindRealtimeWithAuthSession,
   mergeOperatorPollRequest,
@@ -72,6 +72,8 @@ export function OperatorDashboard({
   const manualFullDesiredRef = useRef<boolean | null>(null);
   const manualFullSyncingRef = useRef(false);
   const optimisticRequestsRef = useRef<Map<string, { request: HoistRequest; expiresAt: number }>>(new Map());
+  // Persistent broadcast channel — pre-subscribed so passenger QR reset is near-instant.
+  const broadcastChannelRef = useRef<{ channel: unknown; ready: boolean } | null>(null);
 
   function rememberOptimisticRequest(request: HoistRequest) {
     optimisticRequestsRef.current.set(request.id, {
@@ -115,6 +117,23 @@ export function OperatorDashboard({
         },
       }),
     );
+  }, [projectId]);
+
+  // Pre-subscribe to the passenger broadcast channel so that when the operator
+  // confirms a pickup, the broadcast is sent immediately (no 500ms–5s subscribe wait).
+  useEffect(() => {
+    const client = createClient();
+    if (!client) return;
+    const ch = client.channel(passengerProjectBroadcastChannel(projectId));
+    let ready = false;
+    ch.subscribe((status: string) => {
+      if (status === "SUBSCRIBED") ready = true;
+    });
+    broadcastChannelRef.current = { channel: ch, ready };
+    return () => {
+      client.removeChannel(ch);
+      broadcastChannelRef.current = null;
+    };
   }, [projectId]);
 
   useEffect(() => {
@@ -398,7 +417,17 @@ export function OperatorDashboard({
           return;
         }
 
-        broadcastPassengerQueueCleared(client, projectId, clearedIds);
+        // Use persistent broadcast channel for faster delivery.
+        const ref = broadcastChannelRef.current;
+        if (ref?.channel && typeof (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send === "function") {
+          void (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send({
+            type: "broadcast",
+            event: "queue_cleared",
+            payload: { requestIds: clearedIds },
+          });
+        } else {
+          broadcastPassengerQueueCleared(client, projectId, clearedIds);
+        }
       } finally {
         setIsClearingQueue(false);
       }
@@ -668,9 +697,20 @@ export function OperatorDashboard({
           });
         }}
         onPickupConfirmed={(req) => {
-          const client = createClient();
-          if (client) {
-            broadcastPassengerRequestBoarded(client, projectId, [req.id]);
+          // Use persistent broadcast channel (already subscribed) for near-instant delivery.
+          const ref = broadcastChannelRef.current;
+          if (ref?.channel && typeof (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send === "function") {
+            void (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send({
+              type: "broadcast",
+              event: "request_boarded",
+              payload: { requestIds: [req.id] },
+            });
+          } else {
+            // Fallback: create a one-shot channel (slower but still works)
+            const client = createClient();
+            if (client) {
+              broadcastPassengerRequestBoarded(client, projectId, [req.id]);
+            }
           }
         }}
         onDropoffSuccess={({ requestIds, dropFloorId }) => {
