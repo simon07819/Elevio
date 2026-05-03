@@ -19,7 +19,7 @@ export function PassengerRequestShell({
   return (
     <>
       <header className="mb-5 flex shrink-0 items-center justify-between gap-3">
-        <BrandLogo size="sm" tone="light" priority />
+        <BrandLogo size="sm" tone="light" priority clickable />
         <div className="flex shrink-0 items-center gap-2">
           <LanguageSwitcher light />
         </div>
