@@ -14,8 +14,10 @@ import { createClient } from "@/lib/supabase/client";
 import { bindRealtimeWithAuthSession, subscribeToTable, type ElevatorRealtimePayload } from "@/lib/realtime";
 import {
   OPERATOR_BROADCAST_ELEVATOR_SESSION_CLEARED,
+  broadcastOperatorElevatorSessionCleared,
   operatorProjectBroadcastChannel,
 } from "@/lib/operatorNotifyBroadcast";
+import { broadcastPassengerQueueCleared } from "@/lib/passengerNotifyBroadcast";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { formatFloorLabel } from "@/lib/utils";
 import { ServiceTimePicker } from "@/components/ServiceTimePicker";
@@ -374,8 +376,8 @@ export function OperatorWorkspace({
   }, [project.id, selectedElevator, sessionId]);
 
   function handleActivate(elevator: Elevator, formData: FormData) {
-    // Guard: don't start if another operation is already in progress
-    if (activatingElevatorId || releasingElevatorId) return;
+    // Guard: don't start if this same elevator is already being activated/released
+    if (activatingElevatorId === elevator.id || releasingElevatorId === elevator.id) return;
     const currentFloorId = String(formData.get("currentFloorId") ?? "");
     const serviceStart = String(formData.get("serviceStart") ?? "");
     const serviceEnd = String(formData.get("serviceEnd") ?? "");
@@ -502,8 +504,8 @@ export function OperatorWorkspace({
     if (!selectedElevator) {
       return;
     }
-    // Guard: don't release if another operation is already in progress
-    if (activatingElevatorId || releasingElevatorId) return;
+    // Guard: don't release if this same elevator is being activated/released
+    if (activatingElevatorId === selectedElevator.id || releasingElevatorId === selectedElevator.id) return;
 
     const releasingElevator = selectedElevator;
     const releaseMs = Date.parse(new Date().toISOString());
@@ -559,6 +561,18 @@ export function OperatorWorkspace({
                 : item,
             ),
           );
+        } else {
+          // Broadcast release to other operators and passengers for near-instant sync.
+          const client = createClient();
+          if (client) {
+            broadcastOperatorElevatorSessionCleared(client, project.id, releasingElevator.id);
+            const releasedRequestIds = requests
+              .filter((r) => r.elevator_id === releasingElevator.id && r.status !== "completed" && r.status !== "cancelled")
+              .map((r) => r.id);
+            if (releasedRequestIds.length > 0) {
+              broadcastPassengerQueueCleared(client, project.id, releasedRequestIds);
+            }
+          }
         }
       } catch {
         const rollbackMs = Date.parse(new Date().toISOString());

@@ -105,14 +105,14 @@ test("tablet-toggle: release sets releasingElevatorId=null in finally", () => {
 // ---------------------------------------------------------------------------
 // 6. Rapid clicks activate/release → guard prevents impossible state
 // ---------------------------------------------------------------------------
-test("tablet-toggle: handleActivate and release guard against concurrent ops", () => {
+test("tablet-toggle: handleActivate and release guard against concurrent ops on same elevator", () => {
   const workspace = readFileSync(join(root, "components/operator/OperatorWorkspace.tsx"), "utf8");
-  // handleActivate checks guard
-  assert.match(workspace, /if \(activatingElevatorId \|\| releasingElevatorId\) return/);
-  // release checks guard
-  const releaseFn = workspace.match(/function release\(\)[\s\S]{0,300}/);
+  // handleActivate checks guard (narrowed to same elevator)
+  assert.match(workspace, /activatingElevatorId === elevator\.id \|\| releasingElevatorId === elevator\.id/);
+  // release checks guard (narrowed to same elevator)
+  const releaseFn = workspace.match(/function release\(\)[\s\S]{0,400}/);
   assert.ok(releaseFn, "release function exists");
-  assert.ok(releaseFn![0].includes("activatingElevatorId || releasingElevatorId"), "release has concurrent guard");
+  assert.ok(releaseFn![0].includes("=== selectedElevator.id"), "release has narrow concurrent guard per elevator");
   // activate button disabled during operation
   assert.match(workspace, /disabled=\{locked \|\| isActivatingThisElevator\}/);
   // release button disabled during operation
