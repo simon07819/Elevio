@@ -131,14 +131,17 @@ export function OperatorDashboard({
     const client = createClient();
     if (!client) return;
     const ch = client.channel(passengerProjectBroadcastChannel(projectId));
-    let ready = false;
+    broadcastChannelRef.current = { channel: ch, ready: false };
     ch.subscribe((status: string) => {
-      if (status === "SUBSCRIBED") ready = true;
+      if (status === "SUBSCRIBED" && broadcastChannelRef.current?.channel === ch) {
+        broadcastChannelRef.current = { channel: ch, ready: true };
+      }
     });
-    broadcastChannelRef.current = { channel: ch, ready };
     return () => {
       client.removeChannel(ch);
-      broadcastChannelRef.current = null;
+      if (broadcastChannelRef.current?.channel === ch) {
+        broadcastChannelRef.current = null;
+      }
     };
   }, [projectId]);
 
@@ -438,9 +441,9 @@ export function OperatorDashboard({
           return;
         }
 
-        // Use persistent broadcast channel for faster delivery.
+        // Use persistent broadcast channel if ready for faster delivery.
         const ref = broadcastChannelRef.current;
-        if (ref?.channel && typeof (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send === "function") {
+        if (ref?.ready && ref.channel && typeof (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send === "function") {
           void (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send({
             type: "broadcast",
             event: "queue_cleared",
@@ -718,16 +721,17 @@ export function OperatorDashboard({
           });
         }}
         onPickupConfirmed={(req) => {
-          // Use persistent broadcast channel (already subscribed) for near-instant delivery.
+          // Use persistent broadcast channel if ready (subscribed) for near-instant delivery.
+          // If not ready yet, fall back to one-shot channel (subscribe-then-send).
           const ref = broadcastChannelRef.current;
-          if (ref?.channel && typeof (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send === "function") {
+          if (ref?.ready && ref.channel && typeof (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send === "function") {
             void (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send({
               type: "broadcast",
               event: "request_boarded",
               payload: { requestIds: [req.id] },
             });
           } else {
-            // Fallback: create a one-shot channel (slower but still works)
+            // Fallback: subscribe-then-send (slower but guaranteed to work)
             const client = createClient();
             if (client) {
               broadcastPassengerRequestBoarded(client, projectId, [req.id]);
