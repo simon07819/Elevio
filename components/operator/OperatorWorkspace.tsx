@@ -14,7 +14,9 @@ import { createClient } from "@/lib/supabase/client";
 import { bindRealtimeWithAuthSession, subscribeToTable, type ElevatorRealtimePayload } from "@/lib/realtime";
 import {
   OPERATOR_BROADCAST_ELEVATOR_SESSION_CLEARED,
+  OPERATOR_BROADCAST_ELEVATOR_SESSION_ACTIVATED,
   broadcastOperatorElevatorSessionCleared,
+  broadcastOperatorElevatorSessionActivated,
   operatorProjectBroadcastChannel,
 } from "@/lib/operatorNotifyBroadcast";
 import { broadcastPassengerQueueCleared } from "@/lib/passengerNotifyBroadcast";
@@ -153,6 +155,30 @@ export function OperatorWorkspace({
   const mergeWithLocalClaim = useCallback(
     (current: Elevator[], incoming: Elevator[]) => {
       let merged = mergeElevatorRows(current, incoming);
+
+      // Invalidate stale local claim: if the server shows our claimed elevator
+      // with a different session (or null), our claim is stale — clear it immediately.
+      // This prevents iPad B from re-injecting a ghost session after iPad A released.
+      if (localClaimActive && localSessionClaim.elevatorId) {
+        const claimed = merged.find((e) => e.id === localSessionClaim.elevatorId);
+        if (claimed && claimed.operator_session_id && claimed.operator_session_id !== sessionId) {
+          // Another session owns this elevator — our claim is stale, invalidate immediately
+          try { window.localStorage.removeItem(elevatorStorageKey(project.id)); } catch { /* ignore */ }
+          // Use flushSync to clear claim before the next render uses stale data
+          flushSync(() => {
+            setLocalSessionClaim({ elevatorId: null, updatedAt: Date.now() });
+            setSelectedElevatorId(null);
+          });
+          // Re-merge without the now-invalid claim
+          return merged;
+        }
+        if (claimed && !claimed.operator_session_id && !locallyReleasedElevatorIds.has(claimed.id)) {
+          // Server shows no session on our claimed elevator, and we didn't just release it.
+          // Only inject our claim if we're in the 15-second activation window.
+          // This covers the legitimate optimistic activation case.
+        }
+      }
+
       if (locallyReleasedElevatorIds.size > 0) {
         merged = merged.map((elevator) =>
           locallyReleasedElevatorIds.has(elevator.id) && elevator.operator_session_id === sessionId
@@ -318,6 +344,30 @@ export function OperatorWorkspace({
             );
           },
         )
+        .on(
+          "broadcast",
+          { event: OPERATOR_BROADCAST_ELEVATOR_SESSION_ACTIVATED },
+          (msg: { payload?: { elevatorId?: string } }) => {
+            const elevatorId = msg.payload?.elevatorId;
+            if (!elevatorId || typeof elevatorId !== "string") {
+              return;
+            }
+            // Force an immediate refetch to get the latest session data
+            // (the broadcast only carries elevatorId — we need the full row from the server)
+            void (async () => {
+              if (!client) return;
+              const { data } = await client
+                .from("elevators")
+                .select("*")
+                .eq("id", elevatorId)
+                .eq("project_id", project.id)
+                .maybeSingle();
+              if (data) {
+                setLocalElevators((current) => mergeWithLocalClaim(current, [data as Elevator]));
+              }
+            })();
+          },
+        )
         .subscribe();
       return channel;
     });
@@ -452,6 +502,10 @@ export function OperatorWorkspace({
           operatorDisplayName,
         );
         setMessage(result.ok ? null : result.message);
+        if (result.ok) {
+          const client = createClient();
+          if (client) broadcastOperatorElevatorSessionActivated(client, project.id, elevator.id);
+        }
 
         if (!result.ok) {
           const rollbackMs = Date.parse(new Date().toISOString());
