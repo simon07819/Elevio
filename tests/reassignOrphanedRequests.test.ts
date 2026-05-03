@@ -84,16 +84,17 @@ test("reassign: elevator_id updated via assignRequestToBestElevator scoring", ()
 });
 
 // ---------------------------------------------------------------------------
-// 4. Boarded request NOT reassigned (ORPHAN_REASSIGN_STATUSES excludes boarded)
+// 4. Boarded request IS reassigned (ORPHAN_REASSIGN_STATUSES includes boarded)
+//    Another operator can drop off boarded passengers.
 // ---------------------------------------------------------------------------
-test("reassign: ORPHAN_REASSIGN_STATUSES excludes boarded/completed/cancelled", () => {
+test("reassign: ORPHAN_REASSIGN_STATUSES includes boarded, excludes completed/cancelled", () => {
   const actions = readFileSync(join(root, "lib/actions.ts"), "utf8");
   const match = actions.match(/ORPHAN_REASSIGN_STATUSES[^;]+;/);
   assert.ok(match, "ORPHAN_REASSIGN_STATUSES defined");
   assert.ok(match![0].includes("pending"), "includes pending");
   assert.ok(match![0].includes("assigned"), "includes assigned");
   assert.ok(match![0].includes("arriving"), "includes arriving");
-  assert.ok(!match![0].includes("boarded"), "excludes boarded");
+  assert.ok(match![0].includes("boarded"), "includes boarded — another operator can drop off");
   assert.ok(!match![0].includes("completed"), "excludes completed");
   assert.ok(!match![0].includes("cancelled"), "excludes cancelled");
 });

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { reassignOrphanedRequestsToActiveOperator } from "@/lib/actions";
 
 const TABLET_SESSION_FIELDS_CLEAR = {
   operator_session_id: null,
@@ -19,11 +20,20 @@ function isMissingOperatorDisplayNameColumn(error: { message: string }) {
   return error.message?.includes("operator_display_name");
 }
 
+function isMissingManualFullColumn(error: { message: string }) {
+  return error.message?.includes("manual_full");
+}
+
 /**
  * POST /api/operator/force-release
  *
  * Force-releases an operator session on an elevator.
  * Used when the session is corrupted or the operator cannot release normally.
+ *
+ * After clearing the session:
+ * - Resets elevator state (current_load, direction, manual_full)
+ * - Reassigns orphaned requests to other active operators (including boarded)
+ * - Cancels remaining requests if no operator is available
  *
  * Body: { projectId, elevatorId }
  */
@@ -76,12 +86,50 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "Cabine introuvable." }, { status: 404 });
   }
 
-  // Also reset load and direction
-  await supabase
+  // Reset elevator state: current_load, direction, manual_full
+  const stateReset: Record<string, unknown> = { current_load: 0, direction: "idle", manual_full: false };
+  const { error: stateResetError } = await supabase
     .from("elevators")
-    .update({ current_load: 0, direction: "idle" })
+    .update(stateReset)
     .eq("id", elevatorId)
     .eq("project_id", projectId);
+
+  // If manual_full column doesn't exist, retry without it
+  if (stateResetError && isMissingManualFullColumn(stateResetError)) {
+    await supabase
+      .from("elevators")
+      .update({ current_load: 0, direction: "idle" })
+      .eq("id", elevatorId)
+      .eq("project_id", projectId);
+  }
+
+  // Reassign orphaned requests to other active operators (including boarded)
+  await reassignOrphanedRequestsToActiveOperator(supabase, projectId, elevatorId);
+
+  // Cancel remaining active requests if no operator is live
+  const { data: liveElevators } = await supabase
+    .from("elevators")
+    .select("id,operator_session_id,operator_session_heartbeat_at")
+    .eq("project_id", projectId);
+
+  const hasLiveOperator = (liveElevators ?? []).some((e: { operator_session_id: string | null; operator_session_heartbeat_at: string | null }) =>
+    e.operator_session_id && e.operator_session_heartbeat_at &&
+    Date.now() - new Date(e.operator_session_heartbeat_at).getTime() < 120_000
+  );
+
+  if (!hasLiveOperator) {
+    const now = new Date().toISOString();
+    await supabase
+      .from("requests")
+      .update({
+        status: "cancelled",
+        completed_at: now,
+        updated_at: now,
+        note: "Annulee automatiquement: aucun operateur actif.",
+      })
+      .eq("project_id", projectId)
+      .in("status", ["pending", "assigned", "arriving", "boarded"]);
+  }
 
   return NextResponse.json({ ok: true, message: "Session force-liberee." });
 }

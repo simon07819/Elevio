@@ -8,6 +8,10 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "tsc -p tsconfig.test.json && node --test .test-build/tests/*.test.js",
+    "test:e2e:buttons:live": "npx playwright test --project=button-audit",
+    "test:e2e:chaos:live": "npx playwright test --project=chaos",
+    "test:e2e:50:live": "npx playwright test --project=50-scenarios",
+    "test:e2e:live": "npx playwright test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -25,6 +29,7 @@
     "react-dom": "latest"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4.2.4",
     "@types/node": "latest",
     "@types/qrcode": "latest",
