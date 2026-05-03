@@ -17,6 +17,9 @@ export const metadata: Metadata = {
   title: "Elevio",
   description: "Dispatch temps reel pour elevateurs de chantier.",
   manifest: "/manifest.webmanifest",
+  icons: {
+    apple: "/icon-192.png",
+  },
   appleWebApp: {
     capable: true,
     title: "Elevio",
@@ -29,6 +32,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
