@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { Ban, CheckCircle2, MapPin } from "lucide-react";
+import { Ban, CheckCircle2, MapPin, ShieldAlert } from "lucide-react";
 import {
   demoElevator,
   demoFloors,
@@ -37,6 +37,7 @@ import { CapacityPanel } from "@/components/operator/CapacityPanel";
 import { T, useLanguage } from "@/components/i18n/LanguageProvider";
 import { MovementBoard } from "@/components/operator/MovementBoard";
 import { RecommendedNextStop } from "@/components/operator/RecommendedNextStop";
+import { useNetworkStatus } from "@/lib/useNetworkStatus";
 
 const directionKeys = {
   idle: "direction.idle",
@@ -68,6 +69,7 @@ export function OperatorDashboard({
   const [manualFullOverride, setManualFullOverride] = useState<boolean | null>(null);
   const [cancelingRequestIds, setCancelingRequestIds] = useState<Set<string>>(() => new Set());
   const [isClearingQueue, setIsClearingQueue] = useState(false);
+  const isOnline = useNetworkStatus();
   const projectId = elevator.project_id;
   const manualFullDesiredRef = useRef<boolean | null>(null);
   const manualFullSyncingRef = useRef(false);
@@ -805,6 +807,12 @@ export function OperatorDashboard({
             {operatorActionError}
           </p>
         ) : null}
+        {!isOnline && (
+          <p className="mb-3 flex items-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-100">
+            <ShieldAlert size={16} />
+            <T k="common.offline" />
+          </p>
+        )}
 
         <MovementBoard
           requests={activeQueue}
