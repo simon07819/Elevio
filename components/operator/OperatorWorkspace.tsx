@@ -140,6 +140,9 @@ export function OperatorWorkspace({
   }));
   const [locallyReleasedElevatorIds, setLocallyReleasedElevatorIds] = useState<Set<string>>(() => new Set());
   const localElevatorsRef = useRef(localElevators);
+  /** Tracks whether the user activated another elevator after a release.
+   *  Prevents release-failure rollback from clobbering the new activation. */
+  const hasActivatedAfterReleaseRef = useRef(false);
 
   useEffect(() => {
     localElevatorsRef.current = localElevators;
@@ -180,7 +183,7 @@ export function OperatorWorkspace({
   );
 
   useEffect(() => {
-    const id = window.setInterval(() => setOperatorClockMs(Date.now()), 15_000);
+    const id = window.setInterval(() => setOperatorClockMs(Date.now()), 5_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -376,8 +379,13 @@ export function OperatorWorkspace({
   }, [project.id, selectedElevator, sessionId]);
 
   function handleActivate(elevator: Elevator, formData: FormData) {
-    // Guard: don't start if another operation is already in progress
-    if (activatingElevatorId || releasingElevatorId) return;
+    // Guard: don't start if another ACTIVATION is already in progress.
+    // Note: releasingElevatorId is NOT checked here — after an optimistic release,
+    // the user must be able to immediately activate another elevator without waiting
+    // for the server release to complete. If the release fails, the rollback checks
+    // hasActivatedAfterReleaseRef to avoid clobbering a new activation.
+    if (activatingElevatorId) return;
+    hasActivatedAfterReleaseRef.current = true;
     const currentFloorId = String(formData.get("currentFloorId") ?? "");
     const serviceStart = String(formData.get("serviceStart") ?? "");
     const serviceEnd = String(formData.get("serviceEnd") ?? "");
@@ -390,6 +398,7 @@ export function OperatorWorkspace({
     window.localStorage.setItem(elevatorStorageKey(project.id), elevator.id);
     setSelectedElevatorId(elevator.id);
     setLocalSessionClaim({ elevatorId: elevator.id, updatedAt: nowMs });
+    setOperatorClockMs(nowMs);
     setLocallyReleasedElevatorIds((current) => {
       if (!current.has(elevator.id)) return current;
       const next = new Set(current);
@@ -509,11 +518,13 @@ export function OperatorWorkspace({
 
     const releasingElevator = selectedElevator;
     const releaseMs = Date.parse(new Date().toISOString());
+    hasActivatedAfterReleaseRef.current = false;
     window.localStorage.removeItem(elevatorStorageKey(project.id));
     setSelectedElevatorId(null);
     setLocalSessionClaim({ elevatorId: null, updatedAt: releaseMs });
     setLocallyReleasedElevatorIds((current) => new Set(current).add(releasingElevator.id));
     setMessage(null);
+    setOperatorClockMs(Date.now());
     setReleasingElevatorId(releasingElevator.id);
     setLocalElevators((current) =>
       current.map((item) =>
@@ -536,8 +547,61 @@ export function OperatorWorkspace({
         const result = await releaseOperatorElevator(project.id, releasingElevator.id, sessionId);
 
         if (!result.ok) {
+          // If the user already activated another elevator after this release,
+          // don't clobber the new activation — just show the error.
+          if (hasActivatedAfterReleaseRef.current) {
+            setMessage(result.message);
+          } else {
+            const rollbackMs = Date.parse(new Date().toISOString());
+            setMessage(result.message);
+            window.localStorage.setItem(elevatorStorageKey(project.id), releasingElevator.id);
+            setSelectedElevatorId(releasingElevator.id);
+            setLocalSessionClaim({ elevatorId: releasingElevator.id, updatedAt: rollbackMs });
+            setLocallyReleasedElevatorIds((current) => {
+              const next = new Set(current);
+              next.delete(releasingElevator.id);
+              return next;
+            });
+            setLocalElevators((current) =>
+              current.map((item) =>
+                item.id === releasingElevator.id
+                  ? {
+                      ...item,
+                      operator_session_id: sessionId,
+                      operator_session_started_at: releasingElevator.operator_session_started_at ?? new Date().toISOString(),
+                      operator_session_heartbeat_at: new Date().toISOString(),
+                      operator_user_id: releasingElevator.operator_user_id,
+                      operator_tablet_label: releasingElevator.operator_tablet_label,
+                      operator_display_name: releasingElevator.operator_display_name,
+                    }
+                  : item,
+              ),
+            );
+          }
+        } else {
+          setMessage(t("operator.releaseSuccess"));
+          // Broadcast release to other operators always.
+          // Broadcast to passengers only if no other operator is available
+          // (otherwise requests were reassigned — passenger should NOT be reset).
+          const client = createClient();
+          if (client) {
+            broadcastOperatorElevatorSessionCleared(client, project.id, releasingElevator.id);
+            if (!result.hasOtherOperator) {
+              const releasedRequestIds = requests
+                .filter((r) => r.elevator_id === releasingElevator.id && r.status !== "completed" && r.status !== "cancelled")
+                .map((r) => r.id);
+              if (releasedRequestIds.length > 0) {
+                broadcastPassengerQueueCleared(client, project.id, releasedRequestIds);
+              }
+            }
+          }
+        }
+      } catch {
+        if (hasActivatedAfterReleaseRef.current) {
+          setMessage(t("operator.releaseFailed"));
+        } else {
           const rollbackMs = Date.parse(new Date().toISOString());
-          setMessage(result.message);
+          setMessage(t("operator.releaseFailed"));
           window.localStorage.setItem(elevatorStorageKey(project.id), releasingElevator.id);
           setSelectedElevatorId(releasingElevator.id);
           setLocalSessionClaim({ elevatorId: releasingElevator.id, updatedAt: rollbackMs });
@@ -561,49 +625,7 @@ export function OperatorWorkspace({
                 : item,
             ),
           );
-        } else {
-          // Broadcast release to other operators always.
-          // Broadcast to passengers only if no other operator is available
-          // (otherwise requests were reassigned — passenger should NOT be reset).
-          const client = createClient();
-          if (client) {
-            broadcastOperatorElevatorSessionCleared(client, project.id, releasingElevator.id);
-            if (!result.hasOtherOperator) {
-              const releasedRequestIds = requests
-                .filter((r) => r.elevator_id === releasingElevator.id && r.status !== "completed" && r.status !== "cancelled")
-                .map((r) => r.id);
-              if (releasedRequestIds.length > 0) {
-                broadcastPassengerQueueCleared(client, project.id, releasedRequestIds);
-              }
-            }
-          }
         }
-      } catch {
-        const rollbackMs = Date.parse(new Date().toISOString());
-        setMessage("Impossible de liberer cette tablette. Verifiez la connexion et reessayez.");
-        window.localStorage.setItem(elevatorStorageKey(project.id), releasingElevator.id);
-        setSelectedElevatorId(releasingElevator.id);
-        setLocalSessionClaim({ elevatorId: releasingElevator.id, updatedAt: rollbackMs });
-        setLocallyReleasedElevatorIds((current) => {
-          const next = new Set(current);
-          next.delete(releasingElevator.id);
-          return next;
-        });
-        setLocalElevators((current) =>
-          current.map((item) =>
-            item.id === releasingElevator.id
-              ? {
-                  ...item,
-                  operator_session_id: sessionId,
-                  operator_session_started_at: releasingElevator.operator_session_started_at ?? new Date().toISOString(),
-                  operator_session_heartbeat_at: new Date().toISOString(),
-                  operator_user_id: releasingElevator.operator_user_id,
-                  operator_tablet_label: releasingElevator.operator_tablet_label,
-                  operator_display_name: releasingElevator.operator_display_name,
-                }
-              : item,
-            ),
-        );
       } finally {
         setReleasingElevatorId(null);
       }
@@ -701,7 +723,10 @@ export function OperatorWorkspace({
             const heartbeatStale = isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at, effectiveNowMs);
             const lockActive = heldByOtherSession && !heartbeatStale;
             const locked = lockActive;
+            // After release, our own stale session should show "Activer", not "Reprendre"
+            const justReleased = locallyReleasedElevatorIds.has(elevator.id);
             const staleOtherBinding =
+              !justReleased &&
               heldByOtherSession &&
               heartbeatStale &&
               elevatorHasOperatorTabletBinding(elevator);
@@ -742,9 +767,38 @@ export function OperatorWorkspace({
                 </div>
 
                 {staleOtherBinding ? (
-                  <p className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-50">
-                    {t("operator.sessionInactiveHint")}
-                  </p>
+                  <>
+                    <p className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-50">
+                      {t("operator.sessionInactiveHint")}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch("/api/operator/force-release", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ projectId: project.id, elevatorId: elevator.id }),
+                          });
+                          if (res.ok) {
+                            setLocalElevators((prev) =>
+                              prev.map((e) => (e.id === elevator.id ? clearOperatorSessionFields(e) : e)),
+                            );
+                            const client = createClient();
+                            if (client) broadcastOperatorElevatorSessionCleared(client, project.id, elevator.id);
+                            setMessage(t("operator.releaseSuccess"));
+                          } else {
+                            setMessage(t("operator.releaseFailed"));
+                          }
+                        } catch {
+                          setMessage(t("operator.releaseFailed"));
+                        }
+                      }}
+                      className="mt-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-black text-red-200 hover:bg-red-500/20"
+                    >
+                      {t("operator.forceRelease")}
+                    </button>
+                  </>
                 ) : null}
 
                 <label className="mt-4 grid gap-2 text-sm font-black text-slate-200">

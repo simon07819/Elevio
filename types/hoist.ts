@@ -62,6 +62,18 @@ export type Project = {
   priorities_enabled?: boolean;
   /** When false, dispatch ignores cabin capacity and does not split groups by capacity. */
   capacity_enabled?: boolean;
+  /** When true, project has been fully configured and is ready for use. */
+  configured?: boolean;
+  /** Support email displayed on the support page. */
+  support_email?: string | null;
+  /** Support phone displayed on the support page. */
+  support_phone?: string | null;
+  /** Minimum floor sort order (e.g. -1 for basement). */
+  floor_min?: number | null;
+  /** Maximum floor sort order (e.g. 16). */
+  floor_max?: number | null;
+  /** Default language for the project (fr/en). */
+  default_language?: string | null;
 };
 
 export type Floor = {
@@ -164,6 +176,8 @@ export type CapacityWarning = {
 export type DispatchRecommendationReason =
   | { kind: "idle_empty" }
   | { kind: "idle_blocked" }
+  | { kind: "idle_manual_full" }
+  | { kind: "pickup_fallback"; passengerCount: number }
   | { kind: "dropoff_before_pickups"; passengers: number }
   | {
       kind: "pickup";
