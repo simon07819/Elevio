@@ -15,6 +15,7 @@ import {
   bindRealtimeWithAuthSession,
   mergeOperatorPollRequest,
   mergeRealtimeRequest,
+  TERMINAL_REQUEST_STATUSES,
   mergeRequestsPropIntoLive,
   subscribeToTable,
   type RequestRealtimePayload,
@@ -212,10 +213,12 @@ export function OperatorDashboard({
   const enriched = useMemo(() => enrichRequests(elevatorRequests, floors), [elevatorRequests, floors]);
   const dispatchRequests: DispatchRequest[] = useMemo(
     () =>
-      elevatorRequests.map((request) => ({
-        ...request,
-        from_sort_order: floorById.get(request.from_floor_id)?.sort_order ?? 0,
-        to_sort_order: floorById.get(request.to_floor_id)?.sort_order ?? 0,
+      elevatorRequests
+        .filter((request) => !TERMINAL_REQUEST_STATUSES.includes(request.status))
+        .map((request) => ({
+          ...request,
+          from_sort_order: floorById.get(request.from_floor_id)?.sort_order ?? 0,
+          to_sort_order: floorById.get(request.to_floor_id)?.sort_order ?? 0,
       })),
     [elevatorRequests, floorById],
   );
