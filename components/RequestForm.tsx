@@ -501,9 +501,19 @@ export function RequestForm({
               <ShieldAlert className="text-red-700" size={44} />
             )}
             <h2 className="mt-4 text-3xl font-black">{t("request.sent")}</h2>
-            <p className="mt-3 text-base font-bold leading-7">
-              {liveDispatch.canDispatch ? t("request.sentBody") : t("request.dispatchNoOperator")}
-            </p>
+            {liveDispatch.canDispatch ? (
+              <p className="mt-2 rounded-xl bg-white/60 px-3 py-2 text-sm font-black">
+                {submittedRequest.status === "assigned"
+                  ? t("request.statusAssigned")
+                  : submittedRequest.status === "arriving"
+                    ? t("request.statusArriving")
+                    : submittedRequest.status === "boarded"
+                      ? t("request.statusBoarded")
+                      : t("request.statusPending")}
+              </p>
+            ) : (
+              <p className="mt-3 text-base font-bold leading-7">{t("request.dispatchNoOperator")}</p>
+            )}
           </div>
 
           <div className="rounded-[1.5rem] border-2 border-slate-100 bg-slate-50 p-4">
