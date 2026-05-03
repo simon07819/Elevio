@@ -181,8 +181,15 @@ export function RequestCard({
               </button>
             </>
           )}
-          <button className="col-span-3 flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200">
+          <button
+            type="button"
+            disabled
+            className="col-span-3 flex cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-500"
+          >
             <MessageSquare size={14} /> {t("requestCard.quickMessage")}
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
+              {t("requestCard.comingSoon")}
+            </span>
           </button>
         </div>
       </div>

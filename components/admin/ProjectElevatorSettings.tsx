@@ -73,6 +73,7 @@ export function ProjectElevatorSettings({
               <ElevatorFields elevator={elevator} />
               <div className="flex flex-wrap items-center gap-2">
                 <button
+                  type="submit"
                   disabled={isPending}
                   className="touch-target rounded-2xl bg-yellow-300 px-5 py-3 font-black text-slate-950 disabled:opacity-60"
                 >
@@ -114,6 +115,7 @@ export function ProjectElevatorSettings({
         >
           <ElevatorFields />
           <button
+            type="submit"
             disabled={isPending}
             className="touch-target w-full rounded-2xl bg-yellow-300 px-5 py-3 font-black text-slate-950 disabled:opacity-60 sm:w-auto"
           >

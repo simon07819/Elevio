@@ -85,6 +85,7 @@ export function AdminLoginForm() {
           className="rounded-2xl bg-white px-4 py-4 font-bold text-slate-950 outline-none"
         />
         <button
+          type="submit"
           disabled={isPending}
           className="touch-target mt-2 flex items-center justify-center gap-2 rounded-2xl bg-yellow-300 px-5 py-4 text-lg font-black text-slate-950 disabled:opacity-60"
         >

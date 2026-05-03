@@ -85,6 +85,7 @@ export function ProjectFloorEditor({ projectId, floors }: { projectId: string; f
             {t("floors.includeRdc")}
           </label>
           <button
+            type="submit"
             disabled={isPending}
             className="touch-target rounded-2xl bg-yellow-300 px-5 py-3 font-black text-slate-950 disabled:opacity-60"
           >
@@ -143,6 +144,7 @@ export function ProjectFloorEditor({ projectId, floors }: { projectId: string; f
           {t("floors.active")}
         </label>
         <button
+          type="submit"
           disabled={isPending}
           className="touch-target rounded-2xl bg-yellow-300 px-5 py-3 font-black text-slate-950 disabled:opacity-60"
         >
@@ -243,7 +245,7 @@ export function ProjectFloorEditor({ projectId, floors }: { projectId: string; f
                     <input name="active" type="checkbox" defaultChecked={floor.active} className="size-5 accent-yellow-300" />
                     {t("floors.active")}
                   </label>
-                  <button className="touch-target rounded-2xl bg-yellow-300 px-5 py-3 font-black text-slate-950">
+                  <button type="submit" className="touch-target rounded-2xl bg-yellow-300 px-5 py-3 font-black text-slate-950">
                     {t("profile.save")}
                   </button>
                 </form>

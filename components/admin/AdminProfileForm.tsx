@@ -132,6 +132,7 @@ export function AdminProfileForm({ profile, onboarding }: { profile: Profile; on
         )}
 
         <button
+          type="submit"
           disabled={isPending}
           className="touch-target mt-5 flex items-center justify-center gap-2 rounded-2xl bg-yellow-300 px-5 py-4 text-lg font-black text-slate-950 disabled:opacity-60"
         >
@@ -147,7 +148,7 @@ export function AdminProfileForm({ profile, onboarding }: { profile: Profile; on
           {t("profile.sessionBody")}
         </p>
         <form action={signOutAdmin}>
-          <button className="touch-target mt-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-300/30 bg-red-500/15 px-5 py-4 font-black text-red-100">
+          <button type="submit" className="touch-target mt-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-300/30 bg-red-500/15 px-5 py-4 font-black text-red-100">
             <LogOut size={20} />
             {t("profile.signOut")}
           </button>
