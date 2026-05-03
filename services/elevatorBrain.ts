@@ -409,6 +409,8 @@ function pickupReasonDetail(
   /** Autres demandes de ramassage du même cycle (autres paliers que la cible courante). */
   otherUpcomingPickups: DispatchRequest[] = [],
   travelDirection: Direction = "idle",
+  /** Séquence des déposes planifiées après ce ramassage (incluant intermédiaires). */
+  plannedDropoffs?: string[],
 ): DispatchRecommendationReason {
   // Liste des étages distincts à ramasser après celui-ci, triés dans l'ordre du trajet,
   // pour que l'opérateur sache que « vers 16 » est la destination du passager et pas le
@@ -439,6 +441,7 @@ function pickupReasonDetail(
     destinationLabel: floorLabel(floors, request.to_floor_id, request.to_sort_order),
     priority: prioritiesEnabled && request.priority,
     upcomingPickupLabels: upcomingLabels.length > 0 ? upcomingLabels : undefined,
+    plannedDropoffLabels: plannedDropoffs,
   };
 }
 
@@ -572,6 +575,15 @@ export function computeNextOperatorAction({
         const otherUpcoming = directionPool.filter(
           (r) => Number(r.from_sort_order) !== Number(primary.from_sort_order),
         );
+        // Déposes planifiées : destinations des ramassages en chemin + dépose finale du cycle
+        const dropoffsAtTarget = onboardPassengers.filter((p) => Number(p.to_sort_order) === Number(nextDropSort));
+        const nextDropDropoffs = dropoffsAtTarget.map((p) =>
+          floorLabel(projectFloors, p.to_floor_id, p.to_sort_order),
+        );
+        const primaryDest = floorLabel(projectFloors, primary.to_floor_id, primary.to_sort_order);
+        const upcomingDropoffs = otherUpcoming
+          .map((r) => floorLabel(projectFloors, r.to_floor_id, r.to_sort_order));
+        const allDropoffs = [...upcomingDropoffs, primaryDest, ...nextDropDropoffs];
         const reasonDetail = pickupReasonDetail(
           primary,
           currentSort,
@@ -579,6 +591,7 @@ export function computeNextOperatorAction({
           projectFloors,
           otherUpcoming,
           travelDirection,
+          allDropoffs.length > 0 ? allDropoffs : undefined,
         );
         return {
           action: "pickup",
@@ -698,15 +711,43 @@ export function computeNextOperatorAction({
     (r) => Number(r.from_sort_order) !== Number(idlePrimary.from_sort_order),
   );
   const idleTravelDirection: Direction = directionToward(currentSort, idlePrimary.from_sort_order);
+
+  // Quand le ramassage est à l'étage courant, simuler l'état post-pickup :
+  // - le passager ramassé devient "boarded", sa destination est la prochaine dépose
+  // - les upcoming ne doivent inclure que les ramassages SUR LE CHEMIN vers cette dépose
+  // (sinon le terminal affiche un arrêt qui sera servi dans un cycle ultérieur)
+  const idleAtCurrentFloor = Number(idlePrimary.from_sort_order) === currentSort;
+  const postPickupDropoffSort = idleAtCurrentFloor ? Number(idlePrimary.to_sort_order) : null;
+  let idleFilteredUpcoming = idleOtherUpcoming;
+  let idlePlannedDropoffs: string[] | undefined;
+  if (idleAtCurrentFloor && postPickupDropoffSort !== null) {
+    const postDir = directionToward(currentSort, postPickupDropoffSort);
+    if (postDir !== "idle") {
+      idleFilteredUpcoming = idleOtherUpcoming.filter((r) => {
+        const from = Number(r.from_sort_order);
+        return postDir === "up"
+          ? from > currentSort && from < postPickupDropoffSort
+          : from < currentSort && from > postPickupDropoffSort;
+      });
+    }
+    // Séquence complète des déposes : destinations des ramassages en chemin + destination finale
+    const upcomingDests = idleFilteredUpcoming.map((r) =>
+      floorLabel(projectFloors, r.to_floor_id, r.to_sort_order),
+    );
+    const finalDest = floorLabel(projectFloors, idlePrimary.to_floor_id, idlePrimary.to_sort_order);
+    idlePlannedDropoffs = [...upcomingDests, finalDest];
+  }
+
   const idlePickupDetail = pickupReasonDetail(
     idlePrimary,
     currentSort,
     prioritiesEnabled,
     projectFloors,
-    idleOtherUpcoming,
+    idleFilteredUpcoming,
     // Pour le tri des étages d'avenir, utiliser la direction du trajet effectif (la phase
     // d'idle peut pointer "up" même quand on descend physiquement vers le palier de pickup).
     idlePhaseDirection !== "idle" ? idlePhaseDirection : idleTravelDirection,
+    idlePlannedDropoffs,
   );
 
   return {

@@ -45,7 +45,14 @@ export function formatDispatchRecommendationReason(
             ? ` Ramassages prévus en chemin : ${upcoming.join(", ")}.`
             : ` Planned pickups en route: ${upcoming.join(", ")}.`
           : "";
-      return `${prefix} : ${people}.${upcomingLine}${prio}`;
+      const dropoffs = detail.plannedDropoffLabels ?? [];
+      const dropoffLine =
+        dropoffs.length > 0
+          ? fr
+            ? ` Déposes prévues : ${dropoffs.join(", puis ")}.`
+            : ` Planned dropoffs: ${dropoffs.join(", then ")}.`
+          : "";
+      return `${prefix} : ${people}.${upcomingLine}${dropoffLine}${prio}`;
     }
     case "pickup_fallback":
       return fr

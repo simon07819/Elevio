@@ -174,6 +174,9 @@ export type DispatchRecommendationReason =
       priority: boolean;
       /** Étages d'autres ramassages planifiés dans le même cycle, dans l'ordre du trajet. */
       upcomingPickupLabels?: string[];
+      /** Séquence complète des déposes planifiées après ce ramassage (y compris intermédiaires
+       *  issues des ramassages en chemin), dans l'ordre du trajet. */
+      plannedDropoffLabels?: string[];
     }
   | { kind: "pickup_fallback"; passengerCount: number };
 
