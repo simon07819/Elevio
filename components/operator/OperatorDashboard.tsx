@@ -330,7 +330,8 @@ export function OperatorDashboard({
     recommendation.requestsToDropoff.length === 0 &&
     fallbackPickup &&
     fallbackPickupFloor &&
-    recommendation.reasonDetail?.kind !== "idle_blocked"
+    recommendation.reasonDetail?.kind !== "idle_blocked" &&
+    !effectiveElevator.manual_full
   ) {
     const fbDetail = { kind: "pickup_fallback" as const, passengerCount: fallbackPickup.passenger_count };
     visibleRecommendation = {
