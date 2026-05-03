@@ -19,6 +19,7 @@ yarn-error.log*
 
 # local env files
 .env*.local
+.env.e2e
 
 # vercel
 .vercel
@@ -27,3 +28,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .test-build/
+
+# Playwright
+/test-results/
+/playwright-report/
+/playwright-report-live/
+/blob-report/
+/playwright/.cache/
