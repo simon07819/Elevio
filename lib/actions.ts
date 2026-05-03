@@ -1669,8 +1669,13 @@ export async function updateRequestStatus(
     .maybeSingle();
   const currentStatus = (currentRequest?.status ?? "") as RequestStatus;
   if (currentStatus && !isLegalTransition(currentStatus, status)) {
+    console.error("[updateRequestStatus] ILLEGAL TRANSITION", { requestId, from: currentStatus, to: status });
     return { ok: false, message: `Transition ${currentStatus}→${status} non autorisee.` };
   }
+  if (!currentStatus) {
+    console.warn("[updateRequestStatus] REQUEST NOT FOUND", { requestId, targetStatus: status });
+  }
+  console.log("[updateRequestStatus]", { requestId, from: currentStatus || "(not found)", to: status, elevatorId: options?.assignElevatorId });
 
   const updates: Record<string, unknown> = {
     status,
@@ -1717,12 +1722,15 @@ export async function updateRequestStatus(
     .select("id")
     .maybeSingle();
 
-  if (error) {
+    if (error) {
+    console.error("[updateRequestStatus] DB UPDATE ERROR", { requestId, status, error: error.message });
     return { ok: false, message: error.message };
   }
   if (!updatedRequest) {
+    console.error("[updateRequestStatus] DB UPDATE NO ROW", { requestId, status });
     return { ok: false, message: "Impossible de mettre a jour cette demande." };
   }
+  console.log("[updateRequestStatus] SUCCESS", { requestId, status });
 
   if (status === "cancelled" && options?.cancelRelatedSplit) {
     const group = options.cancelRelatedSplit;

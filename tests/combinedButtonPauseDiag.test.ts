@@ -25,7 +25,8 @@ test("combined-button: showCombined computed when dropoff floor = pickup floor",
   const comp = readFileSync(join(root, "components/operator/RecommendedNextStop.tsx"), "utf8");
   assert.match(comp, /showCombined/, "showCombined flag exists");
   assert.match(comp, /pickupAtDropFloor/, "pickupAtDropFloor computed");
-  assert.match(comp, /actionRequest\.from_floor_id === dropFloorId/, "checks pickup floor matches dropoff floor");
+  assert.match(comp, /pickupCandidateAtDropFloor/, "pickupCandidateAtDropFloor searches actionRequests independently");
+  assert.match(comp, /from_floor_id === dropFloorId/, "checks pickup floor matches dropoff floor");
 });
 
 test("combined-button: dropoffAndPickup function does both actions", () => {

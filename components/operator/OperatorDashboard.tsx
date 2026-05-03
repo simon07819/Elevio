@@ -200,8 +200,8 @@ export function OperatorDashboard({
         if (next.length === current.length && next.every((r, i) => r.id === current[i]?.id && r.status === current[i]?.status && r.elevator_id === current[i]?.elevator_id)) {
           return current;
         }
-        // ── DEBUG: poll merge diagnostic ──
-        if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+        // ── DEBUG: poll merge diagnostic (always log boarded changes) ──
+        {
           const prevBoarded = current.filter(r => r.elevator_id === elevator.id && r.status === "boarded");
           const nextBoarded = next.filter(r => r.elevator_id === elevator.id && r.status === "boarded");
           const dropped = prevBoarded.filter(pb => !nextBoarded.find(nb => nb.id === pb.id));
@@ -404,9 +404,8 @@ export function OperatorDashboard({
   // but poll/realtime haven't caught up yet.
   const realHasOperatorWork = activeQueue.length > 0 || hasAnyBoardedWork;
   if (!realHasOperatorWork) {
-    // ── DEBUG: PAUSE diagnostic ────────────────────────────────────────────
-    if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
-      console.warn("[PAUSE-DIAG]", {
+    // ── DEBUG: PAUSE diagnostic (always log, even in prod) ──
+    console.warn("[PAUSE-DIAG]", {
         reason: "idle_empty",
         activeQueueLen: activeQueue.length,
         hasBoardedPassengers,
@@ -420,7 +419,6 @@ export function OperatorDashboard({
         heartbeatAt: elevator.operator_session_heartbeat_at,
         now: new Date().toISOString(),
       });
-    }
     const idleDetail = { kind: "idle_empty" as const };
     visibleRecommendation = {
       ...recommendation,
