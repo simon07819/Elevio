@@ -176,6 +176,8 @@ export type CapacityWarning = {
 export type DispatchRecommendationReason =
   | { kind: "idle_empty" }
   | { kind: "idle_blocked" }
+  | { kind: "idle_manual_full" }
+  | { kind: "pickup_fallback"; passengerCount: number }
   | { kind: "dropoff_before_pickups"; passengers: number }
   | {
       kind: "pickup";

@@ -2,18 +2,20 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** Émis par l’opérateur après « Vider la liste » ; payload : IDs des demandes annulées. */
+/** Emis par l'operateur apres "Vider la liste" ; payload : IDs des demandes annulees. */
 export const PASSENGER_BROADCAST_QUEUE_CLEARED = "queue_cleared";
-/** Émis par l’opérateur dès « Ramasser » ; payload : IDs des demandes embarquées. */
+/** Emis par l'operateur des "Ramasser" ; payload : IDs des demandes embarquees. */
 export const PASSENGER_BROADCAST_REQUEST_BOARDED = "request_boarded";
+/** Emis par l'operateur quand il annule une demande individuelle ; payload : ID de la demande. */
+export const PASSENGER_BROADCAST_REQUEST_CANCELLED = "request_cancelled";
 
 export function passengerProjectBroadcastChannel(projectId: string) {
   return `proj:${projectId}:passengers`;
 }
 
 /**
- * Notifie les téléphones passagers (canal Realtime Broadcast, pas Postgres).
- * Ne bloque pas l’UI — si ça échoue, le poll RPC reprend le relais.
+ * Notifie les telephones passagers (canal Realtime Broadcast, pas Postgres).
+ * Ne bloque pas l'UI -- si ca echoue, le poll RPC reprend le relais.
  */
 export function broadcastPassengerQueueCleared(client: SupabaseClient, projectId: string, requestIds: string[]): void {
   broadcastPassengerRequestIds(client, projectId, PASSENGER_BROADCAST_QUEUE_CLEARED, requestIds);
@@ -21,6 +23,10 @@ export function broadcastPassengerQueueCleared(client: SupabaseClient, projectId
 
 export function broadcastPassengerRequestBoarded(client: SupabaseClient, projectId: string, requestIds: string[]): void {
   broadcastPassengerRequestIds(client, projectId, PASSENGER_BROADCAST_REQUEST_BOARDED, requestIds);
+}
+
+export function broadcastPassengerRequestCancelled(client: SupabaseClient, projectId: string, requestId: string): void {
+  broadcastPassengerRequestIds(client, projectId, PASSENGER_BROADCAST_REQUEST_CANCELLED, [requestId]);
 }
 
 function broadcastPassengerRequestIds(

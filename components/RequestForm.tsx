@@ -11,6 +11,7 @@ import { useNetworkStatus } from "@/lib/useNetworkStatus";
 import {
   PASSENGER_BROADCAST_QUEUE_CLEARED,
   PASSENGER_BROADCAST_REQUEST_BOARDED,
+  PASSENGER_BROADCAST_REQUEST_CANCELLED,
   passengerProjectBroadcastChannel,
 } from "@/lib/passengerNotifyBroadcast";
 import { subscribeToTable, unsubscribe, type ElevatorRealtimePayload } from "@/lib/realtime";
@@ -348,6 +349,21 @@ export function RequestForm({
           clearPassengerPendingRequest(project.id, rid);
           setSubmittedRequest(null);
           router.replace("/");
+        },
+      )
+      .on(
+        "broadcast",
+        { event: PASSENGER_BROADCAST_REQUEST_CANCELLED },
+        (msg: { payload?: { requestIds?: string[] } | string[] }) => {
+          const raw = msg.payload;
+          const ids = Array.isArray(raw) ? raw : raw?.requestIds;
+          if (!ids?.includes(rid)) {
+            return;
+          }
+          // Operator cancelled this request — passenger stays in flow, can select a new floor
+          clearPassengerPendingRequest(project.id, rid);
+          setSubmittedRequest(null);
+          setMessage(t("request.cancelledByOperator"));
         },
       );
 

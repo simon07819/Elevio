@@ -10,7 +10,7 @@ import {
   enrichRequests,
 } from "@/lib/demoData";
 import { createClient } from "@/lib/supabase/client";
-import { broadcastPassengerQueueCleared, broadcastPassengerRequestBoarded, passengerProjectBroadcastChannel } from "@/lib/passengerNotifyBroadcast";
+import { broadcastPassengerQueueCleared, broadcastPassengerRequestBoarded, broadcastPassengerRequestCancelled, passengerProjectBroadcastChannel } from "@/lib/passengerNotifyBroadcast";
 import {
   bindRealtimeWithAuthSession,
   mergeOperatorPollRequest,
@@ -333,6 +333,7 @@ export function OperatorDashboard({
     fallbackPickup &&
     fallbackPickupFloor &&
     recommendation.reasonDetail?.kind !== "idle_blocked" &&
+    recommendation.reasonDetail?.kind !== "idle_manual_full" &&
     !effectiveElevator.manual_full
   ) {
     const fbDetail = { kind: "pickup_fallback" as const, passengerCount: fallbackPickup.passenger_count };
@@ -509,6 +510,10 @@ export function OperatorDashboard({
           optimisticRequestsRef.current.delete(request.id);
           setLiveRequests(previousRequests);
           setOperatorActionError(result.message);
+        } else {
+          // Notify passenger instantly that their request was cancelled
+          const client = createClient();
+          if (client) broadcastPassengerRequestCancelled(client, projectId, request.id);
         }
       })
       .catch(() => {
