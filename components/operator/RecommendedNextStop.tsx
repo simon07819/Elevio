@@ -60,9 +60,24 @@ export function RecommendedNextStop({
   const dropFloorId =
     recommendation.requestsToDropoff[0]?.to_floor_id ?? (hasRecommendedPickup ? "" : recommendation.nextFloor?.id ?? "");
 
-  const pendingDropoffs = useMemo(() => {
-    return recommendation.requestsToDropoff.filter((p) => !completedDropoffIds.has(p.requestId));
+  // Race condition guard: IDs in completedDropoffIds that still appear in
+  // recommendation.requestsToDropoff must be stale (the DB reverted the
+  // "completed" status, e.g. realtime delivered an older state). Exclude
+  // them so the dropoff button can reappear instead of being permanently hidden.
+  const effectiveCompletedDropoffIds = useMemo(() => {
+    const activeDropIds = new Set(recommendation.requestsToDropoff.map((p) => p.requestId));
+    const next = new Set<string>();
+    for (const id of completedDropoffIds) {
+      if (!activeDropIds.has(id)) {
+        next.add(id);
+      }
+    }
+    return next;
   }, [recommendation.requestsToDropoff, completedDropoffIds]);
+
+  const pendingDropoffs = useMemo(() => {
+    return recommendation.requestsToDropoff.filter((p) => !effectiveCompletedDropoffIds.has(p.requestId));
+  }, [recommendation.requestsToDropoff, effectiveCompletedDropoffIds]);
 
   const dropoffIds = useMemo(() => {
     const fromRecommendation = pendingDropoffs.map((p) => p.requestId);
