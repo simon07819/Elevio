@@ -24,14 +24,23 @@ export function RecommendedNextStop({
   actionRequests,
   operatorElevatorId,
   onPickupSuccess,
+  onPickupFailure,
+  onPickupConfirmed,
   onDropoffSuccess,
+  onDropoffFailure,
 }: {
   recommendation: DispatchRecommendation;
   actionRequests: EnrichedRequest[];
   operatorElevatorId: string;
   onPickupSuccess?: (request: EnrichedRequest) => void;
+  /** Rollback du pickup : appele quand advanceRequestStatus retourne ok=false ou throw. */
+  onPickupFailure?: (request: EnrichedRequest) => void;
+  /** Apres confirmation serveur du pickup : broadcast passager, etc. */
+  onPickupConfirmed?: (request: EnrichedRequest) => void;
   /** Apres depot confirme : ids termines et palier cabine (destination des sorties). */
   onDropoffSuccess?: (payload: { requestIds: string[]; dropFloorId: string }) => void;
+  /** Rollback du dropoff : appele quand au moins un advanceRequestStatus echoue ou throw. */
+  onDropoffFailure?: (payload: { requestIds: string[] }) => void;
 }) {
   const [completedDropoffIds, setCompletedDropoffIds] = useState<Set<string>>(() => new Set());
   const [pendingPickupIds, setPendingPickupIds] = useState<Set<string>>(() => new Set());
@@ -54,9 +63,24 @@ export function RecommendedNextStop({
   const dropFloorId =
     recommendation.requestsToDropoff[0]?.to_floor_id ?? (hasRecommendedPickup ? "" : recommendation.nextFloor?.id ?? "");
 
-  const pendingDropoffs = useMemo(() => {
-    return recommendation.requestsToDropoff.filter((p) => !completedDropoffIds.has(p.requestId));
+  // Race condition guard: IDs in completedDropoffIds that still appear in
+  // recommendation.requestsToDropoff must be stale (the DB reverted the
+  // "completed" status, e.g. realtime delivered an older state). Exclude
+  // them so the dropoff button can reappear instead of being permanently hidden.
+  const effectiveCompletedDropoffIds = useMemo(() => {
+    const activeDropIds = new Set(recommendation.requestsToDropoff.map((p) => p.requestId));
+    const next = new Set<string>();
+    for (const id of completedDropoffIds) {
+      if (!activeDropIds.has(id)) {
+        next.add(id);
+      }
+    }
+    return next;
   }, [recommendation.requestsToDropoff, completedDropoffIds]);
+
+  const pendingDropoffs = useMemo(() => {
+    return recommendation.requestsToDropoff.filter((p) => !effectiveCompletedDropoffIds.has(p.requestId));
+  }, [recommendation.requestsToDropoff, effectiveCompletedDropoffIds]);
 
   const dropoffIds = useMemo(() => {
     const fromRecommendation = pendingDropoffs.map((p) => p.requestId);
@@ -148,20 +172,25 @@ export function RecommendedNextStop({
     const requestId = actionRequest.id;
     if (pendingPickupIds.has(requestId)) return;
 
+    const targetRequest = actionRequest;
     setActionError(null);
     setPendingPickupIds((current) => new Set(current).add(requestId));
-    onPickupSuccess?.(actionRequest);
+    onPickupSuccess?.(targetRequest);
 
     void advanceRequestStatus(requestId, "boarded", {
       assignElevatorId: operatorElevatorId,
     })
       .then((result) => {
-        if (!result.ok) {
+        if (result.ok) {
+          onPickupConfirmed?.(targetRequest);
+        } else {
           setActionError(result.message);
+          onPickupFailure?.(targetRequest);
         }
       })
       .catch(() => {
         setActionError("Action impossible. Verifiez la connexion et reessayez.");
+        onPickupFailure?.(targetRequest);
       })
       .finally(() => {
         setPendingPickupIds((current) => {
@@ -204,6 +233,7 @@ export function RecommendedNextStop({
             for (const id of ids) next.delete(id);
             return next;
           });
+          onDropoffFailure?.({ requestIds: ids });
         }
       })
       .catch(() => {
@@ -213,6 +243,7 @@ export function RecommendedNextStop({
           for (const id of ids) next.delete(id);
           return next;
         });
+        onDropoffFailure?.({ requestIds: ids });
       })
       .finally(() => {
         setPendingDropoffIds((current) => {
