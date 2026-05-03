@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, Send, ShieldAlert, Users, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, Navigation, Send, ShieldAlert, UserCheck, Users, XCircle } from "lucide-react";
 import { createPassengerRequest, resumePassengerRequest, updateRequestStatus } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
 import { cancelPassengerRequestClient } from "@/lib/passengerCancelClient";
@@ -488,33 +488,50 @@ export function RequestForm({
     return (
       <section className="flex flex-1 flex-col justify-between gap-4 rounded-[1.75rem] bg-white p-5 text-slate-950 shadow-sm">
         <div className="grid gap-4">
-          <div
-            className={
-              liveDispatch.canDispatch
-                ? "rounded-[1.5rem] bg-emerald-50 p-5 text-emerald-950"
-                : "rounded-[1.5rem] border border-red-200 bg-red-50 p-5 text-red-950"
-            }
-          >
-            {liveDispatch.canDispatch ? (
-              <CheckCircle2 className="text-emerald-600" size={44} />
-            ) : (
-              <ShieldAlert className="text-red-700" size={44} />
-            )}
-            <h2 className="mt-4 text-3xl font-black">{t("request.sent")}</h2>
-            {liveDispatch.canDispatch ? (
-              <p className="mt-2 rounded-xl bg-white/60 px-3 py-2 text-sm font-black">
-                {submittedRequest.status === "assigned"
-                  ? t("request.statusAssigned")
-                  : submittedRequest.status === "arriving"
-                    ? t("request.statusArriving")
-                    : submittedRequest.status === "boarded"
-                      ? t("request.statusBoarded")
-                      : t("request.statusPending")}
-              </p>
-            ) : (
-              <p className="mt-3 text-base font-bold leading-7">{t("request.dispatchNoOperator")}</p>
-            )}
-          </div>
+          {(() => {
+            const noOperator = !liveDispatch.canDispatch;
+            const st = submittedRequest.status;
+            const isArriving = st === "arriving";
+            const isAssigned = st === "assigned";
+            const isBoarded = st === "boarded";
+            const isCancelled = st === "cancelled";
+            const statusKey = noOperator
+              ? "request.dispatchNoOperator"
+              : isCancelled
+                ? "request.cancelled"
+                : isArriving
+                  ? "request.statusArriving"
+                  : isAssigned
+                    ? "request.statusAssigned"
+                    : isBoarded
+                      ? "request.statusBoarded"
+                      : "request.statusPending";
+            const bgClass = noOperator
+              ? "rounded-[1.5rem] border border-red-200 bg-red-50 p-5 text-red-950"
+              : isArriving
+                ? "rounded-[1.5rem] bg-sky-50 p-5 text-sky-950"
+                : isAssigned
+                  ? "rounded-[1.5rem] bg-blue-50 p-5 text-blue-950"
+                  : isBoarded
+                    ? "rounded-[1.5rem] bg-emerald-50 p-5 text-emerald-950"
+                    : "rounded-[1.5rem] bg-yellow-50 p-5 text-yellow-950";
+            return (
+              <div className={bgClass}>
+                {noOperator ? (
+                  <ShieldAlert className="text-red-700" size={44} />
+                ) : isArriving ? (
+                  <Navigation className="text-sky-600" size={44} />
+                ) : isAssigned ? (
+                  <UserCheck className="text-blue-600" size={44} />
+                ) : isBoarded ? (
+                  <CheckCircle2 className="text-emerald-600" size={44} />
+                ) : (
+                  <Clock className="text-yellow-600" size={44} />
+                )}
+                <h2 className="mt-4 text-3xl font-black">{t(statusKey)}</h2>
+              </div>
+            );
+          })()}
 
           <div className="rounded-[1.5rem] border-2 border-slate-100 bg-slate-50 p-4">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">{t("request.trip")}</p>

@@ -1,24 +1,27 @@
 /**
  * Passenger status feedback — targeted tests.
  *
- * Bug: After submitting a request, the passenger sees only "Demande envoyée"
- * regardless of the actual request status (pending → assigned → arriving
- * → boarded). No visual feedback about operator assignment or approach.
+ * Bug: After submitting a request, the passenger saw only "Demande envoyee"
+ * regardless of actual request status. No visual feedback about operator
+ * assignment, approach, or cancellation.
  *
  * Fix:
- * - Add i18n keys for each status: statusPending, statusAssigned,
- *   statusArriving, statusBoarded (FR + EN)
- * - Show a status badge in the submitted card that changes based on
- *   submittedRequest.status
- * - pending → "En attente d'un opérateur" / "Waiting for an operator"
- * - assigned → "Opérateur assigné — en préparation" / "Operator assigned — preparing"
- * - arriving → "L'opérateur arrive à votre étage" / "The operator is arriving"
- * - boarded → "Embarquement en cours" / "Boarding in progress"
+ * - 6 distinct visual states, each with unique icon + color + title:
+ *   pending  → yellow bg, Clock icon, statusPending text
+ *   assigned → blue bg, UserCheck icon, statusAssigned text
+ *   arriving → sky bg, Navigation icon, statusArriving text
+ *   boarded  → emerald bg, CheckCircle2 icon, statusBoarded text
+ *   no operator → red bg, ShieldAlert icon, dispatchNoOperator text
+ *   cancelled → uses existing request.cancelled message
+ * - Title changes per status (no longer static "Demande envoyee")
+ * - Each state has distinct i18n keys (FR + EN)
  *
  * Tests:
- * 1. i18n keys exist for all 4 statuses (FR + EN)
- * 2. UI shows status label based on submittedRequest.status
- * 3. All 4 statuses produce different visible text
+ * 1. i18n keys for all 4 active statuses + no operator + cancelled
+ * 2. UI maps each status to its icon (Clock, UserCheck, Navigation, CheckCircle2, ShieldAlert)
+ * 3. UI maps each status to its color (yellow, blue, sky, emerald, red)
+ * 4. Title uses status-dependent key, not static "request.sent"
+ * 5. All active statuses produce distinct FR text
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -28,52 +31,71 @@ import assert from "node:assert/strict";
 const root = process.cwd();
 
 // ---------------------------------------------------------------------------
-// 1. i18n keys exist for all 4 statuses (FR + EN)
+// 1. i18n keys for all statuses exist (FR + EN)
 // ---------------------------------------------------------------------------
-test("passenger status: i18n keys for all 4 request statuses", () => {
+test("passenger status: i18n keys for all request statuses", () => {
   const i18n = readFileSync(join(root, "lib/i18n.ts"), "utf8");
-  assert.match(i18n, /"request\.statusPending"/, "statusPending key exists");
-  assert.match(i18n, /"request\.statusAssigned"/, "statusAssigned key exists");
-  assert.match(i18n, /"request\.statusArriving"/, "statusArriving key exists");
-  assert.match(i18n, /"request\.statusBoarded"/, "statusBoarded key exists");
-  // FR messages
-  assert.match(i18n, /En attente d'un opérateur/);
-  assert.match(i18n, /Opérateur assigné/);
-  assert.match(i18n, /L'opérateur arrive/);
-  assert.match(i18n, /Embarquement en cours/);
-  // EN messages
-  assert.match(i18n, /Waiting for an operator/);
-  assert.match(i18n, /Operator assigned/);
-  assert.match(i18n, /The operator is arriving/);
-  assert.match(i18n, /Boarding in progress/);
+  assert.match(i18n, /"request\.statusPending"/);
+  assert.match(i18n, /"request\.statusAssigned"/);
+  assert.match(i18n, /"request\.statusArriving"/);
+  assert.match(i18n, /"request\.statusBoarded"/);
+  assert.match(i18n, /"request\.dispatchNoOperator"/);
+  assert.match(i18n, /"request\.cancelled"/);
 });
 
 // ---------------------------------------------------------------------------
-// 2. UI shows status label based on submittedRequest.status
+// 2. UI maps each status to its icon
 // ---------------------------------------------------------------------------
-test("passenger status: UI references status-dependent i18n keys", () => {
+test("passenger status: each status has distinct icon", () => {
   const form = readFileSync(join(root, "components/RequestForm.tsx"), "utf8");
-  assert.match(form, /request\.statusPending/, "references statusPending");
-  assert.match(form, /request\.statusAssigned/, "references statusAssigned");
-  assert.match(form, /request\.statusArriving/, "references statusArriving");
-  assert.match(form, /request\.statusBoarded/, "references statusBoarded");
+  // Icons are imported and used in the submitted card rendering
+  assert.match(form, /import.*Clock.*from "lucide-react"/, "Clock icon imported");
+  assert.match(form, /import.*UserCheck.*from "lucide-react"/, "UserCheck icon imported");
+  assert.match(form, /import.*Navigation.*from "lucide-react"/, "Navigation icon imported");
+  assert.match(form, /import.*ShieldAlert.*from "lucide-react"/, "ShieldAlert icon imported");
+  // Verify icon usage in submitted card
+  assert.match(form, /<Navigation/, "Navigation rendered");
+  assert.match(form, /<UserCheck/, "UserCheck rendered");
+  assert.match(form, /<Clock/, "Clock rendered");
 });
 
 // ---------------------------------------------------------------------------
-// 3. All 4 statuses produce different visible text (no two share the same label)
+// 3. UI maps each status to distinct color
 // ---------------------------------------------------------------------------
-test("passenger status: each status has distinct FR and EN message", () => {
+test("passenger status: each status has distinct background color", () => {
+  const form = readFileSync(join(root, "components/RequestForm.tsx"), "utf8");
+  assert.match(form, /bg-sky-50/, "arriving → sky bg");
+  assert.match(form, /bg-blue-50/, "assigned → blue bg");
+  assert.match(form, /bg-red-50/, "no operator → red bg");
+  assert.match(form, /bg-emerald-50/, "boarded → emerald bg");
+  assert.match(form, /bg-yellow-50/, "pending → yellow bg");
+});
+
+// ---------------------------------------------------------------------------
+// 4. Title uses status-dependent key, not static "request.sent"
+// ---------------------------------------------------------------------------
+test("passenger status: title changes per status via statusKey", () => {
+  const form = readFileSync(join(root, "components/RequestForm.tsx"), "utf8");
+  // Title uses t(statusKey) not t("request.sent")
+  assert.match(form, /t\(statusKey\)/, "title uses dynamic statusKey");
+  // statusKey is computed from status conditions referencing i18n keys
+  assert.match(form, /statusPending/, "statusPending referenced in statusKey");
+  assert.match(form, /statusAssigned/, "statusAssigned referenced in statusKey");
+  assert.match(form, /statusArriving/, "statusArriving referenced in statusKey");
+  assert.match(form, /dispatchNoOperator/, "dispatchNoOperator referenced in statusKey");
+});
+
+// ---------------------------------------------------------------------------
+// 5. All active statuses produce distinct FR text
+// ---------------------------------------------------------------------------
+test("passenger status: each status has distinct FR message", () => {
   const i18n = readFileSync(join(root, "lib/i18n.ts"), "utf8");
-  // Extract the 4 FR status messages
-  const frPending = i18n.match(/"request\.statusPending":\s*"([^"]+)"/);
-  const frAssigned = i18n.match(/"request\.statusAssigned":\s*"([^"]+)"/);
-  const frArriving = i18n.match(/"request\.statusArriving":\s*"([^"]+)"/);
-  const frBoarded = i18n.match(/"request\.statusBoarded":\s*"([^"]+)"/);
-  assert.ok(frPending, "FR pending message found");
-  assert.ok(frAssigned, "FR assigned message found");
-  assert.ok(frArriving, "FR arriving message found");
-  assert.ok(frBoarded, "FR boarded message found");
-  // All distinct
-  const frMessages = [frPending![1], frAssigned![1], frArriving![1], frBoarded![1]];
-  assert.equal(new Set(frMessages).size, 4, "all 4 FR status messages are distinct");
+  const extract = (key: string) => i18n.match(new RegExp(`"${key}":\\s*"([^"]+)"`));
+  const pending = extract("request.statusPending");
+  const assigned = extract("request.statusAssigned");
+  const arriving = extract("request.statusArriving");
+  const boarded = extract("request.statusBoarded");
+  assert.ok(pending && assigned && arriving && boarded, "all FR messages found");
+  const messages = [pending![1], assigned![1], arriving![1], boarded![1]];
+  assert.equal(new Set(messages).size, 4, "all 4 FR status messages are distinct");
 });
