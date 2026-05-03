@@ -24,12 +24,15 @@ export function RecommendedNextStop({
   actionRequests,
   operatorElevatorId,
   onPickupSuccess,
+  onPickupConfirmed,
   onDropoffSuccess,
 }: {
   recommendation: DispatchRecommendation;
   actionRequests: EnrichedRequest[];
   operatorElevatorId: string;
   onPickupSuccess?: (request: EnrichedRequest) => void;
+  /** Apres confirmation serveur du pickup : broadcast passager, etc. */
+  onPickupConfirmed?: (request: EnrichedRequest) => void;
   /** Apres depot confirme : ids termines et palier cabine (destination des sorties). */
   onDropoffSuccess?: (payload: { requestIds: string[]; dropFloorId: string }) => void;
 }) {
@@ -156,7 +159,9 @@ export function RecommendedNextStop({
       assignElevatorId: operatorElevatorId,
     })
       .then((result) => {
-        if (!result.ok) {
+        if (result.ok) {
+          onPickupConfirmed?.(targetRequest);
+        } else {
           setActionError(result.message);
         }
       })
