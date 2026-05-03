@@ -93,8 +93,11 @@ export function mergeServerRequestsWithLive(previous: HoistRequest[], server: Ho
     merged.set(row.id, row);
   }
   for (const row of previous) {
-    if (!merged.has(row.id)) {
+    const existing = merged.get(row.id);
+    if (!existing) {
       merged.set(row.id, row);
+    } else {
+      merged.set(row.id, mergeOperatorPollRequest(existing, row));
     }
   }
   return [...merged.values()].sort(
