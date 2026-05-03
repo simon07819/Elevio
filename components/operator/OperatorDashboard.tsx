@@ -150,7 +150,11 @@ export function OperatorDashboard({
           const existing = mergedById.get(id);
           mergedById.set(id, mergeOperatorPollRequest(existing, incoming));
         }
-        return [...mergedById.values()];
+        const next = [...mergedById.values()];
+        if (next.length === current.length && next.every((r, i) => r.id === current[i]?.id && r.status === current[i]?.status && r.elevator_id === current[i]?.elevator_id)) {
+          return current;
+        }
+        return next;
       });
     }
 
@@ -205,18 +209,33 @@ export function OperatorDashboard({
     manual_full: manualFullOverride ?? elevator.manual_full,
   };
   const remaining = capacityEnabled ? Math.max(0, effectiveElevator.capacity - effectiveElevator.current_load) : Number.POSITIVE_INFINITY;
-  const recommendation = getRecommendedNextStop({
-    currentFloor,
-    direction: effectiveElevator.direction,
-    requests: dispatchRequests,
-    capacity: effectiveElevator.capacity,
-    currentLoad: effectiveElevator.current_load,
-    activePassengers: liveActivePassengers,
-    floors,
-    prioritiesEnabled,
-    capacityEnabled,
-    manualFull: effectiveElevator.manual_full === true,
-  });
+  const recommendation = useMemo(
+    () =>
+      getRecommendedNextStop({
+        currentFloor,
+        direction: effectiveElevator.direction,
+        requests: dispatchRequests,
+        capacity: effectiveElevator.capacity,
+        currentLoad: effectiveElevator.current_load,
+        activePassengers: liveActivePassengers,
+        floors,
+        prioritiesEnabled,
+        capacityEnabled,
+        manualFull: effectiveElevator.manual_full === true,
+      }),
+    [
+      currentFloor,
+      effectiveElevator.direction,
+      effectiveElevator.capacity,
+      effectiveElevator.current_load,
+      effectiveElevator.manual_full,
+      dispatchRequests,
+      liveActivePassengers,
+      floors,
+      prioritiesEnabled,
+      capacityEnabled,
+    ],
+  );
   const recommendedIds = new Set(recommendation.requestsToPickup.map((request) => request.id));
   const liveQueue = [...enriched].sort((a, b) => {
     const aTerminal = a.status === "completed" || a.status === "cancelled" ? 1 : 0;
