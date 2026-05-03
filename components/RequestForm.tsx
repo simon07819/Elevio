@@ -7,6 +7,7 @@ import { createPassengerRequest, resumePassengerRequest, updateRequestStatus } f
 import { createClient } from "@/lib/supabase/client";
 import { cancelPassengerRequestClient } from "@/lib/passengerCancelClient";
 import { resumePassengerRequestClient } from "@/lib/passengerResumeClient";
+import { useNetworkStatus } from "@/lib/useNetworkStatus";
 import {
   PASSENGER_BROADCAST_QUEUE_CLEARED,
   PASSENGER_BROADCAST_REQUEST_BOARDED,
@@ -114,6 +115,7 @@ export function RequestForm({
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
   const [isCancellingRequest, setIsCancellingRequest] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const isOnline = useNetworkStatus();
   const router = useRouter();
   const { t } = useLanguage();
   const prioritiesEnabled = project.priorities_enabled !== false;
@@ -425,7 +427,7 @@ export function RequestForm({
 
   if (submittedRequest) {
     const tripToFloor = floors.find((floor) => floor.id === submittedRequest.toFloorId);
-    const canCancel = submittedRequest.status !== "boarded" && submittedRequest.status !== "completed";
+    const canCancel = isOnline && submittedRequest.status !== "boarded" && submittedRequest.status !== "completed";
     const submittedRequestId = submittedRequest.requestId;
     const submittedRequestSnapshot = submittedRequest;
 
@@ -487,6 +489,12 @@ export function RequestForm({
 
     return (
       <section className="flex flex-1 flex-col justify-between gap-4 rounded-[1.75rem] bg-white p-5 text-slate-950 shadow-sm">
+        {!isOnline && (
+          <div className="flex items-center gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">
+            <ShieldAlert size={18} />
+            {t("common.unstableConnection")}
+          </div>
+        )}
         <div className="grid gap-4">
           {(() => {
             const noOperator = !liveDispatch.canDispatch;
@@ -573,6 +581,12 @@ export function RequestForm({
 
   return (
     <>
+      {!isOnline && (
+        <div className="mb-3 flex items-center gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">
+          <ShieldAlert size={18} />
+          {t("common.unstableConnection")}
+        </div>
+      )}
       {dispatchResolving ? (
         <div className="flex shrink-0 items-center gap-3 rounded-[1.25rem] border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700">
           <Loader2 className="size-5 animate-spin text-slate-400" aria-hidden />
@@ -789,7 +803,7 @@ export function RequestForm({
 
         <button
           type="submit"
-          disabled={isPending || isSubmittingRequest || dispatchBlocked}
+          disabled={isPending || isSubmittingRequest || dispatchBlocked || !isOnline}
           className="touch-target mt-3 flex w-full items-center justify-center gap-3 rounded-[1.35rem] bg-slate-950 px-5 py-4 text-lg font-black text-white shadow-xl transition active:scale-[0.99] disabled:opacity-60"
         >
           <Send size={22} />
