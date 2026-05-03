@@ -703,7 +703,10 @@ export function OperatorWorkspace({
             const heartbeatStale = isOperatorTabletSessionStale(elevator.operator_session_heartbeat_at, effectiveNowMs);
             const lockActive = heldByOtherSession && !heartbeatStale;
             const locked = lockActive;
+            // After release, our own stale session should show "Activer", not "Reprendre"
+            const justReleased = locallyReleasedElevatorIds.has(elevator.id);
             const staleOtherBinding =
+              !justReleased &&
               heldByOtherSession &&
               heartbeatStale &&
               elevatorHasOperatorTabletBinding(elevator);
@@ -744,9 +747,38 @@ export function OperatorWorkspace({
                 </div>
 
                 {staleOtherBinding ? (
-                  <p className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-50">
-                    {t("operator.sessionInactiveHint")}
-                  </p>
+                  <>
+                    <p className="mt-3 rounded-2xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-50">
+                      {t("operator.sessionInactiveHint")}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch("/api/operator/force-release", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ projectId: project.id, elevatorId: elevator.id }),
+                          });
+                          if (res.ok) {
+                            setLocalElevators((prev) =>
+                              prev.map((e) => (e.id === elevator.id ? clearOperatorSessionFields(e) : e)),
+                            );
+                            const client = createClient();
+                            if (client) broadcastOperatorElevatorSessionCleared(client, project.id, elevator.id);
+                            setMessage(t("operator.releaseSuccess"));
+                          } else {
+                            setMessage(t("operator.releaseFailed"));
+                          }
+                        } catch {
+                          setMessage(t("operator.releaseFailed"));
+                        }
+                      }}
+                      className="mt-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-black text-red-200 hover:bg-red-500/20"
+                    >
+                      {t("operator.forceRelease")}
+                    </button>
+                  </>
                 ) : null}
 
                 <label className="mt-4 grid gap-2 text-sm font-black text-slate-200">

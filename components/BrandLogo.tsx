@@ -1,8 +1,14 @@
+"use client";
+
+import Link from "next/link";
+
 type BrandLogoProps = {
   className?: string;
   priority?: boolean;
   size?: "sm" | "md" | "lg";
   tone?: "light" | "dark";
+  /** When true, logo is a link to home page. */
+  clickable?: boolean;
 };
 
 const sizes = {
@@ -32,7 +38,7 @@ const sizes = {
   },
 };
 
-export function BrandLogo({ className = "", size = "md", tone = "dark" }: BrandLogoProps) {
+function LogoContent({ size = "md", tone = "dark", className = "" }: { size?: "sm" | "md" | "lg"; tone?: "light" | "dark"; className?: string }) {
   const logoSize = sizes[size];
   const textColor = tone === "light" ? "text-slate-950" : "text-white";
 
@@ -50,5 +56,16 @@ export function BrandLogo({ className = "", size = "md", tone = "dark" }: BrandL
         Elevio
       </span>
     </span>
+  );
+}
+
+export function BrandLogo({ className = "", size = "md", tone = "dark", clickable = false }: BrandLogoProps) {
+  if (!clickable) {
+    return <LogoContent size={size} tone={tone} className={className} />;
+  }
+  return (
+    <Link href="/" className="inline-flex no-underline">
+      <LogoContent size={size} tone={tone} className={className} />
+    </Link>
   );
 }
