@@ -374,6 +374,8 @@ export function OperatorWorkspace({
   }, [project.id, selectedElevator, sessionId]);
 
   function handleActivate(elevator: Elevator, formData: FormData) {
+    // Guard: don't start if another operation is already in progress
+    if (activatingElevatorId || releasingElevatorId) return;
     const currentFloorId = String(formData.get("currentFloorId") ?? "");
     const serviceStart = String(formData.get("serviceStart") ?? "");
     const serviceEnd = String(formData.get("serviceEnd") ?? "");
@@ -500,6 +502,8 @@ export function OperatorWorkspace({
     if (!selectedElevator) {
       return;
     }
+    // Guard: don't release if another operation is already in progress
+    if (activatingElevatorId || releasingElevatorId) return;
 
     const releasingElevator = selectedElevator;
     const releaseMs = Date.parse(new Date().toISOString());

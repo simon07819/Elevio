@@ -72,6 +72,8 @@ export function OperatorDashboard({
   const manualFullDesiredRef = useRef<boolean | null>(null);
   const manualFullSyncingRef = useRef(false);
   const optimisticRequestsRef = useRef<Map<string, { request: HoistRequest; expiresAt: number }>>(new Map());
+  // IDs cancelled via clearVisibleQueue — never re-injected by stale poll/realtime.
+  const clearedIdsRef = useRef<Set<string>>(new Set());
   // Persistent broadcast channel — pre-subscribed so passenger QR reset is near-instant.
   const broadcastChannelRef = useRef<{ channel: unknown; ready: boolean } | null>(null);
 
@@ -109,6 +111,10 @@ export function OperatorDashboard({
         table: "requests",
         filter: `project_id=eq.${projectId}`,
         onChange: (payload) => {
+          // Never re-inject a cleared request via stale realtime
+          if (payload.eventType !== "DELETE" && clearedIdsRef.current.has(payload.new.id) && OPERATOR_VISIBLE_REQUEST_STATUSES.includes(payload.new.status as (typeof OPERATOR_VISIBLE_REQUEST_STATUSES)[number])) {
+            return;
+          }
           const nextPayload =
             payload.eventType === "DELETE"
               ? payload
@@ -170,6 +176,16 @@ export function OperatorDashboard({
           mergedById.set(id, mergeOperatorPollRequest(existing, incoming));
         }
         const next = [...mergedById.values()];
+        // Never re-inject requests that were cleared via "Vider la liste"
+        // even if stale poll returns them with a non-terminal status.
+        const cleared = clearedIdsRef.current;
+        if (cleared.size > 0) {
+          for (let i = next.length - 1; i >= 0; i--) {
+            if (cleared.has(next[i].id) && OPERATOR_VISIBLE_REQUEST_STATUSES.includes(next[i].status as (typeof OPERATOR_VISIBLE_REQUEST_STATUSES)[number])) {
+              next.splice(i, 1);
+            }
+          }
+        }
         if (next.length === current.length && next.every((r, i) => r.id === current[i]?.id && r.status === current[i]?.status && r.elevator_id === current[i]?.elevator_id)) {
           return current;
         }
@@ -361,6 +377,10 @@ export function OperatorDashboard({
       )
       .map((request) => request.id);
     const previousRequests = liveRequests;
+    // Remember cleared IDs so stale poll/realtime can never re-inject them.
+    for (const id of clearedIds) {
+      clearedIdsRef.current.add(id);
+    }
     flushSync(() => {
       setOperatorActionError(null);
       setLiveRequests((current) =>
