@@ -1,6 +1,11 @@
-import type { CapacitorConfig } from "@capacitor/cli";
-
-const config: CapacitorConfig = {
+/**
+ * Capacitor configuration for iOS/Android wrapping.
+ *
+ * Plain JS (no external type import) so the Next.js build works
+ * without Capacitor as a dependency. When you run Capacitor init,
+ * install the CLI and restore the typed import.
+ */
+const config = {
   appId: "app.elevio.mobile",
   appName: "Elevio",
   webDir: "out",
@@ -29,4 +34,4 @@ const config: CapacitorConfig = {
   },
 };
 
-export default config;
+module.exports = config;

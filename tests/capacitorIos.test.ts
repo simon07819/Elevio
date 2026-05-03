@@ -62,6 +62,7 @@ test("capacitor: config exists with appId and webDir", () => {
   assert.match(config, /SplashScreen/, "SplashScreen plugin configured");
   assert.match(config, /StatusBar/, "StatusBar plugin configured");
   assert.match(config, /05070a/, "background color matches app theme");
+  assert.ok(!config.includes("@capacitor/cli"), "no @capacitor/cli import (build-safe)");
 });
 
 // ---------------------------------------------------------------------------
