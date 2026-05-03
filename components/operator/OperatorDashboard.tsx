@@ -203,12 +203,15 @@ export function OperatorDashboard({
     [floorById, elevatorRequests],
   );
   const realCurrentLoad = liveActivePassengers.reduce((sum, passenger) => sum + passenger.passenger_count, 0);
+  const reservedLoad = elevatorRequests
+    .filter((request) => request.status === "assigned" || request.status === "arriving")
+    .reduce((sum, request) => sum + request.passenger_count, 0);
   const effectiveElevator = {
     ...elevator,
     current_load: realCurrentLoad,
     manual_full: manualFullOverride ?? elevator.manual_full,
   };
-  const remaining = capacityEnabled ? Math.max(0, effectiveElevator.capacity - effectiveElevator.current_load) : Number.POSITIVE_INFINITY;
+  const remaining = capacityEnabled ? Math.max(0, effectiveElevator.capacity - effectiveElevator.current_load - reservedLoad) : Number.POSITIVE_INFINITY;
   const recommendation = useMemo(
     () =>
       getRecommendedNextStop({
@@ -255,7 +258,8 @@ export function OperatorDashboard({
     );
   });
   const priorityCount = prioritiesEnabled ? enriched.filter((request) => request.priority).length : 0;
-  const capacityBlockedCount = capacityEnabled ? enriched.filter((request) => request.passenger_count > remaining).length : 0;
+  const capacityBlockedRequests = capacityEnabled ? enriched.filter((request) => request.passenger_count > remaining) : [];
+  const capacityBlockedCount = capacityBlockedRequests.length;
   const activeQueue = liveQueue.filter((request) => isOperatorMovementQueueStatus(request.status));
   const hasBoardedPassengers = liveActivePassengers.length > 0;
   const hasOperatorWork = activeQueue.length > 0 || hasBoardedPassengers;
