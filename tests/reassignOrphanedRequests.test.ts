@@ -33,7 +33,7 @@
  * 1. Release without other operator → passenger reset (queue_cleared)
  * 2. Release with other operator → request reassigned
  * 3. Reassigned request visible at new operator (elevator_id changed)
- * 4. Boarded request NOT reassigned (ORPHAN_REASSIGN_STATUSES excludes boarded)
+ * 4. Boarded request IS reassigned (ORPHAN_REASSIGN_STATUSES includes boarded)
  * 5. Unassignable orphans cancelled (ineligible operator → cancel + queue_cleared)
  */
 import { readFileSync } from "node:fs";
@@ -84,16 +84,18 @@ test("reassign: elevator_id updated via assignRequestToBestElevator scoring", ()
 });
 
 // ---------------------------------------------------------------------------
-// 4. Boarded request NOT reassigned (ORPHAN_REASSIGN_STATUSES excludes boarded)
+// 4. Boarded request IS reassigned (ORPHAN_REASSIGN_STATUSES includes boarded)
+//    Boarded passengers are physically in the elevator — another operator
+//    can drop them off. If no operator is available, they are cancelled.
 // ---------------------------------------------------------------------------
-test("reassign: ORPHAN_REASSIGN_STATUSES excludes boarded/completed/cancelled", () => {
+test("reassign: ORPHAN_REASSIGN_STATUSES includes boarded, excludes completed/cancelled", () => {
   const actions = readFileSync(join(root, "lib/actions.ts"), "utf8");
   const match = actions.match(/ORPHAN_REASSIGN_STATUSES[^;]+;/);
   assert.ok(match, "ORPHAN_REASSIGN_STATUSES defined");
   assert.ok(match![0].includes("pending"), "includes pending");
   assert.ok(match![0].includes("assigned"), "includes assigned");
   assert.ok(match![0].includes("arriving"), "includes arriving");
-  assert.ok(!match![0].includes("boarded"), "excludes boarded");
+  assert.ok(match![0].includes("boarded"), "includes boarded — another operator can drop off");
   assert.ok(!match![0].includes("completed"), "excludes completed");
   assert.ok(!match![0].includes("cancelled"), "excludes cancelled");
 });

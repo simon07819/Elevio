@@ -373,17 +373,20 @@ async function cancelActiveProjectRequestsIfNoLiveOperators(
   }
 }
 
-/** Statuts orphelins : demandes actives non embarquées, réassignables. */
-const ORPHAN_REASSIGN_STATUSES: RequestStatus[] = ["pending", "assigned", "arriving"];
+/** Statuts orphelins : demandes actives réassignables (y compris boarded — le passager
+ *  est dans l'ascenseur mais un autre opérateur peut le déposer). */
+const ORPHAN_REASSIGN_STATUSES: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"];
 
 /**
- * Réassigne les demandes orphelines (assignées à l'ascenseur libéré, non boarded)
+ * Réassigne les demandes orphelines (assignées à l'ascenseur libéré)
  * vers un autre opérateur actif et éligible. Seul elevator_id est modifié.
+ * Les demandes boarded sont incluses : le passager est dans l'ascenseur
+ * mais un autre opérateur peut le déposer.
  * Si une demande ne peut pas être réassignée (opérateur PLEIN, capacité pleine,
  * hors service), elle est annulée proprement.
  * Retourne true si TOUTES les demandes ont été réassignées (donc pas de reset passager).
  */
-async function reassignOrphanedRequestsToActiveOperator(
+export async function reassignOrphanedRequestsToActiveOperator(
   supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
   projectId: string,
   releasedElevatorId: string,
@@ -1073,6 +1076,8 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
     .from("elevators")
     .update({
       ...TABLET_SESSION_FIELDS_CLEAR,
+      current_load: 0,
+      direction: "idle",
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId)
@@ -1082,11 +1087,25 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
   if (releaseResult.error && isMissingOperatorDisplayNameColumn(releaseResult.error)) {
     releaseResult = await supabase
       .from("elevators")
-      .update(stripOperatorDisplayName({ ...TABLET_SESSION_FIELDS_CLEAR }))
+      .update(stripOperatorDisplayName({
+        ...TABLET_SESSION_FIELDS_CLEAR,
+        current_load: 0,
+        direction: "idle",
+      }))
       .eq("id", elevatorId)
       .eq("project_id", projectId)
       .select("id")
       .maybeSingle();
+  }
+
+  // Reset manual_full (separate update — column may not exist in older DBs)
+  const { error: manualFullResetError } = await supabase
+    .from("elevators")
+    .update({ manual_full: false })
+    .eq("id", elevatorId)
+    .eq("project_id", projectId);
+  if (manualFullResetError && !isMissingElevatorManualFullColumn(manualFullResetError)) {
+    // Non-critical: don't block release for this
   }
 
   const { data: updated, error } = releaseResult;
@@ -1139,6 +1158,8 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
     .from("elevators")
     .update({
       ...TABLET_SESSION_FIELDS_CLEAR,
+      current_load: 0,
+      direction: "idle",
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId);
@@ -1146,7 +1167,11 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
   if (error && isMissingOperatorDisplayNameColumn(error)) {
     const retry = await supabase
       .from("elevators")
-      .update(stripOperatorDisplayName({ ...TABLET_SESSION_FIELDS_CLEAR }))
+      .update(stripOperatorDisplayName({
+        ...TABLET_SESSION_FIELDS_CLEAR,
+        current_load: 0,
+        direction: "idle",
+      }))
       .eq("id", elevatorId)
       .eq("project_id", projectId);
     error = retry.error;
@@ -1156,6 +1181,20 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
     return { ok: false, message: error.message };
   }
 
+  // Reset manual_full (separate update — column may not exist in older DBs)
+  const { error: manualFullError } = await supabase
+    .from("elevators")
+    .update({ manual_full: false })
+    .eq("id", elevatorId)
+    .eq("project_id", projectId);
+  if (manualFullError && !isMissingElevatorManualFullColumn(manualFullError)) {
+    // Non-critical: log but don't block
+  }
+
+  // Try to reassign orphaned requests to another active operator first
+  // (same as releaseOperatorElevator - boarded passengers can be dropped off by another operator)
+  await reassignOrphanedRequestsToActiveOperator(supabase, projectId, elevatorId);
+  // If no other operator is live, cancel all remaining active requests
   await cancelActiveProjectRequestsIfNoLiveOperators(supabase, projectId);
   revalidateAdminProject(projectId);
   return { ok: true, message: "Tablette desactivee. L’operateur devra reactiver depuis son appareil." };
