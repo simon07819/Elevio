@@ -668,7 +668,11 @@ export function computeNextOperatorAction({
 
   if (idleTargetFloor === null) {
     const waitDetail: DispatchRecommendationReason =
-      openRequests.length === 0 ? { kind: "idle_empty" } : { kind: "idle_blocked" };
+      openRequests.length === 0
+        ? { kind: "idle_empty" }
+        : manualFull
+          ? { kind: "idle_manual_full" }
+          : { kind: "idle_blocked" };
     return {
       action: "wait",
       nextFloor: null,
@@ -689,7 +693,11 @@ export function computeNextOperatorAction({
   const idlePrimary = idleAtFloor[0];
   if (!idlePrimary) {
     const waitDetail: DispatchRecommendationReason =
-      openRequests.length === 0 ? { kind: "idle_empty" } : { kind: "idle_blocked" };
+      openRequests.length === 0
+        ? { kind: "idle_empty" }
+        : manualFull
+          ? { kind: "idle_manual_full" }
+          : { kind: "idle_blocked" };
     return {
       action: "wait",
       nextFloor: null,

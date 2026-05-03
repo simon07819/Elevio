@@ -144,6 +144,15 @@ export function RecommendedNextStop({
         {t("operator.pickup")}
       </span>
     </button>
+  ) : recommendation.reasonDetail?.kind === "idle_manual_full" ? (
+    <button
+      type="button"
+      disabled
+      className="touch-target flex min-h-36 w-full cursor-not-allowed flex-col items-center justify-center gap-3 rounded-3xl border border-red-400/35 bg-red-950/45 px-5 py-6 text-center text-red-50 shadow-inner ring-2 ring-red-400/15"
+    >
+      <ShieldAlert size={34} strokeWidth={2.6} className="shrink-0 text-red-200" aria-hidden />
+      <span className="max-w-md text-sm font-bold leading-snug">{idleBlockedMessage}</span>
+    </button>
   ) : recommendation.reasonDetail?.kind === "idle_blocked" ? (
     <button
       type="button"
