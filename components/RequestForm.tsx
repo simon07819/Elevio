@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, Send, ShieldAlert, Users, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, Navigation, Send, ShieldAlert, UserCheck, Users, XCircle } from "lucide-react";
 import { createPassengerRequest, resumePassengerRequest, updateRequestStatus } from "@/lib/actions";
 import { createClient } from "@/lib/supabase/client";
 import { cancelPassengerRequestClient } from "@/lib/passengerCancelClient";
@@ -490,20 +490,41 @@ export function RequestForm({
         <div className="grid gap-4">
           <div
             className={
-              liveDispatch.canDispatch
-                ? "rounded-[1.5rem] bg-emerald-50 p-5 text-emerald-950"
-                : "rounded-[1.5rem] border border-red-200 bg-red-50 p-5 text-red-950"
+              !liveDispatch.canDispatch
+                ? "rounded-[1.5rem] border border-red-200 bg-red-50 p-5 text-red-950"
+                : submittedRequest.status === "arriving"
+                  ? "rounded-[1.5rem] bg-sky-50 p-5 text-sky-950"
+                  : submittedRequest.status === "assigned"
+                    ? "rounded-[1.5rem] bg-blue-50 p-5 text-blue-950"
+                    : submittedRequest.status === "boarded"
+                      ? "rounded-[1.5rem] bg-emerald-50 p-5 text-emerald-950"
+                      : "rounded-[1.5rem] bg-yellow-50 p-5 text-yellow-950"
             }
           >
-            {liveDispatch.canDispatch ? (
+            {!liveDispatch.canDispatch ? (
+              <ShieldAlert className="text-red-700" size={44} />
+            ) : submittedRequest.status === "arriving" ? (
+              <Navigation className="text-sky-600" size={44} />
+            ) : submittedRequest.status === "assigned" ? (
+              <UserCheck className="text-blue-600" size={44} />
+            ) : submittedRequest.status === "boarded" ? (
               <CheckCircle2 className="text-emerald-600" size={44} />
             ) : (
-              <ShieldAlert className="text-red-700" size={44} />
+              <Clock className="text-yellow-600" size={44} />
             )}
-            <h2 className="mt-4 text-3xl font-black">{t("request.sent")}</h2>
-            <p className="mt-3 text-base font-bold leading-7">
-              {liveDispatch.canDispatch ? t("request.sentBody") : t("request.dispatchNoOperator")}
-            </p>
+            <h2 className="mt-4 text-2xl font-black">
+              {!liveDispatch.canDispatch
+                ? t("request.dispatchNoOperator")
+                : submittedRequest.status === "cancelled"
+                  ? t("request.statusCancelled")
+                  : submittedRequest.status === "arriving"
+                    ? t("request.statusArriving")
+                    : submittedRequest.status === "assigned"
+                      ? t("request.statusAssigned")
+                      : submittedRequest.status === "boarded"
+                        ? t("request.statusBoarded")
+                        : t("request.statusPending")}
+            </h2>
           </div>
 
           <div className="rounded-[1.5rem] border-2 border-slate-100 bg-slate-50 p-4">
