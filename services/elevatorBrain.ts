@@ -387,6 +387,20 @@ function capacityWarnings(request: DispatchRequest, capacity: number, remainingC
   return warnings;
 }
 
+/** Filtre les demandes au palier pour ne pas dépasser la capacité restante. */
+function fitRequestsToCapacity(requests: DispatchRequest[], remaining: number): DispatchRequest[] {
+  const result: DispatchRequest[] = [];
+  let left = remaining;
+  for (const request of requests) {
+    if (left <= 0) break;
+    if (request.passenger_count <= left) {
+      result.push(request);
+      left -= request.passenger_count;
+    }
+  }
+  return result;
+}
+
 function pickupReasonDetail(
   request: DispatchRequest,
   currentSort: number,
@@ -554,6 +568,7 @@ export function computeNextOperatorAction({
       );
       const primary = atFloor[0];
       if (primary) {
+        const fittedAtFloor = fitRequestsToCapacity(atFloor, remainingCapacity);
         const otherUpcoming = directionPool.filter(
           (r) => Number(r.from_sort_order) !== Number(primary.from_sort_order),
         );
@@ -572,7 +587,7 @@ export function computeNextOperatorAction({
           primaryPickupRequestId: primary.id,
           reasonDetail,
           reason: formatDispatchRecommendationReason(reasonDetail, "fr", ""),
-          requestsToPickup: atFloor,
+          requestsToPickup: fittedAtFloor,
           requestsToDropoff: [],
           suggestedDirection: directionToward(currentSort, primary.from_sort_order),
           capacityWarnings: geographic.flatMap((request) =>
@@ -701,7 +716,7 @@ export function computeNextOperatorAction({
     primaryPickupRequestId: idlePrimary.id,
     reasonDetail: idlePickupDetail,
     reason: formatDispatchRecommendationReason(idlePickupDetail, "fr", ""),
-    requestsToPickup: idleAtFloor,
+    requestsToPickup: fitRequestsToCapacity(idleAtFloor, remainingCapacity),
     requestsToDropoff: [],
     suggestedDirection: idleTravelDirection,
     capacityWarnings: warnings,
