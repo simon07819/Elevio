@@ -373,17 +373,17 @@ async function cancelActiveProjectRequestsIfNoLiveOperators(
   }
 }
 
-/** Statuts orphelins : demandes actives non embarquées, réassignables. */
-const ORPHAN_REASSIGN_STATUSES: RequestStatus[] = ["pending", "assigned", "arriving"];
+/** Statuts orphelins : demandes actives reassignables (y compris boarded). */
+const ORPHAN_REASSIGN_STATUSES: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"];
 
 /**
- * Réassigne les demandes orphelines (assignées à l'ascenseur libéré, non boarded)
+ * Réassigne les demandes orphelines (assignees a l'ascenseur libere)
  * vers un autre opérateur actif et éligible. Seul elevator_id est modifié.
  * Si une demande ne peut pas être réassignée (opérateur PLEIN, capacité pleine,
  * hors service), elle est annulée proprement.
  * Retourne true si TOUTES les demandes ont été réassignées (donc pas de reset passager).
  */
-async function reassignOrphanedRequestsToActiveOperator(
+export async function reassignOrphanedRequestsToActiveOperator(
   supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
   projectId: string,
   releasedElevatorId: string,
@@ -1073,6 +1073,8 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
     .from("elevators")
     .update({
       ...TABLET_SESSION_FIELDS_CLEAR,
+      current_load: 0,
+      direction: "idle",
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId)
@@ -1082,11 +1084,25 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
   if (releaseResult.error && isMissingOperatorDisplayNameColumn(releaseResult.error)) {
     releaseResult = await supabase
       .from("elevators")
-      .update(stripOperatorDisplayName({ ...TABLET_SESSION_FIELDS_CLEAR }))
+      .update(stripOperatorDisplayName({
+        ...TABLET_SESSION_FIELDS_CLEAR,
+        current_load: 0,
+        direction: "idle",
+      }))
       .eq("id", elevatorId)
       .eq("project_id", projectId)
       .select("id")
       .maybeSingle();
+  }
+
+  // Reset manual_full (separate update - column may not exist)
+  const { error: manualFullResetError } = await supabase
+    .from("elevators")
+    .update({ manual_full: false })
+    .eq("id", elevatorId)
+    .eq("project_id", projectId);
+  if (manualFullResetError && !isMissingElevatorManualFullColumn(manualFullResetError)) {
+    // Non-critical
   }
 
   const { data: updated, error } = releaseResult;
@@ -1139,6 +1155,8 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
     .from("elevators")
     .update({
       ...TABLET_SESSION_FIELDS_CLEAR,
+      current_load: 0,
+      direction: "idle",
     })
     .eq("id", elevatorId)
     .eq("project_id", projectId);
@@ -1146,7 +1164,11 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
   if (error && isMissingOperatorDisplayNameColumn(error)) {
     const retry = await supabase
       .from("elevators")
-      .update(stripOperatorDisplayName({ ...TABLET_SESSION_FIELDS_CLEAR }))
+      .update(stripOperatorDisplayName({
+        ...TABLET_SESSION_FIELDS_CLEAR,
+        current_load: 0,
+        direction: "idle",
+      }))
       .eq("id", elevatorId)
       .eq("project_id", projectId);
     error = retry.error;
@@ -1156,6 +1178,17 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
     return { ok: false, message: error.message };
   }
 
+  // Reset manual_full
+  const { error: manualFullError } = await supabase
+    .from("elevators")
+    .update({ manual_full: false })
+    .eq("id", elevatorId)
+    .eq("project_id", projectId);
+  if (manualFullError && !isMissingElevatorManualFullColumn(manualFullError)) {
+    // Non-critical
+  }
+
+  await reassignOrphanedRequestsToActiveOperator(supabase, projectId, elevatorId);
   await cancelActiveProjectRequestsIfNoLiveOperators(supabase, projectId);
   revalidateAdminProject(projectId);
   return { ok: true, message: "Tablette desactivee. L’operateur devra reactiver depuis son appareil." };
@@ -1602,6 +1635,25 @@ async function syncElevatorWithRequestStatus(
   }
 }
 
+/** Legal status transitions: from current status -> allowed next statuses.
+ *  Terminal statuses (completed, cancelled) can never be left.
+ *  Each non-terminal status can only go forward or to cancelled/pending (defer). */
+const LEGAL_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
+  pending: ["assigned", "cancelled"],
+  assigned: ["arriving", "pending", "cancelled"],
+  arriving: ["boarded", "pending", "cancelled"],
+  boarded: ["completed", "cancelled"],
+  completed: [], // terminal
+  cancelled: [], // terminal
+};
+
+function isLegalTransition(from: RequestStatus, to: RequestStatus): boolean {
+  if (from === to) return false;
+  const allowed = LEGAL_TRANSITIONS[from];
+  if (!allowed) return false;
+  return allowed.includes(to);
+}
+
 export async function updateRequestStatus(
   requestId: string,
   status: RequestStatus,
@@ -1625,6 +1677,19 @@ export async function updateRequestStatus(
 
   if (!isUuid(requestId)) {
     return staleIdsAction();
+  }
+
+  // Validate status transition is legal
+  const { data: currentRequest } = await supabase
+    .from("requests")
+    .select("status")
+    .eq("id", requestId)
+    .maybeSingle();
+  if (currentRequest?.status) {
+    const currentStatus = currentRequest.status as RequestStatus;
+    if (!isLegalTransition(currentStatus, status)) {
+      return { ok: false, message: "Transition invalide : " + currentStatus + " -> " + status + "." };
+    }
   }
 
   const updates: Record<string, unknown> = {
