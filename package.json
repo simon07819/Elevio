@@ -13,6 +13,7 @@
     "test:e2e:50:live": "npx playwright test --project=50-scenarios",
     "test:e2e:stress-crossing:live": "npx playwright test --project=stress-crossing",
     "test:e2e:pickup-qr:live": "npx playwright test --project=pickup-qr-return",
+    "test:e2e:operator-real-flow:live": "npx playwright test --project=operator-real-flow",
     "test:e2e:live": "npx playwright test",
     "typecheck": "tsc --noEmit"
   },

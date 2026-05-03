@@ -27,3 +27,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .test-build/
+e2e-report/
