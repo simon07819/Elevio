@@ -594,10 +594,6 @@ export function OperatorDashboard({
         operatorElevatorId={elevator.id}
         onPickupSuccess={(req) => {
           const now = new Date().toISOString();
-          const client = createClient();
-          if (client) {
-            broadcastPassengerRequestBoarded(client, projectId, [req.id]);
-          }
           rememberOptimisticRequest({
             ...req,
             status: "boarded",
@@ -647,6 +643,12 @@ export function OperatorDashboard({
             });
             return next;
           });
+        }}
+        onPickupConfirmed={(req) => {
+          const client = createClient();
+          if (client) {
+            broadcastPassengerRequestBoarded(client, projectId, [req.id]);
+          }
         }}
         onDropoffSuccess={({ requestIds, dropFloorId }) => {
           const now = new Date().toISOString();

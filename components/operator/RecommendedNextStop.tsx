@@ -25,6 +25,7 @@ export function RecommendedNextStop({
   operatorElevatorId,
   onPickupSuccess,
   onPickupFailure,
+  onPickupConfirmed,
   onDropoffSuccess,
   onDropoffFailure,
 }: {
@@ -34,6 +35,8 @@ export function RecommendedNextStop({
   onPickupSuccess?: (request: EnrichedRequest) => void;
   /** Rollback du pickup : appele quand advanceRequestStatus retourne ok=false ou throw. */
   onPickupFailure?: (request: EnrichedRequest) => void;
+  /** Apres confirmation serveur du pickup : broadcast passager, etc. */
+  onPickupConfirmed?: (request: EnrichedRequest) => void;
   /** Apres depot confirme : ids termines et palier cabine (destination des sorties). */
   onDropoffSuccess?: (payload: { requestIds: string[]; dropFloorId: string }) => void;
   /** Rollback du dropoff : appele quand au moins un advanceRequestStatus echoue ou throw. */
@@ -178,7 +181,9 @@ export function RecommendedNextStop({
       assignElevatorId: operatorElevatorId,
     })
       .then((result) => {
-        if (!result.ok) {
+        if (result.ok) {
+          onPickupConfirmed?.(targetRequest);
+        } else {
           setActionError(result.message);
           onPickupFailure?.(targetRequest);
         }
