@@ -63,7 +63,12 @@ function isTerminalPassengerRequestStatus(status: RequestStatus): boolean {
 
 /** Après ramassage opérateur : plus de suivi passager — retour scan QR requis. */
 function clearsPassengerPendingStorage(status: RequestStatus): boolean {
-  return isTerminalPassengerRequestStatus(status) || status === "boarded";
+  return status === "boarded" || status === "completed";
+}
+
+/** Quand le passager annule lui-même : on reste dans le flow de sélection. */
+function isPassengerSelfCancelStatus(status: RequestStatus): boolean {
+  return status === "cancelled";
 }
 
 function shouldRestoreSubmittedFromSnapshot(status: RequestStatus): boolean {
@@ -320,9 +325,10 @@ export function RequestForm({
           if (!ids?.includes(rid)) {
             return;
           }
+          // Operator cleared queue — passenger stays in flow, can select a new floor
           clearPassengerPendingRequest(project.id, rid);
           setSubmittedRequest(null);
-          router.replace("/");
+          setMessage(t("request.cancelled"));
         },
       )
       .on(
@@ -367,10 +373,16 @@ export function RequestForm({
         router.replace("/");
         return;
       }
+      if (isPassengerSelfCancelStatus(snap.status)) {
+        // Cancelled (by passenger or operator) — stay in flow, don't force to QR.
+        clearPassengerPendingRequest(project.id, trackedRequestId);
+        setSubmittedRequest(null);
+        setMessage(t("request.cancelled"));
+        return;
+      }
       if (clearsPassengerPendingStorage(snap.status)) {
         clearPassengerPendingRequest(project.id, trackedRequestId);
         setSubmittedRequest(null);
-        setMessage(requestInvalidatedMessage(snap.status, t));
         router.replace("/");
         return;
       }
