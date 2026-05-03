@@ -180,7 +180,7 @@ export function OperatorWorkspace({
   );
 
   useEffect(() => {
-    const id = window.setInterval(() => setOperatorClockMs(Date.now()), 15_000);
+    const id = window.setInterval(() => setOperatorClockMs(Date.now()), 5_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -390,6 +390,7 @@ export function OperatorWorkspace({
     window.localStorage.setItem(elevatorStorageKey(project.id), elevator.id);
     setSelectedElevatorId(elevator.id);
     setLocalSessionClaim({ elevatorId: elevator.id, updatedAt: nowMs });
+    setOperatorClockMs(nowMs);
     setLocallyReleasedElevatorIds((current) => {
       if (!current.has(elevator.id)) return current;
       const next = new Set(current);
@@ -514,6 +515,7 @@ export function OperatorWorkspace({
     setLocalSessionClaim({ elevatorId: null, updatedAt: releaseMs });
     setLocallyReleasedElevatorIds((current) => new Set(current).add(releasingElevator.id));
     setMessage(null);
+    setOperatorClockMs(Date.now());
     setReleasingElevatorId(releasingElevator.id);
     setLocalElevators((current) =>
       current.map((item) =>

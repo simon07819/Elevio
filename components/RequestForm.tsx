@@ -536,6 +536,9 @@ export function RequestForm({
                         ? t("request.statusBoarded")
                         : t("request.statusPending")}
             </h2>
+            {liveDispatch.canDispatch && submittedRequest.status === "pending" && (
+              <p className="mt-3 text-base font-bold leading-7">{t("request.sentBody")}</p>
+            )}
           </div>
 
           <div className="rounded-[1.5rem] border-2 border-slate-100 bg-slate-50 p-4">

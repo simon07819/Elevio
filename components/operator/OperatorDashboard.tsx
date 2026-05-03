@@ -133,11 +133,11 @@ export function OperatorDashboard({
     const client = createClient();
     if (!client) return;
     const ch = client.channel(passengerProjectBroadcastChannel(projectId));
-    let ready = false;
+    const ref = { channel: ch, ready: false };
     ch.subscribe((status: string) => {
-      if (status === "SUBSCRIBED") ready = true;
+      if (status === "SUBSCRIBED") ref.ready = true;
     });
-    broadcastChannelRef.current = { channel: ch, ready };
+    broadcastChannelRef.current = ref;
     return () => {
       client.removeChannel(ch);
       broadcastChannelRef.current = null;
@@ -442,7 +442,7 @@ export function OperatorDashboard({
 
         // Use persistent broadcast channel for faster delivery.
         const ref = broadcastChannelRef.current;
-        if (ref?.channel && typeof (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send === "function") {
+        if (ref?.ready && ref.channel && typeof (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send === "function") {
           void (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send({
             type: "broadcast",
             event: "queue_cleared",
@@ -722,7 +722,7 @@ export function OperatorDashboard({
         onPickupConfirmed={(req) => {
           // Use persistent broadcast channel (already subscribed) for near-instant delivery.
           const ref = broadcastChannelRef.current;
-          if (ref?.channel && typeof (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send === "function") {
+          if (ref?.ready && ref.channel && typeof (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send === "function") {
             void (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send({
               type: "broadcast",
               event: "request_boarded",
