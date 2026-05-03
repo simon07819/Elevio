@@ -1,11 +1,11 @@
 import { AppShell } from "@/components/AppShell";
 import { AdminProjectManager } from "@/components/admin/AdminProjectManager";
 import { T } from "@/components/i18n/LanguageProvider";
-import { requireUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { getProjects } from "@/lib/projects";
 
 export default async function AdminProjectsPage() {
-  await requireUser();
+  await requireAdmin();
   const { projects, loadError, qrReadyProjectIds } = await getProjects();
 
   return (
