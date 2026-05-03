@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/AppShell";
 import { QRCodeGenerator } from "@/components/admin/QRCodeGenerator";
 import { T } from "@/components/i18n/LanguageProvider";
-import { requireUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { getAdminProjectData } from "@/lib/adminProject";
 import { getProjects } from "@/lib/projects";
 
@@ -10,7 +10,7 @@ export default async function AdminQRCodesPage({
 }: {
   searchParams: Promise<{ projectId?: string }>;
 }) {
-  await requireUser();
+  await requireAdmin();
   const { projectId } = await searchParams;
   const { projects } = await getProjects();
   const selectedProject = projects.find((project) => project.id === projectId) ?? projects.find((project) => project.active) ?? projects[0];

@@ -3,7 +3,7 @@ import { AppNavigation } from "@/components/AppNavigation";
 import { T } from "@/components/i18n/LanguageProvider";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { OperatorWorkspace } from "@/components/operator/OperatorWorkspace";
-import { getCurrentProfile, requireUser } from "@/lib/auth";
+import { getCurrentProfile, requireOperator } from "@/lib/auth";
 import { getAdminProjectData } from "@/lib/adminProject";
 import { getProjects } from "@/lib/projects";
 import type { Project } from "@/types/hoist";
@@ -20,8 +20,7 @@ function pickOperatorProject(projects: Project[]): Project | undefined {
 }
 
 export default async function OperatorPage() {
-  const user = await requireUser();
-  const profile = await getCurrentProfile();
+  const { user, profile } = await requireOperator();
   const operatorDisplayName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() || profile?.email || user.email || "";
 

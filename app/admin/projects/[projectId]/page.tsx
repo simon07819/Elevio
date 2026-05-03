@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { AdminProjectDetail } from "@/components/admin/AdminProjectDetail";
 import { T } from "@/components/i18n/LanguageProvider";
-import { requireUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { getAdminProjectData } from "@/lib/adminProject";
 
 export default async function AdminProjectDetailPage({
@@ -10,7 +10,7 @@ export default async function AdminProjectDetailPage({
 }: {
   params: Promise<{ projectId: string }>;
 }) {
-  await requireUser();
+  await requireAdmin();
   const { projectId } = await params;
   const data = await getAdminProjectData(projectId);
 

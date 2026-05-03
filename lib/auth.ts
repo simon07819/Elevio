@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ensureProfileForUser, type Profile } from "@/lib/profile";
+import { ensureProfileForUser, type AccountRole, type Profile } from "@/lib/profile";
+
+const OPERATOR_ROLES: AccountRole[] = ["operator", "admin", "superadmin"];
+const ADMIN_ROLES: AccountRole[] = ["admin", "superadmin"];
 
 export async function getCurrentUser() {
   const supabase = await createClient();
@@ -24,6 +27,30 @@ export async function requireUser() {
   }
 
   return user;
+}
+
+/** Operator guard: requires auth + operator/admin/superadmin role. */
+export async function requireOperator() {
+  const user = await requireUser();
+  const profile = await getCurrentProfile();
+
+  if (!profile || !OPERATOR_ROLES.includes(profile.account_role)) {
+    redirect("/admin/login");
+  }
+
+  return { user, profile };
+}
+
+/** Admin guard: requires auth + admin/superadmin role. */
+export async function requireAdmin() {
+  const user = await requireUser();
+  const profile = await getCurrentProfile();
+
+  if (!profile || !ADMIN_ROLES.includes(profile.account_role)) {
+    redirect("/admin/login");
+  }
+
+  return { user, profile };
 }
 
 export async function getCurrentProfile(): Promise<Profile | null> {

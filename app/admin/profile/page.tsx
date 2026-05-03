@@ -1,14 +1,14 @@
 import { AppShell } from "@/components/AppShell";
 import { AdminProfileForm } from "@/components/admin/AdminProfileForm";
 import { T } from "@/components/i18n/LanguageProvider";
-import { getCurrentProfile, requireUser } from "@/lib/auth";
+import { getCurrentProfile, requireAdmin } from "@/lib/auth";
 
 export default async function AdminProfilePage({
   searchParams,
 }: {
   searchParams: Promise<{ onboarding?: string }>;
 }) {
-  await requireUser();
+  await requireAdmin();
   const profile = await getCurrentProfile();
   const onboarding = (await searchParams).onboarding === "1";
 

@@ -1,6 +1,6 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
-export type AccountRole = "admin" | "superadmin";
+export type AccountRole = "operator" | "admin" | "superadmin";
 
 export type Profile = {
   id: string;
@@ -24,7 +24,7 @@ export function superadminEmails() {
 }
 
 export function roleForEmail(email?: string | null): AccountRole {
-  return email && superadminEmails().includes(email.toLowerCase()) ? "superadmin" : "admin";
+  return email && superadminEmails().includes(email.toLowerCase()) ? "superadmin" : "operator";
 }
 
 function metadataValue(metadata: User["user_metadata"], snakeKey: string, camelKey?: string) {
