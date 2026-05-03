@@ -626,6 +626,28 @@ export function OperatorDashboard({
             return next;
           });
         }}
+        onPickupFailure={(req) => {
+          optimisticRequestsRef.current.delete(req.id);
+          setLiveRequests((prev) => {
+            const next = prev.map((r) =>
+              r.id === req.id
+                ? {
+                    ...r,
+                    status: req.status,
+                    updated_at: req.updated_at,
+                    elevator_id: req.elevator_id,
+                  }
+                : r,
+            );
+            const boardedLoad = next
+              .filter((r) => r.elevator_id === elevator.id && r.status === "boarded")
+              .reduce((sum, r) => sum + r.passenger_count, 0);
+            onElevatorPatch?.(elevator.id, {
+              current_load: boardedLoad,
+            });
+            return next;
+          });
+        }}
         onDropoffSuccess={({ requestIds, dropFloorId }) => {
           const now = new Date().toISOString();
           setLiveRequests((prev) => {
@@ -649,6 +671,26 @@ export function OperatorDashboard({
             onElevatorPatch?.(elevator.id, {
               current_floor_id: dropFloorId,
               direction: boardedLoad === 0 ? "idle" : elevator.direction,
+              current_load: boardedLoad,
+            });
+            return next;
+          });
+        }}
+        onDropoffFailure={({ requestIds }) => {
+          const now = new Date().toISOString();
+          for (const id of requestIds) {
+            optimisticRequestsRef.current.delete(id);
+          }
+          setLiveRequests((prev) => {
+            const next = prev.map((r) =>
+              requestIds.includes(r.id) && r.status === "completed"
+                ? { ...r, status: "boarded" as const, completed_at: null, updated_at: now }
+                : r,
+            );
+            const boardedLoad = next
+              .filter((r) => r.elevator_id === elevator.id && r.status === "boarded")
+              .reduce((sum, r) => sum + r.passenger_count, 0);
+            onElevatorPatch?.(elevator.id, {
               current_load: boardedLoad,
             });
             return next;

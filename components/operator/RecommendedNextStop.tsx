@@ -24,14 +24,20 @@ export function RecommendedNextStop({
   actionRequests,
   operatorElevatorId,
   onPickupSuccess,
+  onPickupFailure,
   onDropoffSuccess,
+  onDropoffFailure,
 }: {
   recommendation: DispatchRecommendation;
   actionRequests: EnrichedRequest[];
   operatorElevatorId: string;
   onPickupSuccess?: (request: EnrichedRequest) => void;
+  /** Rollback du pickup : appele quand advanceRequestStatus retourne ok=false ou throw. */
+  onPickupFailure?: (request: EnrichedRequest) => void;
   /** Apres depot confirme : ids termines et palier cabine (destination des sorties). */
   onDropoffSuccess?: (payload: { requestIds: string[]; dropFloorId: string }) => void;
+  /** Rollback du dropoff : appele quand au moins un advanceRequestStatus echoue ou throw. */
+  onDropoffFailure?: (payload: { requestIds: string[] }) => void;
 }) {
   const [completedDropoffIds, setCompletedDropoffIds] = useState<Set<string>>(() => new Set());
   const [pendingPickupIds, setPendingPickupIds] = useState<Set<string>>(() => new Set());
@@ -148,9 +154,10 @@ export function RecommendedNextStop({
     const requestId = actionRequest.id;
     if (pendingPickupIds.has(requestId)) return;
 
+    const targetRequest = actionRequest;
     setActionError(null);
     setPendingPickupIds((current) => new Set(current).add(requestId));
-    onPickupSuccess?.(actionRequest);
+    onPickupSuccess?.(targetRequest);
 
     void advanceRequestStatus(requestId, "boarded", {
       assignElevatorId: operatorElevatorId,
@@ -158,10 +165,12 @@ export function RecommendedNextStop({
       .then((result) => {
         if (!result.ok) {
           setActionError(result.message);
+          onPickupFailure?.(targetRequest);
         }
       })
       .catch(() => {
         setActionError("Action impossible. Verifiez la connexion et reessayez.");
+        onPickupFailure?.(targetRequest);
       })
       .finally(() => {
         setPendingPickupIds((current) => {
@@ -204,6 +213,7 @@ export function RecommendedNextStop({
             for (const id of ids) next.delete(id);
             return next;
           });
+          onDropoffFailure?.({ requestIds: ids });
         }
       })
       .catch(() => {
@@ -213,6 +223,7 @@ export function RecommendedNextStop({
           for (const id of ids) next.delete(id);
           return next;
         });
+        onDropoffFailure?.({ requestIds: ids });
       })
       .finally(() => {
         setPendingDropoffIds((current) => {
