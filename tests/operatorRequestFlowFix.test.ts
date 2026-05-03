@@ -38,10 +38,10 @@ test("operator flow fix: RecommendedNextStop expose les props onPickupFailure et
 });
 
 test("operator flow fix: pickup() appelle onPickupFailure quand advanceRequestStatus retourne ok=false", () => {
-  // Branche `then` : si !result.ok -> setActionError + onPickupFailure.
+  // Branche `then` : si result.ok -> onPickupConfirmed, else -> setActionError + onPickupFailure.
   assert.match(
     RECOMMENDED,
-    /if \(!result\.ok\) \{\s*setActionError\(result\.message\);\s*onPickupFailure\?\.\(targetRequest\);/,
+    /if \(result\.ok\) \{\s*onPickupConfirmed\?\.\(targetRequest\);\s*\} else \{\s*setActionError\(result\.message\);\s*onPickupFailure\?\.\(targetRequest\);/,
   );
 });
 
