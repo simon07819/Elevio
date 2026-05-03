@@ -7,26 +7,34 @@
  * existed). Passengers were always reset via queue_cleared even when
  * their request was reassigned to another operator.
  *
+ * Additional bug: if another operator exists but is ineligible
+ * (PLEIN/manual_full, capacity full, out of service), requests were
+ * left orphaned — passenger stuck waiting indefinitely.
+ *
  * Fix (server-side):
  * - Add reassignOrphanedRequestsToActiveOperator in actions.ts
  * - Called BEFORE cancelActiveProjectRequestsIfNoLiveOperators
  * - Uses assignRequestToBestElevator for scoring
  * - Only updates elevator_id (no new request, no duplication)
+ * - If assignRequestToBestElevator returns null (ineligible operator),
+ *   cancels the orphan with note "Annulée automatiquement: aucun
+ *   opérateur éligible disponible."
+ * - Returns true ONLY if ALL orphans were reassigned
+ * - Returns false if any orphan was unassignable → triggers queue_cleared
  * - Returns hasOtherOperator boolean in release result
  *
  * Fix (client-side):
  * - After release, broadcast OPERATOR_BROADCAST_ELEVATOR_SESSION_CLEARED
  *   to other operators always
  * - Broadcast PASSENGER_BROADCAST_QUEUE_CLEARED to passengers ONLY
- *   if no other operator is available (hasOtherOperator=false)
- * - If hasOtherOperator=true, passengers keep their request (reassigned)
+ *   if hasOtherOperator=false
  *
  * Tests:
  * 1. Release without other operator → passenger reset (queue_cleared)
  * 2. Release with other operator → request reassigned
  * 3. Reassigned request visible at new operator (elevator_id changed)
  * 4. Boarded request NOT reassigned (ORPHAN_REASSIGN_STATUSES excludes boarded)
- * 5. No duplication: only elevator_id updated via .update()
+ * 5. Unassignable orphans cancelled (ineligible operator → cancel + queue_cleared)
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -91,15 +99,21 @@ test("reassign: ORPHAN_REASSIGN_STATUSES excludes boarded/completed/cancelled", 
 });
 
 // ---------------------------------------------------------------------------
-// 5. No duplication: only elevator_id changed, no new request created
+// 5. Unassignable orphans cancelled (ineligible operator → cancel + queue_cleared)
 // ---------------------------------------------------------------------------
-test("reassign: only elevator_id changed via update, no insert", () => {
+test("reassign: unassignable orphans cancelled when operator ineligible", () => {
   const actions = readFileSync(join(root, "lib/actions.ts"), "utf8");
-  // Find the reassign function body — ends at the next top-level function or export
   const fnStart = actions.indexOf("async function reassignOrphanedRequestsToActiveOperator");
-  const fnEnd = actions.indexOf("\n}", fnStart + 100); // first closing brace at column 0
+  const fnEnd = actions.indexOf("\n}", fnStart + 100);
   const fnBody = actions.slice(fnStart, fnEnd);
-  assert.ok(fnBody.includes(".update({ elevator_id:"), "uses update");
+  // Unassignable orphans collected in unassignedIds
+  assert.match(fnBody, /unassignedIds/, "tracks unassignable orphans");
+  // They are cancelled with status "cancelled"
+  assert.match(fnBody, /status: .cancelled./, "sets status to cancelled");
+  // With a specific note explaining why
+  assert.match(fnBody, /Annulée automatiquement/, "cancellation note present");
+  // Function returns false if any orphan was unassignable
+  assert.match(fnBody, /unassignedIds\.length === 0/, "returns false when unassignable orphans exist");
+  // No insert in reassign function
   assert.ok(!fnBody.includes(".insert("), "no insert in reassign function body");
-  assert.match(fnBody, /\.eq\("id", orphan\.id\)/, "targets specific request by id");
 });
