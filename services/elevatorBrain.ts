@@ -411,6 +411,9 @@ function pickupReasonDetail(
   travelDirection: Direction = "idle",
   /** Séquence des déposes planifiées après ce ramassage (incluant intermédiaires). */
   plannedDropoffs?: string[],
+  /** Demandes au même palier que la primaire (inclut la primaire) — pour agréger le nombre
+   *  de passagers vers la même destination. */
+  sameFloorRequests?: DispatchRequest[],
 ): DispatchRecommendationReason {
   // Liste des étages distincts à ramasser après celui-ci, triés dans l'ordre du trajet,
   // pour que l'opérateur sache que « vers 16 » est la destination du passager et pas le
@@ -437,7 +440,11 @@ function pickupReasonDetail(
     kind: "pickup",
     atCurrentFloor: request.from_sort_order === currentSort,
     pickupLabel: floorLabel(floors, request.from_floor_id, request.from_sort_order),
-    passengerCount: request.passenger_count,
+    passengerCount: sameFloorRequests
+      ? sameFloorRequests
+          .filter((r) => r.to_floor_id === request.to_floor_id)
+          .reduce((sum, r) => sum + r.passenger_count, 0)
+      : request.passenger_count,
     destinationLabel: floorLabel(floors, request.to_floor_id, request.to_sort_order),
     priority: prioritiesEnabled && request.priority,
     upcomingPickupLabels: upcomingLabels.length > 0 ? upcomingLabels : undefined,
@@ -592,6 +599,7 @@ export function computeNextOperatorAction({
           otherUpcoming,
           travelDirection,
           allDropoffs.length > 0 ? allDropoffs : undefined,
+          fittedAtFloor,
         );
         return {
           action: "pickup",
@@ -704,6 +712,8 @@ export function computeNextOperatorAction({
     };
   }
 
+  const idleFittedAtFloor = fitRequestsToCapacity(idleAtFloor, remainingCapacity);
+
   // Lister les autres ramassages prévus dans le cycle (autres paliers du pool directionnel)
   // pour que la raison ne donne pas l'illusion d'un trajet direct vers la destination du
   // premier passager.
@@ -748,6 +758,7 @@ export function computeNextOperatorAction({
     // d'idle peut pointer "up" même quand on descend physiquement vers le palier de pickup).
     idlePhaseDirection !== "idle" ? idlePhaseDirection : idleTravelDirection,
     idlePlannedDropoffs,
+    idleFittedAtFloor,
   );
 
   return {
@@ -757,7 +768,7 @@ export function computeNextOperatorAction({
     primaryPickupRequestId: idlePrimary.id,
     reasonDetail: idlePickupDetail,
     reason: formatDispatchRecommendationReason(idlePickupDetail, "fr", ""),
-    requestsToPickup: fitRequestsToCapacity(idleAtFloor, remainingCapacity),
+    requestsToPickup: idleFittedAtFloor,
     requestsToDropoff: [],
     suggestedDirection: idleTravelDirection,
     capacityWarnings: warnings,

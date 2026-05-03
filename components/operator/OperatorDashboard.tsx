@@ -333,7 +333,12 @@ export function OperatorDashboard({
     recommendation.reasonDetail?.kind !== "idle_blocked" &&
     !effectiveElevator.manual_full
   ) {
-    const fbDetail = { kind: "pickup_fallback" as const, passengerCount: fallbackPickup.passenger_count };
+    const fbPickupSameFloor = fallbackPickup
+      ? [...liveQueue]
+          .filter((request) => isOperatorAwaitingPickup(request.status) && request.from_floor_id === fallbackPickup.from_floor_id && request.to_floor_id === fallbackPickup.to_floor_id)
+          .reduce((sum, r) => sum + r.passenger_count, 0)
+      : fallbackPickup?.passenger_count ?? 0;
+    const fbDetail = { kind: "pickup_fallback" as const, passengerCount: fbPickupSameFloor };
     visibleRecommendation = {
       ...recommendation,
       nextFloor: fallbackPickupFloor,
