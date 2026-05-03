@@ -373,6 +373,101 @@ async function cancelActiveProjectRequestsIfNoLiveOperators(
   }
 }
 
+/** Statuts orphelins : demandes actives non embarquées, réassignables. */
+const ORPHAN_REASSIGN_STATUSES: RequestStatus[] = ["pending", "assigned", "arriving"];
+
+/**
+ * Réassigne les demandes orphelines (assignées à l'ascenseur libéré, non boarded)
+ * vers un autre opérateur actif et éligible. Seul elevator_id est modifié.
+ * Si une demande ne peut pas être réassignée (opérateur PLEIN, capacité pleine,
+ * hors service), elle est annulée proprement.
+ * Retourne true si TOUTES les demandes ont été réassignées (donc pas de reset passager).
+ */
+async function reassignOrphanedRequestsToActiveOperator(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  projectId: string,
+  releasedElevatorId: string,
+): Promise<boolean> {
+  const { data: elevators } = await supabase
+    .from("elevators")
+    .select(elevatorSelectColumns)
+    .eq("project_id", projectId)
+    .eq("active", true);
+
+  const liveElevators = ((elevators ?? []) as Elevator[]).filter(
+    (e) =>
+      e.id !== releasedElevatorId &&
+      Boolean(e.operator_session_id) &&
+      !isOperatorTabletSessionStale(e.operator_session_heartbeat_at),
+  );
+
+  if (liveElevators.length === 0) {
+    return false;
+  }
+
+  const { data: orphans } = await supabase
+    .from("requests")
+    .select("id,from_floor_id,to_floor_id,direction,passenger_count,priority,wait_started_at,status")
+    .eq("project_id", projectId)
+    .eq("elevator_id", releasedElevatorId)
+    .in("status", ORPHAN_REASSIGN_STATUSES);
+
+  if (!orphans || orphans.length === 0) {
+    return true;
+  }
+
+  const { data: floors } = await supabase
+    .from("floors")
+    .select("*")
+    .eq("project_id", projectId);
+
+  const { data: activeRequests } = await supabase
+    .from("requests")
+    .select("id,project_id,elevator_id,from_floor_id,to_floor_id,direction,passenger_count,original_passenger_count,remaining_passenger_count,split_required,priority,priority_reason,note,status,sequence_number,wait_started_at,created_at,updated_at,completed_at")
+    .eq("project_id", projectId)
+    .in("status", REQUESTS_OPEN_DURING_SERVICE);
+
+  const projectFloors = (floors ?? []) as Floor[];
+  const allRequests = (activeRequests ?? []) as HoistRequest[];
+  const unassignedIds: string[] = [];
+
+  for (const orphan of orphans) {
+    const assignment = assignRequestToBestElevator({
+      request: orphan,
+      elevators: liveElevators,
+      floors: projectFloors,
+      requests: allRequests,
+    });
+    if (assignment.elevatorId) {
+      await supabase
+        .from("requests")
+        .update({ elevator_id: assignment.elevatorId, updated_at: new Date().toISOString() })
+        .eq("id", orphan.id);
+    } else {
+      // Aucun opérateur éligible (PLEIN, capacité pleine, hors service) → annuler
+      unassignedIds.push(orphan.id);
+    }
+  }
+
+  // Annuler les demandes qui n'ont pas pu être réassignées
+  if (unassignedIds.length > 0) {
+    const now = new Date().toISOString();
+    await supabase
+      .from("requests")
+      .update({
+        status: "cancelled",
+        completed_at: now,
+        updated_at: now,
+        note: "Annulée automatiquement : aucun opérateur éligible disponible.",
+      })
+      .in("id", unassignedIds);
+  }
+
+  // Retourner false si au moins une demande n'a pas pu être réassignée
+  // → le client doit envoyer queue_cleared pour ces passagers
+  return unassignedIds.length === 0;
+}
+
 export async function createFloor(projectId: string, formData: FormData) {
   const supabase = await createClient();
   const rawLabel = String(formData.get("label") ?? "").trim();
@@ -1008,9 +1103,10 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
     };
   }
 
+  const hasOtherOperator = await reassignOrphanedRequestsToActiveOperator(supabase, projectId, elevatorId);
   await cancelActiveProjectRequestsIfNoLiveOperators(supabase, projectId);
   revalidateAdminProject(projectId);
-  return { ok: true, message: "Tablette operateur liberee." };
+  return { ok: true as const, message: "Tablette operateur liberee.", hasOtherOperator };
 }
 
 export async function adminDeactivateOperatorTablet(projectId: string, elevatorId: string) {
