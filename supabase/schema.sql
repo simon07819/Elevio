@@ -171,6 +171,15 @@ create table if not exists requests (
   check (priority = false or nullif(trim(priority_reason), '') is not null)
 );
 
+-- Skip passage: operator temporarily ignores a pickup for the current cycle.
+-- Auto-expires after 5 minutes or when elevator direction returns to idle after dropoff.
+alter table requests add column if not exists skipped_by_elevator_id uuid references elevators(id) on delete set null;
+alter table requests add column if not exists skipped_at timestamptz;
+
+-- Partial index: only rows currently skipped (fast dispatch filter)
+create index if not exists idx_requests_skipped_active on requests (skipped_by_elevator_id, id)
+  where skipped_by_elevator_id is not null and skipped_at is not null;
+
 alter table requests add column if not exists passenger_device_key uuid;
 
 create table if not exists request_events (

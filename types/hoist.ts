@@ -137,6 +137,10 @@ export type HoistRequest = {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  /** Elevator that temporarily skipped this request for the current cycle. */
+  skipped_by_elevator_id?: string | null;
+  /** When the skip was applied; auto-expires after 5 min. */
+  skipped_at?: string | null;
 };
 
 export type RequestEvent = {
@@ -214,6 +218,8 @@ export type DispatchInput = {
   capacityEnabled?: boolean;
   /** Operator-set full pause: continue dropoffs, block pickups. */
   manualFull?: boolean;
+  /** Real elevator ID from DB — used to match skip markers on requests. */
+  elevatorId?: string;
 };
 
 export type DispatchRecommendation = {

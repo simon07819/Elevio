@@ -329,6 +329,7 @@ function revalidateAdminProject(projectId: string) {
 }
 
 const REQUESTS_OPEN_DURING_SERVICE: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"];
+const WAITING_STATUSES = new Set<RequestStatus>(["pending", "assigned", "arriving"]);
 
 /** Legal forward-only status transitions. Terminal statuses (completed, cancelled) have no outgoing edges. */
 const LEGAL_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
@@ -1923,6 +1924,95 @@ export async function advanceRequestStatus(
   };
 
   return updateRequestStatus(requestId, status, messages[status], options);
+}
+
+/** Skip a pickup request for the current passage cycle. The request stays active
+ *  (pending/assigned/arriving) but is temporarily ignored by the dispatch engine
+ *  for this elevator. Auto-expires after 5 minutes or on direction change/dropoff.
+ *  The request will be recommended again on the next cycle. */
+export async function skipRequestForCurrentPassage(requestId: string, elevatorId: string) {
+  const supabase = await createClient();
+
+  if (!supabase) {
+    return { ok: true, message: "Mode demo: passage saute." };
+  }
+
+  if (!isUuid(requestId) || !isUuid(elevatorId)) {
+    return staleIdsAction();
+  }
+
+  // Verify request is in a skippable status
+  const { data: request } = await supabase
+    .from("requests")
+    .select("id, status, elevator_id")
+    .eq("id", requestId)
+    .maybeSingle();
+
+  if (!request) {
+    return { ok: false, message: "Demande introuvable." };
+  }
+
+  if (!WAITING_STATUSES.has(request.status as RequestStatus)) {
+    return { ok: false, message: "Cette demande ne peut plus etre sautee." };
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("requests")
+    .update({
+      skipped_by_elevator_id: elevatorId,
+      skipped_at: now,
+      updated_at: now,
+    })
+    .eq("id", requestId);
+
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+
+  // Log the skip event
+  await supabase.from("request_events").insert({
+    request_id: requestId,
+    event_type: "deferred",
+    message: "Passage saute par l'operateur — sera recommande au prochain cycle.",
+  });
+
+  console.log("[Elevio Skip]", { requestId, elevatorId, status: request.status, skippedAt: now });
+  logAction("skipRequestForCurrentPassage", { requestId, elevatorId, fromStatus: request.status });
+
+  revalidatePath("/operator");
+  revalidatePath("/admin");
+  return { ok: true, message: "Passage saute. La demande sera recommandee au prochain cycle." };
+}
+
+/** Clear skip markers on requests assigned to an elevator when the cycle changes
+ *  (direction returns to idle after dropoff). Called from the operator dashboard
+ *  after a dropoff completes. */
+export async function clearSkippedRequestsForElevator(elevatorId: string) {
+  const supabase = await createClient();
+
+  if (!supabase) {
+    return { ok: true, message: "Mode demo: skip cleared." };
+  }
+
+  if (!isUuid(elevatorId)) {
+    return staleIdsAction();
+  }
+
+  const { error } = await supabase
+    .from("requests")
+    .update({
+      skipped_by_elevator_id: null,
+      skipped_at: null,
+    })
+    .eq("skipped_by_elevator_id", elevatorId);
+
+  if (error) {
+    console.error("[clearSkippedRequestsForElevator] error", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  return { ok: true, message: "Skips cleared." };
 }
 
 export async function createRequestEvent(requestId: string, eventType: RequestEventType, message: string) {

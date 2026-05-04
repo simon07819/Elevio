@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { Ban, DoorOpen, Loader2, Pause, TriangleAlert, UserCheck } from "lucide-react";
-import { advanceRequestStatus } from "@/lib/actions";
+import { advanceRequestStatus, skipRequestForCurrentPassage } from "@/lib/actions";
 import { trackRequestPickedUp, trackRequestDroppedOff } from "@/lib/analytics";
 import { captureError } from "@/lib/errorTracking";
 import { startPickupToDbTimer } from "@/lib/performanceMonitor";
@@ -12,6 +12,7 @@ import { formatDispatchRecommendationReason } from "@/lib/recommendationReason";
 import { resolveRequestState, logAction } from "@/lib/stateResolution";
 import type { DispatchRecommendation, EnrichedRequest } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
+import { SkipForward } from "lucide-react";
 
 function capacityWarningTranslationKey(type: DispatchRecommendation["capacityWarnings"][number]["type"]): TranslationKey {
   switch (type) {
@@ -32,6 +33,7 @@ export function RecommendedNextStop({
   onPickupSuccess,
   onPickupFailure,
   onPickupConfirmed,
+  onSkipSuccess,
   onDropoffSuccess,
   onDropoffFailure,
 }: {
@@ -44,6 +46,8 @@ export function RecommendedNextStop({
   onPickupFailure?: (request: EnrichedRequest) => void;
   /** Apres confirmation serveur du pickup : broadcast passager, etc. */
   onPickupConfirmed?: (request: EnrichedRequest) => void;
+  /** Apres skip: la requete disparait de la recommandation courante. */
+  onSkipSuccess?: (request: EnrichedRequest) => void;
   /** Apres depot confirme : ids termines et palier cabine (destination des sorties). */
   onDropoffSuccess?: (payload: { requestIds: string[]; dropFloorId: string }) => void;
   /** Rollback du dropoff : appele quand au moins un advanceRequestStatus echoue ou throw. */
@@ -51,6 +55,8 @@ export function RecommendedNextStop({
 }) {
   const [completedDropoffIds, setCompletedDropoffIds] = useState<Set<string>>(() => new Set());
   const [pendingDropoffIds, setPendingDropoffIds] = useState<Set<string>>(() => new Set());
+  const [skippedIds, setSkippedIds] = useState<Set<string>>(() => new Set());
+  const [skipConfirmation, setSkipConfirmation] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const { t, locale } = useLanguage();
   // Track pickup click time for performance logging (<200ms target)
@@ -113,6 +119,7 @@ export function RecommendedNextStop({
   const actionRequest = useMemo(() => {
     const candidates = actionRequests.filter(
       (request) =>
+        !skippedIds.has(request.id) &&
         (request.status === "pending" || request.status === "assigned" || request.status === "arriving"),
     );
     const primaryId = recommendation.primaryPickupRequestId;
@@ -121,13 +128,14 @@ export function RecommendedNextStop({
     }
     const primary = candidates.find((request) => request.id === primaryId);
     return primary ?? null;
-  }, [actionRequests, recommendation.primaryPickupRequestId]);
+  }, [actionRequests, skippedIds, recommendation.primaryPickupRequestId]);
 
   const showDropoff = dropoffIds.length > 0 && dropFloorId !== "";
   // Find any pickup at the dropoff floor, even if brain didn't recommend it as primary
   const pickupCandidateAtDropFloor = showDropoff
     ? actionRequests.find(
         (request) =>
+          !skippedIds.has(request.id) &&
           (request.status === "pending" || request.status === "assigned" || request.status === "arriving") &&
           request.from_floor_id === dropFloorId,
       ) ?? null
@@ -180,19 +188,29 @@ export function RecommendedNextStop({
       </span>
     </button>
   ) : showPickup ? (
-    <button
-      type="button"
-      onClick={pickup}
-      disabled={isActionPending}
-      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-sky-300 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(56,189,248,0.42)] ring-4 ring-sky-100/40 transition active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait"
-    >
-      {isActionPending && <span className="absolute inset-0 bg-slate-950/20" />}
-      <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.6),transparent)] opacity-75 motion-safe:animate-[action-shine_1.45s_ease-in-out_infinite]" />
-      <span className="relative flex w-full items-center justify-center gap-4 text-4xl font-black uppercase tracking-wide">
-        {isActionPending ? <Loader2 size={38} className="anim-spinner" /> : <UserCheck size={38} strokeWidth={2.8} />}
-        {isActionPending ? t("operator.actionInProgress") : t("operator.pickup")}
-      </span>
-    </button>
+    <div className="grid gap-3">
+      <button
+        type="button"
+        onClick={pickup}
+        disabled={isActionPending}
+        className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-sky-300 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(56,189,248,0.42)] ring-4 ring-sky-100/40 transition active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait"
+      >
+        {isActionPending && <span className="absolute inset-0 bg-slate-950/20" />}
+        <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.6),transparent)] opacity-75 motion-safe:animate-[action-shine_1.45s_ease-in-out_infinite]" />
+        <span className="relative flex w-full items-center justify-center gap-4 text-4xl font-black uppercase tracking-wide">
+          <UserCheck size={38} strokeWidth={2.8} />
+          {t("operator.pickup")}
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={skipPickup}
+        className="touch-target flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-slate-300 transition hover:bg-white/10 active:scale-[0.98]"
+      >
+        <SkipForward size={16} />
+        {t("operator.skipPassage")}
+      </button>
+    </div>
   ) : recommendation.reasonDetail?.kind === "idle_manual_full" ? (
     <div className="flex min-h-36 w-full flex-col items-center justify-center gap-3 rounded-3xl border border-red-400/35 bg-red-950/45 px-5 py-6 text-center shadow-inner ring-2 ring-red-400/15">
       <Ban size={34} strokeWidth={2.6} className="shrink-0 text-red-200" aria-hidden />
@@ -289,6 +307,37 @@ export function RecommendedNextStop({
         structuredLog("Error", "pickup_exception", { requestId, error: String(err) });
         captureError(err, { projectId, elevatorId: operatorElevatorId, requestId, userType: "operator", action: "pickup" });
         onPickupFailure?.(targetRequest);
+      });
+  }
+
+  function skipPickup() {
+    if (!actionRequest) return;
+
+    const requestId = actionRequest.id;
+    const targetRequest = actionRequest;
+    setActionError(null);
+
+    // Instant optimistic — remove from recommendation immediately
+    setSkippedIds((current) => new Set(current).add(requestId));
+    onSkipSuccess?.(targetRequest);
+    setSkipConfirmation(t("operator.skipConfirmation"));
+    // Clear confirmation after 3 seconds
+    setTimeout(() => setSkipConfirmation(null), 3000);
+
+    // Fire-and-forget server action — no rollback needed on error
+    void skipRequestForCurrentPassage(requestId, operatorElevatorId)
+      .then((result) => {
+        if (result.ok) {
+          structuredLog("Performance", "skip_server_confirmed", { requestId, elevatorId: operatorElevatorId });
+        } else {
+          setActionError(result.message);
+          // Don't rollback the optimistic skip — the request is still skipped locally
+          // and will come back naturally from poll/realtime
+        }
+      })
+      .catch((err) => {
+        captureError(err, { projectId, elevatorId: operatorElevatorId, requestId, userType: "operator", action: "skip" });
+        // Same — don't rollback
       });
   }
 
@@ -459,6 +508,11 @@ export function RecommendedNextStop({
         </p>
       ) : null}
       {actionButton}
+      {skipConfirmation ? (
+        <p className="mt-3 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-center text-sm font-bold text-emerald-100">
+          {skipConfirmation}
+        </p>
+      ) : null}
       {actionError ? (
         <p className="anim-shake mt-3 rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-center text-sm font-bold text-red-100">
           {actionError}

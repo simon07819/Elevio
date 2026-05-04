@@ -12,9 +12,10 @@ export function getRecommendedNextStop({
   prioritiesEnabled = true,
   capacityEnabled = true,
   manualFull = false,
+  elevatorId,
 }: DispatchInput): DispatchRecommendation {
   const elevator: Elevator = {
-    id: "operator-current-elevator",
+    id: elevatorId ?? "operator-current-elevator",
     project_id: currentFloor.project_id,
     name: "Élévateur",
     current_floor_id: currentFloor.id,

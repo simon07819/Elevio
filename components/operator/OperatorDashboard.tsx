@@ -10,6 +10,7 @@ import {
   enrichRequests,
 } from "@/lib/demoData";
 import { createClient } from "@/lib/supabase/client";
+import { clearSkippedRequestsForElevator } from "@/lib/actions";
 import { broadcastPassengerQueueCleared, broadcastPassengerRequestBoarded, broadcastPassengerRequestCancelled, passengerProjectBroadcastChannel } from "@/lib/passengerNotifyBroadcast";
 import {
   bindRealtimeWithAuthSession,
@@ -188,7 +189,7 @@ export function OperatorDashboard({
       const { data } = await client
         .from("requests")
         .select(
-          "id,project_id,elevator_id,from_floor_id,to_floor_id,direction,passenger_count,original_passenger_count,remaining_passenger_count,split_required,priority,priority_reason,note,status,sequence_number,wait_started_at,created_at,updated_at,completed_at",
+          "id,project_id,elevator_id,from_floor_id,to_floor_id,direction,passenger_count,original_passenger_count,remaining_passenger_count,split_required,priority,priority_reason,note,status,sequence_number,wait_started_at,created_at,updated_at,completed_at,skipped_by_elevator_id,skipped_at",
         )
         .eq("project_id", projectId)
         .eq("elevator_id", elevator.id)
@@ -322,6 +323,7 @@ export function OperatorDashboard({
         prioritiesEnabled,
         capacityEnabled,
         manualFull: effectiveElevator.manual_full === true,
+        elevatorId: elevator.id,
       }),
     [
       currentFloor,
@@ -334,6 +336,7 @@ export function OperatorDashboard({
       floors,
       prioritiesEnabled,
       capacityEnabled,
+      elevator.id,
     ],
   );
   const recommendedIds = new Set(recommendation.requestsToPickup.map((request) => request.id));
@@ -915,21 +918,27 @@ export function OperatorDashboard({
         onDropoffSuccess={({ requestIds, dropFloorId }) => {
           const now = new Date().toISOString();
           logAction("dropoffSuccess", { requestIds, dropFloorId, count: requestIds.length });
+          // Clear skip markers after dropoff — cycle changes, skipped requests become eligible again
+          void clearSkippedRequestsForElevator(elevator.id);
           setLiveRequests((prev) => {
-            const next = prev.map((r) =>
-              requestIds.includes(r.id)
-                ? (() => {
-                    const completed = {
-                      ...r,
-                      status: "completed" as const,
-                      completed_at: now,
-                      updated_at: now,
-                    };
-                    rememberOptimisticRequest(completed);
-                    return completed;
-                  })()
-                : r,
-            );
+            const next = prev.map((r) => {
+              // Clear skip markers for all requests on this elevator
+              if (r.skipped_by_elevator_id === elevator.id) {
+                return { ...r, skipped_by_elevator_id: null, skipped_at: null };
+              }
+              // Complete the dropped-off requests
+              if (requestIds.includes(r.id)) {
+                const completed = {
+                  ...r,
+                  status: "completed" as const,
+                  completed_at: now,
+                  updated_at: now,
+                };
+                rememberOptimisticRequest(completed);
+                return completed;
+              }
+              return r;
+            });
             const boardedLoad = next
               .filter((r) => r.elevator_id === elevator.id && r.status === "boarded")
               .reduce((sum, r) => sum + r.passenger_count, 0);
@@ -958,6 +967,23 @@ export function OperatorDashboard({
             onElevatorPatch?.(elevator.id, {
               current_load: boardedLoad,
             });
+            return next;
+          });
+        }}
+        onSkipSuccess={(req) => {
+          logAction("skipSuccess", { requestId: req.id, fromStatus: req.status });
+          // Optimistically mark the request as skipped in live state
+          // so the dispatch engine won't recommend it again this cycle
+          setLiveRequests((prev) => {
+            const next = prev.map((r) =>
+              r.id === req.id
+                ? {
+                    ...r,
+                    skipped_by_elevator_id: elevator.id,
+                    skipped_at: new Date().toISOString(),
+                  }
+                : r,
+            );
             return next;
           });
         }}

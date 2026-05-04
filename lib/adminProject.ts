@@ -114,14 +114,14 @@ export async function getAdminProjectData(
       ? supabase
           .from("requests")
           .select(
-            "id,project_id,elevator_id,from_floor_id,to_floor_id,direction,passenger_count,original_passenger_count,remaining_passenger_count,split_required,priority,priority_reason,note,status,sequence_number,wait_started_at,created_at,updated_at,completed_at",
+            "id,project_id,elevator_id,from_floor_id,to_floor_id,direction,passenger_count,original_passenger_count,remaining_passenger_count,split_required,priority,priority_reason,note,status,sequence_number,wait_started_at,created_at,updated_at,completed_at,skipped_by_elevator_id,skipped_at",
           )
           .eq("project_id", projectId)
           .in("status", [...ACTIVE_REQUEST_STATUSES])
       : supabase
           .from("requests")
           .select(
-            "id,project_id,elevator_id,from_floor_id,to_floor_id,direction,passenger_count,original_passenger_count,remaining_passenger_count,split_required,priority,priority_reason,note,status,sequence_number,wait_started_at,created_at,updated_at,completed_at",
+            "id,project_id,elevator_id,from_floor_id,to_floor_id,direction,passenger_count,original_passenger_count,remaining_passenger_count,split_required,priority,priority_reason,note,status,sequence_number,wait_started_at,created_at,updated_at,completed_at,skipped_by_elevator_id,skipped_at",
           )
           .eq("project_id", projectId)
           .order("created_at", { ascending: false })

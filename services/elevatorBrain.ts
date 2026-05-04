@@ -38,6 +38,8 @@ export type BrainRequest = Pick<
   | "wait_started_at"
   | "status"
   | "sequence_number"
+  | "skipped_by_elevator_id"
+  | "skipped_at"
 >;
 
 export type NewBrainRequest = Pick<
@@ -518,8 +520,16 @@ export function computeNextOperatorAction({
 }): OperatorActionResult {
   void nowMs;
   const currentSort = floorSortOrder(projectFloors, elevator.current_floor_id);
+  // Filter out requests skipped by this elevator for the current cycle.
+  // A skip auto-expires after 5 minutes; it also clears on dropoff/direction change.
+  const SKIP_TTL_MS = 5 * 60_000;
+  const isSkippedForThisElevator = (request: DispatchRequest): boolean => {
+    if (!request.skipped_by_elevator_id || request.skipped_by_elevator_id !== elevator.id) return false;
+    if (!request.skipped_at) return false;
+    return Date.now() - new Date(request.skipped_at).getTime() < SKIP_TTL_MS;
+  };
   const openRequests = assignedRequests
-    .filter((request) => WAITING_STATUSES.has(request.status))
+    .filter((request) => WAITING_STATUSES.has(request.status) && !isSkippedForThisElevator(request))
     .sort((a, b) => a.sequence_number - b.sequence_number);
   const activeLoad = onboardPassengers.reduce((sum, passenger) => sum + passenger.passenger_count, 0);
   const currentLoad = Math.max(Number(elevator.current_load ?? 0), activeLoad);
