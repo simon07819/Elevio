@@ -847,6 +847,23 @@ export function OperatorDashboard({
             });
             return next;
           });
+          // ── BUG 3 FIX: Broadcast passenger pickup IMMEDIATELY on optimistic update ──
+          // Don't wait for server confirmation. The passenger poll will confirm
+          // once the DB commits, but the broadcast gives instant feedback.
+          // If the server action fails, onPickupFailure will roll back.
+          const ref = broadcastChannelRef.current;
+          if (ref?.ready && ref.channel && typeof (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send === "function") {
+            void (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send({
+              type: "broadcast",
+              event: "request_boarded",
+              payload: { requestIds: [req.id] },
+            });
+          }
+          // Also send via one-shot channel as backup
+          const client = createClient();
+          if (client) {
+            broadcastPassengerRequestBoarded(client, projectId, [req.id]);
+          }
         }}
         onPickupFailure={(req) => {
           logAction("pickupFailure", { requestId: req.id, rollbackTo: req.status });

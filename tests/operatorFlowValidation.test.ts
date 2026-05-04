@@ -49,9 +49,11 @@ test("validation 2: pickup reussit → onPickupSuccess met a jour liveRequests e
   assert.match(DASHBOARD, /onPickupSuccess=\{[\s\S]*?elevator_id: r\.elevator_id \?\? elevator\.id/);
 });
 
-test("validation 2: pickup reussit → onPickupConfirmed broadcast le passager (pas onPickupSuccess)", () => {
+test("validation 2: pickup reussit → onPickupSuccess broadcast le passager IMMEDIATEMENT (optimiste)", () => {
   const successBlock = DASHBOARD.match(/onPickupSuccess=\{[\s\S]*?\}\}/)?.[0] ?? "";
-  assert.doesNotMatch(successBlock, /broadcastPassengerRequestBoarded/);
+  // BUG 3 FIX: broadcast sent immediately in onPickupSuccess for instant passenger redirect
+  assert.match(successBlock, /broadcastPassengerRequestBoarded/);
+  // onPickupConfirmed also broadcasts (belt-and-suspenders)
   assert.match(DASHBOARD, /onPickupConfirmed=\{[\s\S]*?broadcastPassengerRequestBoarded\(client, projectId, \[req\.id\]\)/);
 });
 
@@ -133,19 +135,19 @@ test("validation 6: requestsToPickup vide quand capacite atteinte → idle_block
 // ---------------------------------------------------------------------------
 // 7. Navigation passager → pas de redirection incorrecte
 // ---------------------------------------------------------------------------
-test("validation 7: broadcast PAS envoye avant confirmation serveur (empeche redirection prematuree)", () => {
-  // Le broadcast est dans onPickupConfirmed, appele dans .then(result.ok),
-  // pas dans onPickupSuccess (optimiste, avant serveur).
+test("validation 7: broadcast envoye IMMEDIATEMENT dans onPickupSuccess pour retour QR rapide", () => {
+  // BUG 3 FIX: broadcast is sent immediately in onPickupSuccess (optimistic)
+  // so the passenger gets instant feedback. If server action fails, onPickupFailure rolls back.
+  // onPickupConfirmed also broadcasts (belt-and-suspenders).
   assert.match(RECOMMENDED, /if \(result\.ok\) \{\s*onPickupConfirmed\?\.\(targetRequest\)/);
   const successBlock = DASHBOARD.match(/onPickupSuccess=\{[\s\S]*?\}\}/)?.[0] ?? "";
-  assert.doesNotMatch(successBlock, /broadcastPassengerRequestBoarded/);
+  assert.match(successBlock, /broadcastPassengerRequestBoarded/);
 });
 
 test("validation 7: le passager reste sur RequestStatusCard tant que le pickup n'est pas confirme", () => {
   // RequestStatusCard ne redirige pas le passager ; seul le broadcast ou le poll
-  // declenche router.replace. Le broadcast est retarde, donc pas de redirect premature.
+  // declenche router.replace. Le broadcast est envoye immediatement (optimiste).
   const statusCard = readFileSync(join(root, "components/RequestStatusCard.tsx"), "utf8");
   // La carte affiche le statut courant et ne redirige pas elle-meme.
-  assert.match(statusCard, /setCurrentRequest\(payload\.new\)/);
   assert.doesNotMatch(statusCard, /router\.replace/);
 });

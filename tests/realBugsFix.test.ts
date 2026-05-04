@@ -91,6 +91,30 @@ test("BUG2: locallyReleasedElevatorIds prevents stale poll from re-claiming sess
 
 // ── BUG 3: Passenger QR return after Ramasser ───────────────────────────
 
+test("BUG3: SSR auto-cleanup AWAITs DB update (not fire-and-forget)", () => {
+  const src = readFileSync(resolve(SRC_ROOT, "lib/adminProject.ts"), "utf-8");
+  // The auto-cleanup section must use `await supabase` not `void supabase`
+  const cleanupIdx = src.indexOf("autoCleanupOrphanedRequests");
+  assert.ok(cleanupIdx > 0, "auto cleanup present");
+  const cleanupSection = src.slice(cleanupIdx, cleanupIdx + 2000);
+  // Must contain `await supabase` for the cancel update
+  assert.ok(cleanupSection.includes("await supabase"), "await DB cancel in SSR cleanup");
+  // Must NOT contain `void supabase` for the cancel update
+  assert.ok(!cleanupSection.includes("void supabase"), "not fire-and-forget in SSR cleanup");
+});
+
+test("BUG3: operator broadcasts pickup IMMEDIATELY on optimistic update (onPickupSuccess)", () => {
+  const src = readFileSync(resolve(SRC_ROOT, "components/operator/OperatorDashboard.tsx"), "utf-8");
+  // The onPickupSuccess callback must send broadcast immediately
+  // Find the onPickupSuccess handler section
+  const pickupSuccessIdx = src.indexOf("onPickupSuccess={");
+  assert.ok(pickupSuccessIdx > 0, "onPickupSuccess handler found");
+  const section = src.slice(pickupSuccessIdx, pickupSuccessIdx + 4000);
+  // Must contain broadcast within onPickupSuccess (not just onPickupConfirmed)
+  assert.ok(section.includes("request_boarded"), "broadcasts request_boarded in onPickupSuccess");
+  assert.ok(section.includes("broadcastPassengerRequestBoarded"), "one-shot backup in onPickupSuccess");
+});
+
 test("BUG3: passenger poll interval is fast (≤250ms)", () => {
   const src = readFileSync(resolve(SRC_ROOT, "components/RequestForm.tsx"), "utf-8");
   assert.ok(src.includes("PASSENGER_ACTIVE_REQUEST_POLL_MS = 250"), "poll interval is 250ms");
@@ -111,6 +135,19 @@ test("BUG3: operator broadcasts pickup via both pre-subscribed and one-shot chan
   assert.ok(src.includes("request_boarded"), "broadcasts request_boarded event");
   // Must also send via one-shot channel as backup
   assert.ok(src.includes("broadcastPassengerRequestBoarded"), "one-shot channel backup broadcast");
+});
+
+test("BUG3: updateRequestStatus revalidates /request path (no stale cache)", () => {
+  const src = readFileSync(resolve(SRC_ROOT, "lib/actions.ts"), "utf-8");
+  // Find the updateRequestStatus function's revalidatePath calls
+  const fnStart = src.indexOf("export async function updateRequestStatus(");
+  assert.ok(fnStart > 0, "updateRequestStatus found");
+  const fnBody = src.slice(fnStart, fnStart + 5000);
+  // Must revalidate /request so passenger pages aren't stale
+  assert.ok(fnBody.includes('revalidatePath("/request")'), "/request revalidated after status update");
+  // Must revalidate /operator and /admin too
+  assert.ok(fnBody.includes('revalidatePath("/operator")'), "/operator revalidated");
+  assert.ok(fnBody.includes('revalidatePath("/admin")'), "/admin revalidated");
 });
 
 test("BUG3: merge protects boarded from being overwritten by stale poll", () => {

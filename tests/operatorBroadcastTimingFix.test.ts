@@ -27,9 +27,11 @@ test("broadcast fix: RecommendedNextStop expose onPickupConfirmed appele seuleme
   );
 });
 
-test("broadcast fix: onPickupSuccess ne contient PAS broadcastPassengerRequestBoarded", () => {
+test("broadcast fix: onPickupSuccess broadcasts IMMEDIATELY for instant passenger redirect", () => {
   const pickupSuccessMatch = DASHBOARD.match(/onPickupSuccess=\{[\s\S]*?\}\}/)?.[0] ?? "";
-  assert.doesNotMatch(pickupSuccessMatch, /broadcastPassengerRequestBoarded/);
+  // BUG 3 FIX: broadcast is sent immediately in onPickupSuccess (optimistic)
+  // so the passenger gets instant feedback without waiting for server confirmation
+  assert.match(pickupSuccessMatch, /broadcastPassengerRequestBoarded/);
 });
 
 test("broadcast fix: onPickupConfirmed cable broadcastPassengerRequestBoarded", () => {

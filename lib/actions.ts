@@ -1781,6 +1781,7 @@ export async function updateRequestStatus(
 
   revalidatePath("/operator");
   revalidatePath("/admin");
+  revalidatePath("/request");
   return { ok: true, message: "Statut mis a jour." };
 }
 

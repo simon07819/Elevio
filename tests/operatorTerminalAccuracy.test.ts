@@ -134,10 +134,12 @@ test("terminal accuracy: activeQueue includes requests even if passenger_count >
 });
 
 // ---------------------------------------------------------------------------
-// 10. broadcast only after server confirmation, not on optimistic pickup
+// 10. broadcast immediately on optimistic pickup for instant passenger redirect
 // ---------------------------------------------------------------------------
-test("terminal accuracy: broadcast passenger only after onPickupConfirmed, not onPickupSuccess", () => {
+test("terminal accuracy: broadcast passenger IMMEDIATELY on onPickupSuccess (optimistic)", () => {
   const successBlock = DASHBOARD.match(/onPickupSuccess=\{\(req\) => \{[\s\S]*?\}\}/)?.[0] ?? "";
-  assert.doesNotMatch(successBlock, /broadcastPassengerRequestBoarded/);
+  // BUG 3 FIX: broadcast sent immediately in onPickupSuccess for instant passenger redirect
+  assert.match(successBlock, /broadcastPassengerRequestBoarded/);
+  // onPickupConfirmed also broadcasts (belt-and-suspenders double broadcast)
   assert.match(DASHBOARD, /onPickupConfirmed=\{[\s\S]*?broadcastPassengerRequestBoarded/);
 });

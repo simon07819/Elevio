@@ -143,6 +143,7 @@ export async function getAdminProjectData(
   // If this is the operator terminal (activeRequestsOnly) and NO elevator has
   // a live operator session, cancel pending/assigned/arriving requests and
   // filter them from the returned data. Boarded passengers are NEVER cancelled.
+  // We AWAIT the DB update so the data is consistent when the page renders.
   let cleanedRequests = (requests ?? []) as HoistRequest[];
   if (options?.activeRequestsOnly) {
     const now = new Date();
@@ -163,14 +164,14 @@ export async function getAdminProjectData(
           orphanedCount: orphaned.length,
           sparedBoarded: cleanedRequests.filter(r => r.status === "boarded").length,
         });
-        // Cancel orphaned requests in DB (async — don't block SSR)
-        const now = new Date().toISOString();
-        void supabase
+        // Cancel orphaned requests in DB (AWAIT so DB is consistent)
+        const cancelNow = new Date().toISOString();
+        await supabase
           .from("requests")
           .update({
             status: "cancelled",
-            completed_at: now,
-            updated_at: now,
+            completed_at: cancelNow,
+            updated_at: cancelNow,
             note: "Annule automatiquement: aucun operateur actif.",
           })
           .eq("project_id", projectId)
