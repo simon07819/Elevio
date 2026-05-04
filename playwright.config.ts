@@ -19,5 +19,6 @@ export default defineConfig({
     { name: "stress-crossing", testMatch: "stress-crossing-50.spec.ts" },
     { name: "pickup-qr-return", testMatch: "pickup-qr-return.spec.ts" },
     { name: "operator-real-flow", testMatch: "operator-real-flow.spec.ts" },
+    { name: "full-live-regression", testMatch: "full-live-regression.spec.ts" },
   ],
 });
