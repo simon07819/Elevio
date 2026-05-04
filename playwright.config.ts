@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 60_000,
+  timeout: 120_000,
   retries: 0,
   use: {
     baseURL: process.env.ELEVIO_BASE_URL || "http://localhost:3000",

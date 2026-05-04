@@ -28,3 +28,6 @@ yarn-error.log*
 next-env.d.ts
 .test-build/
 e2e-report/
+e2e-artifacts/
+test-results/
+.env.vercel
