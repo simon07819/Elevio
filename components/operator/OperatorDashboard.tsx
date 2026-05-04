@@ -56,6 +56,7 @@ export function OperatorDashboard({
   prioritiesEnabled = true,
   capacityEnabled = true,
   onElevatorPatch,
+  sessionStartedAt,
 }: {
   floors?: Floor[];
   requests?: HoistRequest[];
@@ -63,6 +64,10 @@ export function OperatorDashboard({
   prioritiesEnabled?: boolean;
   capacityEnabled?: boolean;
   onElevatorPatch?: (elevatorId: string, patch: Partial<Elevator>) => void;
+  /** ISO timestamp when the current operator session was activated.
+   *  Requests created before this are from a previous session and must be
+   *  filtered out to prevent stale data from reappearing after release/reactivate. */
+  sessionStartedAt?: string | null;
 }) {
   const { locale } = useLanguage();
   const [liveRequests, setLiveRequests] = useState(requests);
@@ -267,8 +272,22 @@ export function OperatorDashboard({
 
   const floorById = useMemo(() => new Map(floors.map((floor) => [floor.id, floor])), [floors]);
   const elevatorRequests = useMemo(
-    () => liveRequests.filter((request) => request.elevator_id === elevator.id),
-    [elevator.id, liveRequests],
+    () => {
+      let filtered = liveRequests.filter((request) => request.elevator_id === elevator.id);
+      // ── SESSION GUARD: Filter out requests from a previous session ──
+      // When an operator releases and re-activates, stale requests from the
+      // previous session should NOT appear. If sessionStartedAt is set, only
+      // show requests created after the session was activated.
+      if (sessionStartedAt) {
+        const sessionStartMs = new Date(sessionStartedAt).getTime();
+        filtered = filtered.filter((request) => {
+          const createdMs = new Date(request.created_at).getTime();
+          return createdMs >= sessionStartMs - 5000; // 5s tolerance for clock skew
+        });
+      }
+      return filtered;
+    },
+    [elevator.id, liveRequests, sessionStartedAt],
   );
   const currentFloor = floorById.get(elevator.current_floor_id ?? "") ?? floors[0] ?? demoFloors[2];
   const enriched = useMemo(() => enrichRequests(elevatorRequests, floors), [elevatorRequests, floors]);

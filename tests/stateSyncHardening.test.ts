@@ -126,14 +126,14 @@ test("resolveOperatorAction: completed/cancelled => none", () => {
   assert.equal(resolveOperatorAction([]), "none");
 });
 
-// ── 9. Libérer never deletes boarded/onboard ────────────────────────────
-test("Libérer: cancelActiveProjectRequestsIfNoLiveOperators spares boarded", () => {
+// ── 9. Libérer: zero operators cancels ALL including boarded ──────────────────────
+test("Libérer: cancelActiveProjectRequestsIfNoLiveOperators cancels ALL including boarded", () => {
   const src = readFileSync(resolve(SRC_ROOT, "lib/actions.ts"), "utf-8");
-  // The function must only cancel pending/assigned/arriving, NOT boarded
-  assert.ok(src.includes('cancellableStatuses: RequestStatus[] = ["pending", "assigned", "arriving"]'));
-  assert.ok(!src.includes('cancellableStatuses: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"]'));
-  // Must NOT reset elevator load/direction when boarded passengers exist
-  assert.ok(src.includes("// Do NOT reset elevator load/direction — boarded passengers still need dropoff"));
+  // When no operators are active, ALL non-terminal requests are cancelled,
+  // including boarded — because boarded passengers can't be dropped off without an operator.
+  assert.ok(src.includes('cancellableStatuses: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"]'));
+  // Must reset ALL elevators when no operators are active
+  assert.ok(src.includes("from(\"elevators\").update(fullReset).eq(\"project_id\", projectId)"), "all elevators reset on zero operators");
 });
 
 // ── 10. PLEIN never deletes boarded/onboard ─────────────────────────────

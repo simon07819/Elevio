@@ -385,22 +385,36 @@ async function cancelActiveProjectRequestsIfNoLiveOperators(
   );
 
   if (!hasLiveOperator) {
-    // Boarded passengers are IN the elevator — NEVER cancel them.
-    // Only cancel pending/assigned/arriving requests.
-    const cancellableStatuses: RequestStatus[] = ["pending", "assigned", "arriving"];
+    // No operator available → cancel ALL non-terminal requests, INCLUDING boarded.
+    // Boarded passengers cannot be dropped off if no operator is on duty.
+    // This prevents stale boarded requests from reappearing when a new operator activates.
+    const cancellableStatuses: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"];
     const now = new Date().toISOString();
-    logAction("cancelActiveNoLiveOps", { projectId, cancellableStatuses, spared: ["boarded"] as RequestStatus[] });
+    logAction("cancelActiveNoLiveOps", { projectId, cancellableStatuses, reason: "zero_live_operators" });
+    // Cancel all active requests for this project
     await supabase
       .from("requests")
       .update({
         status: "cancelled",
         completed_at: now,
         updated_at: now,
-        note: "Annule automatiquement: aucun operateur actif.",
+        note: "Annulé automatiquement : aucun opérateur actif.",
       })
       .eq("project_id", projectId)
       .in("status", cancellableStatuses);
-    // Do NOT reset elevator load/direction — boarded passengers still need dropoff
+    // Clear skip markers on all remaining requests for this project
+    await supabase
+      .from("requests")
+      .update({ skipped_by_elevator_id: null, skipped_at: null })
+      .eq("project_id", projectId)
+      .not("skipped_by_elevator_id", "is", null);
+    // Reset ALL elevators — no operator means no load, no direction, no manual_full
+    const stateReset: Record<string, unknown> = { current_load: 0, direction: "idle" };
+    const fullReset = { ...stateReset, manual_full: false };
+    const resetResult = await supabase.from("elevators").update(fullReset).eq("project_id", projectId);
+    if (resetResult.error) {
+      await supabase.from("elevators").update(stateReset).eq("project_id", projectId);
+    }
   }
 }
 

@@ -156,15 +156,15 @@ export async function getAdminProjectData(
     );
 
     if (!hasLiveOperator) {
-      const cancellableStatuses: RequestStatus[] = ["pending", "assigned", "arriving"];
+      const cancellableStatuses: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"];
       const orphaned = cleanedRequests.filter(r => cancellableStatuses.includes(r.status));
       if (orphaned.length > 0) {
         logAction("autoCleanupOrphanedRequests", {
           projectId,
           orphanedCount: orphaned.length,
-          sparedBoarded: cleanedRequests.filter(r => r.status === "boarded").length,
+          reason: "zero_live_operators",
         });
-        // Cancel orphaned requests in DB (AWAIT so DB is consistent)
+        // Cancel ALL orphaned requests in DB (AWAIT so DB is consistent)
         const cancelNow = new Date().toISOString();
         await supabase
           .from("requests")
@@ -172,10 +172,23 @@ export async function getAdminProjectData(
             status: "cancelled",
             completed_at: cancelNow,
             updated_at: cancelNow,
-            note: "Annule automatiquement: aucun operateur actif.",
+            note: "Annulé automatiquement : aucun opérateur actif.",
           })
           .eq("project_id", projectId)
           .in("status", cancellableStatuses);
+        // Clear skip markers
+        await supabase
+          .from("requests")
+          .update({ skipped_by_elevator_id: null, skipped_at: null })
+          .eq("project_id", projectId)
+          .not("skipped_by_elevator_id", "is", null);
+        // Reset all elevators
+        const stateReset: Record<string, unknown> = { current_load: 0, direction: "idle" };
+        const fullReset = { ...stateReset, manual_full: false };
+        const resetResult = await supabase.from("elevators").update(fullReset).eq("project_id", projectId);
+        if (resetResult.error) {
+          await supabase.from("elevators").update(stateReset).eq("project_id", projectId);
+        }
         // Filter out cancelled requests from the response immediately
         cleanedRequests = cleanedRequests.filter(r => !cancellableStatuses.includes(r.status));
       }

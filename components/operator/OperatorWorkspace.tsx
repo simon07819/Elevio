@@ -657,6 +657,7 @@ export function OperatorWorkspace({
           prioritiesEnabled={project.priorities_enabled !== false}
           capacityEnabled={capacityEnabled}
           onElevatorPatch={patchElevator}
+          sessionStartedAt={selectedElevator.operator_session_started_at}
         />
         {message ? <div className="rounded-2xl bg-white/10 p-3 text-sm font-bold text-slate-100">{message}</div> : null}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-3">

@@ -34,10 +34,11 @@ const SRC_ROOT = resolve(__dirname, "..", "..");
 
 // ── BUG 1: No live operators cancels pending/assigned/arriving ───────────
 
-test("BUG1: cancelActiveProjectRequestsIfNoLiveOperators spares boarded", () => {
+test("BUG1: cancelActiveProjectRequestsIfNoLiveOperators cancels ALL including boarded", () => {
   const src = readFileSync(resolve(SRC_ROOT, "lib/actions.ts"), "utf-8");
-  assert.ok(src.includes('cancellableStatuses: RequestStatus[] = ["pending", "assigned", "arriving"]'));
-  assert.ok(!src.includes('cancellableStatuses: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"]'));
+  // When no operators are active, ALL non-terminal requests are cancelled,
+  // including boarded — because boarded passengers can't be dropped off without an operator.
+  assert.ok(src.includes('cancellableStatuses: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"]'), "boarded in cancellable statuses for zero-operator cleanup");
 });
 
 test("BUG1: SSR auto-cleanup cancels orphaned requests when no live operator", () => {
@@ -46,16 +47,20 @@ test("BUG1: SSR auto-cleanup cancels orphaned requests when no live operator", (
   assert.ok(src.includes("hasLiveOperator"), "SSR checks for live operators");
   assert.ok(src.includes("cancellableStatuses"), "SSR filters cancellable statuses");
   assert.ok(src.includes("autoCleanupOrphanedRequests"), "auto cleanup function present");
-  // Must NEVER cancel boarded
-  assert.ok(!src.includes('cancellableStatuses.includes("boarded")'), "boarded not in cancellable list");
+  // Now cancels boarded too when no operators are active
+  assert.ok(src.includes('"boarded"'), "boarded is in cancellable statuses for zero-operator cleanup");
 });
 
-test("BUG1: no live operators does NOT cancel boarded", () => {
-  // Boarded request survives merge even when no operator
-  const boarded = mkReq("r1", "boarded");
-  const resolved = resolveRequestState(boarded);
-  assert.equal(resolved.action, "dropoff");
-  assert.equal(resolved.onboard, true);
+test("BUG1: zero operators cancels ALL non-terminal requests including boarded", () => {
+  // Boarded passengers are cancelled when no operator is active —
+  // they cannot be dropped off without an operator.
+  // This prevents stale boarded requests from reappearing on reactivation.
+  const src = readFileSync(resolve(SRC_ROOT, "lib/actions.ts"), "utf-8");
+  assert.ok(src.includes('"boarded"'), "boarded is in cancellable list for zero-operator scenario");
+  // Reset ALL elevators when no operators are active
+  assert.ok(src.includes("resetResult = await supabase.from(\"elevators\").update(fullReset).eq(\"project_id\", projectId)"), "all elevators reset when zero operators");
+  // Clear skip markers
+  assert.ok(src.includes("skipped_by_elevator_id: null"), "skip markers cleared on zero-operator cleanup");
 });
 
 // ── BUG 2: Release tablet immediately enables activation ─────────────────
