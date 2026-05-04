@@ -13,6 +13,7 @@ export type BillingPeriod = "monthly" | "annual";
 export interface PlanLimit {
   maxProjects: number | null; // null = unlimited
   maxOperators: number | null;
+  maxRequestsPerDay: number | null; // null = unlimited
   analytics: "none" | "simple" | "advanced";
   multiOperator: boolean;
   prioritySupport: boolean;
@@ -42,6 +43,7 @@ export const PLANS: Record<PlanId, Plan> = {
     limits: {
       maxProjects: 1,
       maxOperators: 1,
+      maxRequestsPerDay: 20,
       analytics: "none",
       multiOperator: false,
       prioritySupport: false,
@@ -60,6 +62,7 @@ export const PLANS: Record<PlanId, Plan> = {
     limits: {
       maxProjects: 1,
       maxOperators: 2,
+      maxRequestsPerDay: null,
       analytics: "simple",
       multiOperator: false,
       prioritySupport: false,
@@ -78,6 +81,7 @@ export const PLANS: Record<PlanId, Plan> = {
     limits: {
       maxProjects: 3,
       maxOperators: 10,
+      maxRequestsPerDay: null,
       analytics: "advanced",
       multiOperator: true,
       prioritySupport: false,
@@ -97,6 +101,7 @@ export const PLANS: Record<PlanId, Plan> = {
     limits: {
       maxProjects: null,
       maxOperators: null,
+      maxRequestsPerDay: null,
       analytics: "advanced",
       multiOperator: true,
       prioritySupport: true,
@@ -115,6 +120,7 @@ export const PLANS: Record<PlanId, Plan> = {
     limits: {
       maxProjects: null,
       maxOperators: null,
+      maxRequestsPerDay: null,
       analytics: "advanced",
       multiOperator: true,
       prioritySupport: true,

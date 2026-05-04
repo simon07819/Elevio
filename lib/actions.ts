@@ -8,6 +8,7 @@ import { maxPassengerPartySize } from "@/lib/passengerPartyLimits";
 import { floorLabelForSortOrder, getDirection, isUuid } from "@/lib/utils";
 import { assignRequestToBestElevator } from "@/services/multiElevatorDispatch";
 import { elevatorDuplicateMessage } from "@/lib/elevatorMessages";
+import { enforceProjectLimit, enforceOperatorLimit, enforceRequestLimit } from "@/lib/billing/planGuards";
 import type {
   Direction,
   Elevator,
@@ -141,6 +142,12 @@ export async function createProject(formData: FormData) {
 
   if (!user) {
     return { ok: false, message: "Connexion admin requise." };
+  }
+
+  // ── PLAN GUARD: Check project limit before creation ──
+  const planGuard = await enforceProjectLimit(user.id);
+  if (!planGuard.ok) {
+    return { ok: false, message: planGuard.message };
   }
 
   if (makeActive) {
@@ -928,6 +935,12 @@ export async function activateOperatorElevator(
     return { ok: false, message: "Connexion operateur requise." };
   }
 
+  // ── PLAN GUARD: Check operator limit before activation ──
+  const opGuard = await enforceOperatorLimit(projectId);
+  if (!opGuard.ok) {
+    return { ok: false, message: opGuard.message };
+  }
+
   const operatorDisplayName =
     normalizeOperatorDisplayName(operatorDisplayNameRaw) ??
     normalizeOperatorDisplayName(user.email?.includes("@") ? user.email.split("@")[0] : user.email);
@@ -1258,6 +1271,12 @@ export async function createPassengerRequest(formData: FormData) {
   if (supabase) {
     if (!isUuid(projectId) || !isUuid(fromFloorId) || !isUuid(toFloorId)) {
       return { ok: false, message: "Lien ou chantier invalide. Utilisez le QR du chantier." };
+    }
+
+    // ── PLAN GUARD: Check daily request limit before creation ──
+    const reqGuard = await enforceRequestLimit(projectId);
+    if (!reqGuard.ok) {
+      return { ok: false, message: reqGuard.message };
     }
 
     const [floorsResult, projectResult, elevatorsResult, requestsResult] = await Promise.all([

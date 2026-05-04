@@ -38,6 +38,13 @@ export function canAddOperator(planId: PlanId, currentOperatorCount: number): bo
   return currentOperatorCount < limits.maxOperators;
 }
 
+/** Check if a user can create another request today */
+export function canCreateRequest(planId: PlanId, todayRequestCount: number): boolean {
+  const limits = PLANS[planId].limits;
+  if (limits.maxRequestsPerDay === null) return true; // unlimited
+  return todayRequestCount < limits.maxRequestsPerDay;
+}
+
 /** Check if the plan is Enterprise */
 export function isEnterprise(planId: PlanId): boolean {
   return planId === "enterprise";
@@ -66,6 +73,11 @@ export function effectiveMaxProjects(planId: PlanId): number | null {
 /** Get the effective max operators (null = unlimited, displayed as "∞") */
 export function effectiveMaxOperators(planId: PlanId): number | null {
   return PLANS[planId].limits.maxOperators;
+}
+
+/** Get the effective max requests per day (null = unlimited, displayed as "∞") */
+export function effectiveMaxRequestsPerDay(planId: PlanId): number | null {
+  return PLANS[planId].limits.maxRequestsPerDay;
 }
 
 /**

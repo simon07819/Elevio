@@ -23,6 +23,8 @@ const REVENUECAT = readFileSync(join(root, "lib/billing/revenuecat.ts"), "utf8")
 const SCHEMA = readFileSync(join(root, "supabase/schema.sql"), "utf8");
 const PAYWALL_PAGE = readFileSync(join(root, "app/paywall/page.tsx"), "utf8");
 const PAYWALL_CLIENT = readFileSync(join(root, "components/billing/PaywallClient.tsx"), "utf8");
+const PLAN_GUARDS = readFileSync(join(root, "lib/billing/planGuards.ts"), "utf8");
+const ACTIONS = readFileSync(join(root, "lib/actions.ts"), "utf8");
 
 // ═══════════════════════════════════════════════════════════════════
 // 1. Plans defined
@@ -204,4 +206,82 @@ test("billing: Pro plan has popular badge in paywall UI", () => {
 test("billing: activation code rolls back code usage on entitlement error", () => {
   assert.match(ACTIVATION, /Roll back/, "rollback comment");
   assert.match(ACTIVATION, /used_at: null.*used_by_user_id: null/, "resets code usage on error");
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 16. Plan guards wired into server actions
+// ═══════════════════════════════════════════════════════════════════
+
+test("billing: planGuards.ts exists with enforce functions", () => {
+  assert.match(PLAN_GUARDS, /enforceProjectLimit/, "enforceProjectLimit function");
+  assert.match(PLAN_GUARDS, /enforceOperatorLimit/, "enforceOperatorLimit function");
+  assert.match(PLAN_GUARDS, /enforceRequestLimit/, "enforceRequestLimit function");
+});
+
+test("billing: getPlanForUser fetches from user_entitlements", () => {
+  assert.match(PLAN_GUARDS, /getPlanForUser/, "getPlanForUser function");
+  assert.match(PLAN_GUARDS, /user_entitlements/, "queries user_entitlements table");
+  assert.match(PLAN_GUARDS, /plan/, "selects plan column");
+});
+
+test("billing: enforceProjectLimit counts user projects", () => {
+  assert.match(PLAN_GUARDS, /countProjects/, "counts projects");
+  assert.match(PLAN_GUARDS, /owner_id/, "filters by owner_id");
+  assert.match(PLAN_GUARDS, /archived_at/, "excludes archived");
+});
+
+test("billing: enforceOperatorLimit counts live operators in project", () => {
+  assert.match(PLAN_GUARDS, /countLiveOperators/, "counts live operators");
+  assert.match(PLAN_GUARDS, /operator_session_heartbeat_at/, "checks heartbeat freshness");
+  assert.match(PLAN_GUARDS, /STALE_THRESHOLD_MS/, "stale threshold");
+});
+
+test("billing: enforceRequestLimit counts today's requests", () => {
+  assert.match(PLAN_GUARDS, /countTodayRequests/, "counts today's requests");
+  assert.match(PLAN_GUARDS, /maxRequestsPerDay/, "checks maxRequestsPerDay limit");
+});
+
+test("billing: guards return { ok: false, message } with upgrade hint", () => {
+  assert.match(PLAN_GUARDS, /ok: false/, "returns ok: false when limit hit");
+  assert.match(PLAN_GUARDS, /Passez.*forfait/, "upgrade message");
+  assert.match(PLAN_GUARDS, /Limite atteinte/, "limit reached message");
+});
+
+test("billing: createProject checks enforceProjectLimit", () => {
+  assert.match(ACTIONS, /enforceProjectLimit\(user\.id\)/, "project guard in createProject");
+  assert.match(ACTIONS, /PLAN GUARD.*project limit/, "plan guard comment");
+});
+
+test("billing: activateOperatorElevator checks enforceOperatorLimit", () => {
+  assert.match(ACTIONS, /enforceOperatorLimit\(projectId\)/, "operator guard in activate");
+  assert.match(ACTIONS, /PLAN GUARD.*operator limit/, "plan guard comment");
+});
+
+test("billing: createPassengerRequest checks enforceRequestLimit", () => {
+  assert.match(ACTIONS, /enforceRequestLimit\(projectId\)/, "request guard in createPassengerRequest");
+  assert.match(ACTIONS, /PLAN GUARD.*request limit/, "plan guard comment");
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 17. Free plan has daily request limit
+// ═══════════════════════════════════════════════════════════════════
+
+test("billing: Free plan has maxRequestsPerDay limit", () => {
+  assert.match(PLANS, /maxRequestsPerDay: 20/, "Free maxRequestsPerDay = 20");
+});
+
+test("billing: Starter+ plans have no daily request limit", () => {
+  const starterSection = PLANS.match(/starter: \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const proSection = PLANS.match(/pro: \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(starterSection, /maxRequestsPerDay: null/, "Starter unlimited requests");
+  assert.match(proSection, /maxRequestsPerDay: null/, "Pro unlimited requests");
+});
+
+test("billing: canCreateRequest function exists in entitlements", () => {
+  assert.match(ENTITLEMENTS, /canCreateRequest/, "canCreateRequest function");
+  assert.match(ENTITLEMENTS, /maxRequestsPerDay/, "uses maxRequestsPerDay");
+});
+
+test("billing: effectiveMaxRequestsPerDay helper exists", () => {
+  assert.match(ENTITLEMENTS, /effectiveMaxRequestsPerDay/, "effectiveMaxRequestsPerDay function");
 });
