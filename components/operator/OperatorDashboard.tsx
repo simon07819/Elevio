@@ -171,13 +171,16 @@ export function OperatorDashboard({
 
       if (cancelled || !data) return;
       setLiveRequests((current) => {
-        const liveById = new Map((data as HoistRequest[]).map((request) => [request.id, applyOptimisticRequest(request)]));
+        // Compute kept BEFORE liveById so that applyOptimisticRequest
+        // side-effects (deleting confirmed optimistic entries) don't
+        // cause the kept filter to discard requests that were just confirmed.
         const kept = current.filter(
           (request) =>
             request.elevator_id !== elevator.id ||
             !OPERATOR_VISIBLE_REQUEST_STATUSES.includes(request.status as (typeof OPERATOR_VISIBLE_REQUEST_STATUSES)[number]) ||
             optimisticRequestsRef.current.has(request.id),
         );
+        const liveById = new Map((data as HoistRequest[]).map((request) => [request.id, applyOptimisticRequest(request)]));
         const mergedById = new Map<string, HoistRequest>();
         for (const row of kept) {
           mergedById.set(row.id, row);

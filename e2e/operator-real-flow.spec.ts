@@ -51,7 +51,8 @@ function collectConsole(page: Page, label: string) {
     if (msg.type() === "error") consoleErrors.push(`[${label}] ${text.slice(0, 300)}`);
     if (text.includes("[RAMASSER]") || text.includes("[RAMASSER-RESULT]") || text.includes("[PAUSE-DIAG]") ||
         text.includes("[POLL-MERGE]") || text.includes("[COMBINED-BTN]") || text.includes("[updateRequestStatus]") ||
-        text.includes("[PASSENGER-REQUEST-RESULT]") || text.includes("[createPassengerRequest]")) {
+        text.includes("[PASSENGER-REQUEST-RESULT]") || text.includes("[createPassengerRequest]") ||
+        text.includes("[POLL-DATA]") || text.includes("[COMBINED-ACTION]")) {
       debugLogs.push(`[${label}] ${text.slice(0, 500)}`);
     }
   });
@@ -576,16 +577,22 @@ test.describe.serial("operator-real-flow: 5→P1 + P1→5 with refresh, PAUSE, c
 
     // ── Refresh persistence check ──
     await opPage.reload({ waitUntil: "domcontentloaded" });
-    await wait(5000);
+    await wait(8000);
     await ss(opPage, "step8-after-refresh");
 
-    const dropoffAfterRefresh = opPage.locator("button").filter({ hasText: /deposer|dropoff/i }).first();
+    const combinedAfterRefresh = opPage.locator("button").filter({ hasText: /d[eé]poser.*ramasser|drop.*pick/i }).first();
+    const dropoffAfterRefresh = opPage.locator("button").filter({ hasText: /d[eé]poser|dropoff/i }).first();
+    // Pickup = contains Ramasser but NOT Déposer
     const pickupAfterRefresh = opPage.locator("button").filter({ hasText: /ramasser|pickup/i }).first();
+    const hasCombined = await combinedAfterRefresh.isVisible({ timeout: 5_000 }).catch(() => false);
     const hasDropoff = await dropoffAfterRefresh.isVisible({ timeout: 5_000 }).catch(() => false);
     const hasPickupAgain = await pickupAfterRefresh.isVisible({ timeout: 3_000 }).catch(() => false);
 
-    console.log(`  [RESULT] 6: after refresh: dropoff=${hasDropoff} pickup=${hasPickupAgain}`);
-    if (hasPickupAgain && !hasDropoff) {
+    console.log(`  [RESULT] 6: after refresh: combined=${hasCombined} dropoff=${hasDropoff} pickup=${hasPickupAgain}`);
+    // If we have a dropoff or combined button, the Ramasser was persisted
+    if (hasDropoff || hasCombined) {
+      console.log("  [PASS] 6: Déposer or combined button visible after refresh — DB persisted correctly!");
+    } else if (hasPickupAgain) {
       console.log("  [FAIL] 6: Ramasser still visible after refresh — DB NOT PERSISTED!");
       failures.push("6: after Ramasser + refresh, still shows Ramasser (DB not persisted)");
       const ramasserResult = debugLogs.filter(l => l.includes("[RAMASSER-RESULT]")).pop();
@@ -604,10 +611,10 @@ test.describe.serial("operator-real-flow: 5→P1 + P1→5 with refresh, PAUSE, c
     await ss(opPage, "step8-before-combined");
 
     // Check for combined Déposer + Ramasser button
-    const combinedBtn = opPage.locator("button").filter({ hasText: /deposer.*ramasser|drop off.*pickup|deposer \+ ramasser|deposer.*\+.*ramasser/i }).first();
+    const combinedBtn = opPage.locator("button").filter({ hasText: /d[eé]poser.*ramasser|drop.*pick/i }).first();
     const hasCombined = await combinedBtn.isVisible({ timeout: 5_000 }).catch(() => false);
 
-    // Also check for separate Déposer and Ramasser at same floor
+    // Also check for separate Déposer and Ramasser
     const dropoffBtn = opPage.locator("button").filter({ hasText: /deposer|dropoff/i }).first();
     const pickupBtn = opPage.locator("button").filter({ hasText: /ramasser|pickup/i }).first();
     const hasDropoff = await dropoffBtn.isVisible({ timeout: 3_000 }).catch(() => false);
@@ -620,10 +627,17 @@ test.describe.serial("operator-real-flow: 5→P1 + P1→5 with refresh, PAUSE, c
     console.log(`  [RESULT] 7: combined=${hasCombined} dropoff=${hasDropoff} pickup=${hasPickup}`);
 
     if (hasCombined) {
-      console.log("  [ACTION] 7: clicking combined Déposer + Ramasser...");
+      const btnText = await combinedBtn.textContent({ timeout: 3000 }).catch(() => "N/A");
+      const isEnabled = await combinedBtn.isEnabled().catch(() => false);
+      const isVisible = await combinedBtn.isVisible().catch(() => false);
+      console.log(`  [ACTION] 7: clicking combined button (text: "${btnText?.slice(0, 100)}", enabled: ${isEnabled}, visible: ${isVisible})...`);
       const clickStart = Date.now();
-      await combinedBtn.click({ force: true });
-      await wait(5000);
+      // Use JS dispatch to ensure React onClick fires
+      await combinedBtn.evaluate((el: HTMLElement) => {
+        console.log("[E2E-CLICK] dispatching click on combined button");
+        el.click();
+      });
+      await wait(1000);
       await ss(opPage, "step8-after-combined");
 
       // Verify passenger B QR returned <2s
