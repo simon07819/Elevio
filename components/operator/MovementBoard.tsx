@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Trash2, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, Inbox, Trash2, Users } from "lucide-react";
 import { formatFloorLabel, formatWaitTime } from "@/lib/utils";
 import { type EnrichedRequest, isOperatorMovementQueueStatus } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
@@ -53,7 +53,8 @@ function MovementTable({
       <div className="rounded-2xl border border-slate-200 bg-slate-100 p-2">
         <div className="grid gap-2">
           {requests.length === 0 ? (
-            <div className="rounded-xl bg-white px-3 py-5 text-center text-sm font-bold text-slate-500">
+            <div className="flex flex-col items-center gap-2 rounded-xl bg-white px-3 py-5 text-center text-sm font-bold text-slate-500">
+              <Inbox size={24} className="text-slate-400" />
               {t("common.none")}
             </div>
           ) : (
@@ -63,11 +64,11 @@ function MovementTable({
                 className={
                   request.status === "boarded"
                     ? recommendedIds.has(request.id)
-                      ? "grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-sky-100/90 px-3 py-2 text-sm font-bold ring-2 ring-inset ring-sky-300/70"
-                      : "grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-sky-50 px-3 py-2 text-sm font-bold ring-1 ring-inset ring-sky-200/80"
+                      ? "anim-slide-in grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-sky-100/90 px-3 py-2 text-sm font-bold ring-2 ring-inset ring-sky-300/70"
+                      : "anim-slide-in grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-sky-50 px-3 py-2 text-sm font-bold ring-1 ring-inset ring-sky-200/80"
                     : recommendedIds.has(request.id)
-                      ? "grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-yellow-50 px-3 py-2 text-sm font-bold ring-2 ring-inset ring-yellow-300/55"
-                      : "grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-bold"
+                      ? "anim-slide-in grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-yellow-50 px-3 py-2 text-sm font-bold ring-2 ring-inset ring-yellow-300/55"
+                      : "anim-slide-in grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-bold"
                 }
               >
                 <div className="min-w-0">

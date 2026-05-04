@@ -21,6 +21,83 @@
   }
 }
 
+/* ── UX Polish: Animations ── */
+
+@keyframes elevio-fade-out {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+
+@keyframes elevio-fade-in {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes elevio-slide-in-right {
+  0% { opacity: 0; transform: translateX(24px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes elevio-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-4px); }
+  30% { transform: translateX(4px); }
+  45% { transform: translateX(-3px); }
+  60% { transform: translateX(3px); }
+  75% { transform: translateX(-1px); }
+}
+
+@keyframes elevio-success-pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes elevio-pulse-dot {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes elevio-spinner {
+  to { transform: rotate(360deg); }
+}
+
+.anim-fade-out {
+  animation: elevio-fade-out 200ms ease-out forwards;
+}
+.anim-fade-in {
+  animation: elevio-fade-in 250ms ease-out both;
+}
+.anim-slide-in {
+  animation: elevio-slide-in-right 250ms ease-out both;
+}
+.anim-shake {
+  animation: elevio-shake 400ms ease-out both;
+}
+.anim-success-pop {
+  animation: elevio-success-pop 300ms ease-out both;
+}
+.anim-pulse-dot {
+  animation: elevio-pulse-dot 1.4s ease-in-out infinite;
+}
+.anim-spinner {
+  animation: elevio-spinner 0.7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-fade-out,
+  .anim-fade-in,
+  .anim-slide-in,
+  .anim-shake,
+  .anim-success-pop,
+  .anim-pulse-dot {
+    animation: none !important;
+  }
+  .anim-spinner {
+    animation: elevio-spinner 1.2s linear infinite !important;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

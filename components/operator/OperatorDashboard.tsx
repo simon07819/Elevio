@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { Ban, CheckCircle2, MapPin, ShieldAlert } from "lucide-react";
+import { Ban, CheckCircle2, Inbox, MapPin, ShieldAlert, Users } from "lucide-react";
 import {
   demoElevator,
   demoFloors,
@@ -967,7 +967,19 @@ export function OperatorDashboard({
           <div>
             <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-300"><T k="operator.tablet" /></p>
             <h2 className="text-2xl font-black text-white"><T k="operator.movements" /></h2>
-            <p className="mt-1 text-xs font-bold text-emerald-200"><T k="operator.requestsSynced" /></p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <p className="text-xs font-bold text-emerald-200"><T k="operator.requestsSynced" /></p>
+              {liveActivePassengers.length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/20 px-2.5 py-0.5 text-xs font-black text-sky-100">
+                  <Users size={12} /> {liveActivePassengers.length} <T k="operator.onboardCount" />
+                </span>
+              )}
+              {activeQueue.filter(r => r.status !== "boarded").length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/20 px-2.5 py-0.5 text-xs font-black text-yellow-100">
+                  {activeQueue.filter(r => r.status !== "boarded").length} <T k="operator.pendingCount" />
+                </span>
+              )}
+            </div>
           </div>
           <button
             type="button"
@@ -979,7 +991,7 @@ export function OperatorDashboard({
           </button>
         </div>
         {operatorActionError ? (
-          <p className="mb-3 rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-100">
+          <p className="anim-shake mb-3 rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-100">
             {operatorActionError}
           </p>
         ) : null}
@@ -990,12 +1002,20 @@ export function OperatorDashboard({
           </p>
         )}
 
-        <MovementBoard
-          requests={activeQueue}
-          recommendedIds={visibleRecommendedIds}
-          onCancelRequest={cancelMovementRequest}
-          cancelingIds={cancelingRequestIds}
-        />
+        {activeQueue.length === 0 && liveActivePassengers.length === 0 ? (
+          <div className="anim-fade-in flex flex-col items-center justify-center gap-3 rounded-2xl border border-white/8 bg-white/4 px-6 py-12 text-center">
+            <Inbox size={40} className="text-slate-500" />
+            <p className="text-lg font-black text-slate-300"><T k="operator.emptyQueue" /></p>
+            <p className="text-sm font-bold text-slate-500"><T k="operator.emptyQueueHint" /></p>
+          </div>
+        ) : (
+          <MovementBoard
+            requests={activeQueue}
+            recommendedIds={visibleRecommendedIds}
+            onCancelRequest={cancelMovementRequest}
+            cancelingIds={cancelingRequestIds}
+          />
+        )}
       </section>
     </div>
   );

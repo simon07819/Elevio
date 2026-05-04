@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, MessageSquare, PauseCircle, UserCheck, XCircle } from "lucide-react";
+import { ArrowDown, ArrowUp, CheckCircle2, Loader2, MessageSquare, PauseCircle, UserCheck, XCircle } from "lucide-react";
 import { advanceRequestStatus, createRequestEvent } from "@/lib/actions";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { formatFloorLabel, formatWaitTime } from "@/lib/utils";
@@ -104,7 +104,7 @@ export function RequestCard({
   }
 
   return (
-    <article className={isTerminal ? "rounded-2xl border border-white/10 bg-slate-950/35 p-3 opacity-70" : "rounded-2xl border border-white/12 bg-slate-950/70 p-3"}>
+    <article className={isTerminal ? "anim-fade-out rounded-2xl border border-white/10 bg-slate-950/35 p-3 opacity-70" : "anim-fade-in rounded-2xl border border-white/12 bg-slate-950/70 p-3"}>
       <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -120,6 +120,7 @@ export function RequestCard({
               {formatFloorLabel(request.from_floor)} {"->"} {formatFloorLabel(request.to_floor)}
             </h3>
             <span className={`rounded-full px-3 py-1 text-xs font-black ${meta.tone}`}>
+              {currentStatus === "completed" && <CheckCircle2 size={12} className="mr-1 inline anim-success-pop" />}
               {t(meta.stage)}
             </span>
             <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black text-slate-200">
@@ -148,10 +149,10 @@ export function RequestCard({
             <button
               disabled={isPending}
               onClick={() => advance(meta.nextStatus as RequestStatus)}
-              className="touch-target col-span-3 rounded-xl bg-yellow-300 px-3 py-3 text-sm font-black text-slate-950 disabled:opacity-60"
+              className="touch-target col-span-3 flex items-center justify-center gap-2 rounded-xl bg-yellow-300 px-3 py-3 text-sm font-black text-slate-950 transition disabled:opacity-60 disabled:cursor-wait"
             >
-              <UserCheck className="mx-auto mb-1" size={16} />
-              {meta.nextLabel ? t(meta.nextLabel) : null}
+              {isPending ? <Loader2 size={16} className="anim-spinner" /> : <UserCheck className="mx-auto mb-1" size={16} />}
+              {isPending ? "…" : (meta.nextLabel ? t(meta.nextLabel) : null)}
             </button>
           ) : (
             <div className="col-span-3 rounded-xl bg-white/10 px-3 py-3 text-center text-sm font-black text-slate-300">
@@ -175,7 +176,7 @@ export function RequestCard({
               </button>
               <button
                 onClick={() => advance("cancelled")}
-                className="rounded-xl bg-red-500/20 px-3 py-2 text-xs font-black text-red-100"
+                className="rounded-xl bg-red-500/20 px-3 py-2 text-xs font-black text-red-100 active:scale-95"
               >
                 <XCircle className="mx-auto mb-1" size={14} /> {t("requestCard.cancel")}
               </button>

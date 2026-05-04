@@ -56,7 +56,7 @@ test("passenger-clarity: i18n keys for pending, assigned, arriving, boarded, can
 // ---------------------------------------------------------------------------
 test("passenger-clarity: title references status-dependent i18n keys", () => {
   const form = readFileSync(join(root, "components/RequestForm.tsx"), "utf8");
-  assert.match(form, /request\.statusPending/, "pending key used");
+  assert.match(form, /request\.(statusPending|waitingForOperator)/, "pending key used");
   assert.match(form, /request\.statusAssigned/, "assigned key used");
   assert.match(form, /request\.statusArriving/, "arriving key used");
   assert.match(form, /request\.statusBoarded/, "boarded key used");

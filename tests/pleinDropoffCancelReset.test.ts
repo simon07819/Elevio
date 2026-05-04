@@ -50,10 +50,11 @@ test("bug1: UI shows PLEIN info banner for idle_manual_full (not disabled button
   const ui = readFileSync(join(root, "components/operator/RecommendedNextStop.tsx"), "utf8");
   assert.match(ui, /idle_manual_full/, "idle_manual_full handled in UI");
   assert.match(ui, /Ban/, "Ban icon used for PLEIN banner");
-  // idle_manual_full should appear in a section that doesn't have "disabled" before the next branch
-  const manualFullIdx = ui.indexOf("idle_manual_full");
-  const nextBranch = ui.indexOf("idle_blocked", manualFullIdx);
-  const section = ui.substring(manualFullIdx, nextBranch > manualFullIdx ? nextBranch : manualFullIdx + 500);
+  // idle_manual_full JSX render section should not have disabled (it's a <div>, not a <button>)
+  // Use the LAST occurrence (JSX), not the first (variable declaration)
+  const lastManualFullIdx = ui.lastIndexOf("idle_manual_full");
+  const nextBranch = ui.indexOf("idle_blocked", lastManualFullIdx);
+  const section = ui.substring(lastManualFullIdx, nextBranch > lastManualFullIdx ? nextBranch : lastManualFullIdx + 500);
   assert.doesNotMatch(section, /disabled/, "PLEIN banner section has no disabled attribute");
 });
 

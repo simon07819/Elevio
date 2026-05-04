@@ -591,7 +591,7 @@ export function RequestForm({
     }
 
     return (
-      <section className="flex flex-1 flex-col justify-between gap-4 rounded-[1.75rem] bg-white p-5 text-slate-950 shadow-sm">
+      <section className="anim-fade-in flex flex-1 flex-col justify-between gap-4 rounded-[1.75rem] bg-white p-5 text-slate-950 shadow-sm">
         {!isOnline && (
           <div className="flex items-center gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">
             <ShieldAlert size={18} />
@@ -619,9 +619,12 @@ export function RequestForm({
             ) : submittedRequest.status === "assigned" ? (
               <UserCheck className="text-blue-600" size={44} />
             ) : submittedRequest.status === "boarded" ? (
-              <CheckCircle2 className="text-emerald-600" size={44} />
+              <CheckCircle2 className="anim-success-pop text-emerald-600" size={44} />
             ) : (
-              <Clock className="text-yellow-600" size={44} />
+              <span className="relative inline-flex">
+                <Clock className="text-yellow-600" size={44} />
+                <span className="absolute right-0 top-0 size-3 rounded-full bg-yellow-400 anim-pulse-dot" />
+              </span>
             )}
             <h2 className="mt-4 text-2xl font-black">
               {!liveDispatch.canDispatch
@@ -634,7 +637,7 @@ export function RequestForm({
                       ? t("request.statusAssigned")
                       : submittedRequest.status === "boarded"
                         ? t("request.statusBoarded")
-                        : t("request.statusPending")}
+                        : t("request.waitingForOperator")}
             </h2>
             {liveDispatch.canDispatch && submittedRequest.status === "pending" && (
               <p className="mt-3 text-base font-bold leading-7">{t("request.sentBody")}</p>
@@ -912,7 +915,7 @@ export function RequestForm({
         </button>
 
         {message && (
-          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-900">
+          <div className="anim-shake mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-900">
             {message}
           </div>
         )}

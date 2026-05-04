@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Ban, DoorOpen, Pause, TriangleAlert, UserCheck } from "lucide-react";
+import { Ban, DoorOpen, Loader2, Pause, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatDispatchRecommendationReason } from "@/lib/recommendationReason";
@@ -131,6 +131,7 @@ export function RecommendedNextStop({
   const showPickup = !showDropoff && actionRequest !== null;
   const showCombined = showDropoff && pickupAtDropFloor;
   const showPrimaryAction = showDropoff || showPickup;
+  const isActionPending = pendingPickupIds.size > 0 || pendingDropoffIds.size > 0;
   // ── DEBUG: Combined button diagnostic ──
   console.log("[COMBINED-BTN]", {
     showDropoff,
@@ -149,40 +150,55 @@ export function RecommendedNextStop({
     <button
       type="button"
       onClick={dropoffAndPickup}
-      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(16,185,129,0.42)] ring-4 ring-teal-100/40 transition active:scale-[0.98]"
+      disabled={isActionPending}
+      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(16,185,129,0.42)] ring-4 ring-teal-100/40 transition active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait"
     >
+      {isActionPending && <span className="absolute inset-0 bg-slate-950/20" />}
       <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.55),transparent)] opacity-70 motion-safe:animate-[action-shine_1.45s_ease-in-out_infinite]" />
       <span className="relative flex w-full flex-col items-center justify-center gap-1">
-        <span className="flex w-full items-center justify-center gap-4 text-4xl font-black uppercase tracking-wide">
-          <DoorOpen size={36} strokeWidth={2.8} />
-          <span>+</span>
-          <UserCheck size={36} strokeWidth={2.8} />
-        </span>
-        <span className="text-lg font-black uppercase tracking-wide">{t("operator.dropoffAndPickup")}</span>
+        {isActionPending ? (
+          <span className="flex items-center gap-3 text-3xl font-black uppercase tracking-wide">
+            <Loader2 size={36} className="anim-spinner" />
+            <span className="text-lg font-black uppercase tracking-wide">{t("operator.actionInProgress")}</span>
+          </span>
+        ) : (
+          <>
+            <span className="flex w-full items-center justify-center gap-4 text-4xl font-black uppercase tracking-wide">
+              <DoorOpen size={36} strokeWidth={2.8} />
+              <span>+</span>
+              <UserCheck size={36} strokeWidth={2.8} />
+            </span>
+            <span className="text-lg font-black uppercase tracking-wide">{t("operator.dropoffAndPickup")}</span>
+          </>
+        )}
       </span>
     </button>
   ) : showDropoff ? (
     <button
       type="button"
       onClick={dropoff}
-      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-emerald-300 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(16,185,129,0.42)] ring-4 ring-emerald-100/40 transition active:scale-[0.98]"
+      disabled={isActionPending}
+      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-emerald-300 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(16,185,129,0.42)] ring-4 ring-emerald-100/40 transition active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait"
     >
+      {isActionPending && <span className="absolute inset-0 bg-slate-950/20" />}
       <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.55),transparent)] opacity-70 motion-safe:animate-[action-shine_1.45s_ease-in-out_infinite]" />
       <span className="relative flex w-full items-center justify-center gap-4 text-4xl font-black uppercase tracking-wide">
-        <DoorOpen size={38} strokeWidth={2.8} />
-        {t("operator.dropoff")}
+        {isActionPending ? <Loader2 size={38} className="anim-spinner" /> : <DoorOpen size={38} strokeWidth={2.8} />}
+        {isActionPending ? t("operator.actionInProgress") : t("operator.dropoff")}
       </span>
     </button>
   ) : showPickup ? (
     <button
       type="button"
       onClick={pickup}
-      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-sky-300 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(56,189,248,0.42)] ring-4 ring-sky-100/40 transition active:scale-[0.98]"
+      disabled={isActionPending}
+      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-sky-300 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(56,189,248,0.42)] ring-4 ring-sky-100/40 transition active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait"
     >
+      {isActionPending && <span className="absolute inset-0 bg-slate-950/20" />}
       <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.6),transparent)] opacity-75 motion-safe:animate-[action-shine_1.45s_ease-in-out_infinite]" />
       <span className="relative flex w-full items-center justify-center gap-4 text-4xl font-black uppercase tracking-wide">
-        <UserCheck size={38} strokeWidth={2.8} />
-        {t("operator.pickup")}
+        {isActionPending ? <Loader2 size={38} className="anim-spinner" /> : <UserCheck size={38} strokeWidth={2.8} />}
+        {isActionPending ? t("operator.actionInProgress") : t("operator.pickup")}
       </span>
     </button>
   ) : recommendation.reasonDetail?.kind === "idle_manual_full" ? (
@@ -427,7 +443,7 @@ export function RecommendedNextStop({
       ) : null}
       {actionButton}
       {actionError ? (
-        <p className="mt-3 rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-center text-sm font-bold text-red-100">
+        <p className="anim-shake mt-3 rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-center text-sm font-bold text-red-100">
           {actionError}
         </p>
       ) : null}

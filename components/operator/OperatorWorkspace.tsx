@@ -4,7 +4,7 @@ import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { flushSync } from "react-dom";
-import { LockKeyhole, TabletSmartphone } from "lucide-react";
+import { LockKeyhole, Loader2, TabletSmartphone } from "lucide-react";
 import {
   activateOperatorElevator,
   heartbeatOperatorElevator,
@@ -657,9 +657,10 @@ export function OperatorWorkspace({
               type="button"
               disabled={releasingElevatorId === selectedElevator.id}
               onClick={release}
-              className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-black text-white disabled:opacity-60"
+              className="touch-target flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-black text-white transition disabled:opacity-60 disabled:cursor-wait"
             >
-              {t("operator.releaseTablet")}
+              {releasingElevatorId === selectedElevator.id ? <Loader2 size={16} className="anim-spinner" /> : null}
+              {releasingElevatorId === selectedElevator.id ? t("operator.actionInProgress") : t("operator.releaseTablet")}
             </button>
           </div>
         </div>
@@ -848,10 +849,10 @@ export function OperatorWorkspace({
                 <button
                   type="submit"
                   disabled={locked || isActivatingThisElevator}
-                  className="touch-target mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-yellow-300 px-5 py-4 font-black text-slate-950 disabled:opacity-50"
+                  className="touch-target mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-yellow-300 px-5 py-4 font-black text-slate-950 transition disabled:opacity-50 disabled:cursor-wait"
                 >
-                  <LockKeyhole size={18} />
-                  {staleOtherBinding ? t("operator.retakeTablet") : t("operator.activate")}
+                  {isActivatingThisElevator ? <Loader2 size={18} className="anim-spinner" /> : <LockKeyhole size={18} />}
+                  {isActivatingThisElevator ? t("operator.actionInProgress") : staleOtherBinding ? t("operator.retakeTablet") : t("operator.activate")}
                 </button>
               </form>
             );
