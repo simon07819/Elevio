@@ -43,10 +43,10 @@ test("buttons state: pickup is instant optimistic — onPickupSuccess called bef
   // instantly in client state, so the pickup button disappears on its own.
   // No need for a separate pendingPickupIds guard.
   assert.match(RECOMMENDED, /onPickupSuccess\?\.\(targetRequest\)/);
-  // Server call is fire-and-forget (void + withTimeout)
-  assert.match(RECOMMENDED, /void withTimeout\(/);
-  // Timeout for server call
-  assert.match(RECOMMENDED, /SERVER_ACTION_TIMEOUT_MS/);
+  // Server call is fire-and-forget — NO timeout wrapper (slow server ≠ error)
+  assert.match(RECOMMENDED, /void advanceRequestStatus\(/);
+  // Rollback only on real server error (ok: false) or real exception
+  assert.match(RECOMMENDED, /onPickupFailure/);
 });
 
 // ---------------------------------------------------------------------------

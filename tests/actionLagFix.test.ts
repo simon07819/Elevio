@@ -1,10 +1,11 @@
 /**
- * Action lag fix — Ramasser instant (optimistic UI).
+ * Action lag fix — Ramasser instant (optimistic UI) + no false timeout rollback.
  *
  * Verifies that the Ramasser (pickup) button:
  * - Updates UI immediately (optimistic) — no spinner
- * - Server call is fire-and-forget with timeout
- * - onPickupFailure provides rollback on error/timeout
+ * - Server call is fire-and-forget (NO timeout wrapper)
+ * - onPickupFailure provides rollback ONLY on real server error
+ * - NEVER rollback on slow server / network delay
  * - Performance logging for pickup click → UI update
  * - Server action returns fast for boarded/completed status
  */
@@ -28,7 +29,6 @@ test("action lag: no pendingPickupIds state variable", () => {
 // 2. Pickup calls onPickupSuccess BEFORE server call
 // ---------------------------------------------------------------------------
 test("action lag: onPickupSuccess fires before advanceRequestStatus", () => {
-  // In pickup(), onPickupSuccess must appear BEFORE the server call
   const pickupFn = RECOMMENDED.match(/function pickup\(\) \{[\s\S]*?^  \}/m)?.[0] ?? "";
   assert.match(pickupFn, /onPickupSuccess/, "onPickupSuccess is called in pickup");
   const successPos = pickupFn.indexOf("onPickupSuccess");
@@ -37,25 +37,41 @@ test("action lag: onPickupSuccess fires before advanceRequestStatus", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Server call uses withTimeout (3s) — fire-and-forget
+// 3. No withTimeout — server call is pure fire-and-forget
 // ---------------------------------------------------------------------------
-test("action lag: advanceRequestStatus wrapped in withTimeout", () => {
-  assert.match(RECOMMENDED, /void withTimeout\(/, "fire-and-forget with timeout");
-  assert.match(RECOMMENDED, /SERVER_ACTION_TIMEOUT_MS/, "timeout constant used");
-  assert.match(RECOMMENDED, /SERVER_ACTION_TIMEOUT_MS = 3_000/, "3 second timeout");
+test("action lag: no withTimeout wrapper on pickup server call", () => {
+  assert.doesNotMatch(RECOMMENDED, /withTimeout/, "withTimeout removed — no false timeout rollback");
+  assert.doesNotMatch(RECOMMENDED, /SERVER_ACTION_TIMEOUT_MS/, "timeout constant removed");
 });
 
 // ---------------------------------------------------------------------------
-// 4. Timeout error triggers onPickupFailure (rollback)
+// 4. Rollback ONLY on real server error (ok: false) or real exception
 // ---------------------------------------------------------------------------
-test("action lag: timeout and server errors trigger onPickupFailure", () => {
+test("action lag: onPickupFailure only on real server error, never on slow response", () => {
   assert.match(RECOMMENDED, /onPickupFailure\?\.\(targetRequest\)/, "onPickupFailure on server error");
-  // Timeout-specific error message
-  assert.match(RECOMMENDED, /Le serveur ne repond pas/, "specific timeout error message");
+  // No timeout-specific error message — that was the false rollback
+  assert.doesNotMatch(RECOMMENDED, /Le serveur ne repond pas/, "timeout error message removed");
+  // Only rollback on: result.ok === false OR catch (real exception)
+  assert.match(RECOMMENDED, /if \(result\.ok\)/, "checks result.ok for success vs failure");
+  assert.match(RECOMMENDED, /\.catch\(/, "catch for real exceptions only");
 });
 
 // ---------------------------------------------------------------------------
-// 5. Performance log: pickup click → UI update
+// 5. Optimistic state stays visible even when server is slow
+// ---------------------------------------------------------------------------
+test("action lag: optimistic boarded stays visible — no rollback on delay", () => {
+  // pickup_optimistic_success log confirms the optimistic state
+  assert.match(RECOMMENDED, /pickup_optimistic_success/, "optimistic success log");
+  // pickup_server_confirmed log when server finally confirms
+  assert.match(RECOMMENDED, /pickup_server_confirmed/, "server confirmed log");
+  // pickup_server_error log ONLY when server says ok: false
+  assert.match(RECOMMENDED, /pickup_server_error/, "server error log");
+  // pickup_exception log ONLY on real exception (network down)
+  assert.match(RECOMMENDED, /pickup_exception/, "exception log");
+});
+
+// ---------------------------------------------------------------------------
+// 6. Performance log: pickup click → UI update
 // ---------------------------------------------------------------------------
 test("action lag: performance log measures pickup click → UI update", () => {
   assert.match(RECOMMENDED, /pickupClickTimeRef/, "click time ref");
@@ -65,7 +81,7 @@ test("action lag: performance log measures pickup click → UI update", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 6. SLOW performance warning
+// 7. SLOW performance warning
 // ---------------------------------------------------------------------------
 test("action lag: SLOW warning when pickup UI update >200ms", () => {
   assert.match(RECOMMENDED, /uiUpdateMs > 200/, ">200ms threshold");
@@ -73,7 +89,7 @@ test("action lag: SLOW warning when pickup UI update >200ms", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 7. Server action fast-path for boarded/completed
+// 8. Server action fast-path for boarded/completed
 // ---------------------------------------------------------------------------
 test("action lag: updateRequestStatus returns fast for boarded/completed", () => {
   assert.match(ACTIONS, /isFastPath = status === "boarded" \|\| status === "completed"/, "fast path for boarded/completed");
@@ -82,10 +98,9 @@ test("action lag: updateRequestStatus returns fast for boarded/completed", () =>
 });
 
 // ---------------------------------------------------------------------------
-// 8. Background tasks still execute (syncElevator, insertEvent, revalidate)
+// 9. Background tasks still execute (syncElevator, insertEvent, revalidate)
 // ---------------------------------------------------------------------------
 test("action lag: background tasks still run after fast return", () => {
-  // In the fast-path block, syncElevator, insertEvent, revalidate must still happen
   const fastPathBlock = ACTIONS.match(/const isFastPath[\s\S]*?return \{ ok: true[\s\S]*?message: "Statut mis a jour\." \};/)?.[0] ?? "";
   assert.match(fastPathBlock, /syncElevatorWithRequestStatus/, "syncElevator still runs in background");
   assert.match(fastPathBlock, /request_events.*insert/, "insertEvent still runs in background");
@@ -93,35 +108,31 @@ test("action lag: background tasks still run after fast return", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 9. Combined button also uses optimistic pickup (no spinner)
+// 10. Combined button also uses optimistic pickup without timeout
 // ---------------------------------------------------------------------------
-test("action lag: combined button uses instant optimistic pickup", () => {
-  // In dropoffAndPickup, pickup is also optimistic
+test("action lag: combined button uses instant optimistic pickup without timeout", () => {
   const combinedFn = RECOMMENDED.match(/function dropoffAndPickup\(\) \{[\s\S]*?^  \}/m)?.[0] ?? "";
   assert.match(combinedFn, /onPickupSuccess/, "onPickupSuccess in combined");
-  assert.match(combinedFn, /withTimeout/, "combined pickup also uses withTimeout");
+  assert.doesNotMatch(combinedFn, /withTimeout/, "no withTimeout in combined");
 });
 
 // ---------------------------------------------------------------------------
-// 10. isActionPending only for dropoff (not pickup)
+// 11. isActionPending only for dropoff (not pickup)
 // ---------------------------------------------------------------------------
 test("action lag: isActionPending only checks dropoff, not pickup", () => {
   assert.match(RECOMMENDED, /isActionPending = pendingDropoffIds\.size > 0/, "isActionPending = dropoff only");
 });
 
 // ---------------------------------------------------------------------------
-// 11. No "En cours..." spinner for pickup button
+// 12. No "En cours..." spinner for pickup button
 // ---------------------------------------------------------------------------
 test("action lag: pickup button has no spinner state", () => {
-  // The pickup button should NOT show Loader2 for pickup-specific pending
-  // (the isActionPending now only covers dropoff, and showPickup only shows
-  // when there's no dropoff, so isActionPending will be false for pickup)
   assert.doesNotMatch(RECOMMENDED, /pendingPickupIds/, "no pendingPickupIds — no pickup spinner");
 });
 
 // ---------------------------------------------------------------------------
-// 12. Rollback on server failure restores previous state
+// 13. onPickupFailure callback exists for rollback on real error
 // ---------------------------------------------------------------------------
-test("action lag: onPickupFailure callback exists for rollback", () => {
+test("action lag: onPickupFailure callback exists for real error rollback", () => {
   assert.match(RECOMMENDED, /onPickupFailure\?:\s*\(request: EnrichedRequest\) => void/, "onPickupFailure prop type");
 });

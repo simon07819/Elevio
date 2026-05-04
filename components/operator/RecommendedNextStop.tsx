@@ -13,23 +13,6 @@ import { resolveRequestState, logAction } from "@/lib/stateResolution";
 import type { DispatchRecommendation, EnrichedRequest } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
-/** Maximum time to wait for server confirmation before showing error + rollback. */
-const SERVER_ACTION_TIMEOUT_MS = 3_000;
-
-/**
- * Wrap a promise with a timeout. If the promise doesn't resolve within
- * `ms` milliseconds, reject with a timeout error.
- */
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Action timeout after ${ms}ms`)), ms);
-    promise.then(
-      (value) => { clearTimeout(timer); resolve(value); },
-      (err) => { clearTimeout(timer); reject(err); },
-    );
-  });
-}
-
 function capacityWarningTranslationKey(type: DispatchRecommendation["capacityWarnings"][number]["type"]): TranslationKey {
   switch (type) {
     case "insufficient_remaining":
@@ -263,6 +246,7 @@ export function RecommendedNextStop({
     // onPickupSuccess sets status "boarded" in client state,
     // hides Ramasser, shows Déposer — all before server responds.
     onPickupSuccess?.(targetRequest);
+    structuredLog("Performance", "pickup_optimistic_success", { requestId, action: "boarded" });
 
     // ── Performance log: click → UI update time ────────────────
     const uiUpdateMs = Math.round(performance.now() - pickupClickTimeRef.current);
@@ -275,34 +259,34 @@ export function RecommendedNextStop({
       console.warn("[Elevio Performance] pickup click → UI update SLOW", { uiUpdateMs, target: "<200ms" });
     }
 
-    // ── FIRE-AND-FORGET SERVER CALL WITH TIMEOUT ────────────────
-    // The server action does: DB update + syncElevator + insertEvent + revalidate
-    // This can take 500ms–2s but the user already sees the optimistic result.
+    // ── FIRE-AND-FORGET SERVER CALL ────────────────────────────
+    // The server action does: DB update + syncElevator + insertEvent + revalidate.
+    // This can take 500ms–10s but the user already sees the optimistic result.
+    // NEVER rollback on timeout/delay — only rollback on real server error (ok: false or exception).
+    // The poll/realtime will confirm the state eventually.
     const stopPickupDbTimer = startPickupToDbTimer({ projectId: projectId ?? "", elevatorId: operatorElevatorId, requestId });
 
-    void withTimeout(
-      advanceRequestStatus(requestId, "boarded", { assignElevatorId: operatorElevatorId }),
-      SERVER_ACTION_TIMEOUT_MS,
-    )
+    void advanceRequestStatus(requestId, "boarded", { assignElevatorId: operatorElevatorId })
       .then((result) => {
         if (result.ok) {
           const pickupDbMs = stopPickupDbTimer();
           trackRequestPickedUp(requestId, projectId ?? "", operatorElevatorId);
-          structuredLog("Performance", "pickup_to_db", { requestId, durationMs: Math.round(pickupDbMs) });
+          structuredLog("Performance", "pickup_server_confirmed", { requestId, durationMs: Math.round(pickupDbMs) });
           onPickupConfirmed?.(targetRequest);
         } else {
+          // Real server rejection — rollback the optimistic state
           stopPickupDbTimer();
           setActionError(result.message);
+          structuredLog("Error", "pickup_server_error", { requestId, message: result.message });
           captureError(new Error("pickup_failed: " + result.message), { projectId, elevatorId: operatorElevatorId, requestId, userType: "operator", action: "pickup" });
           onPickupFailure?.(targetRequest);
         }
       })
       .catch((err) => {
+        // Real exception (network down, server crash) — rollback
         stopPickupDbTimer();
-        const message = err instanceof Error && err.message.includes("timeout")
-          ? "Le serveur ne repond pas. Reessayez."
-          : "Action impossible. Verifiez la connexion et reessayez.";
-        setActionError(message);
+        setActionError("Action impossible. Verifiez la connexion et reessayez.");
+        structuredLog("Error", "pickup_exception", { requestId, error: String(err) });
         captureError(err, { projectId, elevatorId: operatorElevatorId, requestId, userType: "operator", action: "pickup" });
         onPickupFailure?.(targetRequest);
       });
@@ -407,25 +391,24 @@ export function RecommendedNextStop({
 
     // 3. Fire server actions — pickup FIRST for instant passenger QR return
     if (targetRequest) {
-      void withTimeout(
-        advanceRequestStatus(targetRequest.id, "boarded", { assignElevatorId: operatorElevatorId }),
-        SERVER_ACTION_TIMEOUT_MS,
-      )
+      void advanceRequestStatus(targetRequest.id, "boarded", { assignElevatorId: operatorElevatorId })
         .then((pickupResult) => {
           if (pickupResult.ok) {
             trackRequestPickedUp(targetRequest.id, projectId ?? "", operatorElevatorId);
+            structuredLog("Performance", "pickup_server_confirmed", { requestId: targetRequest.id, context: "combined" });
             onPickupConfirmed?.(targetRequest);
           } else {
+            // Real server rejection — rollback
             setActionError(pickupResult.message);
+            structuredLog("Error", "pickup_server_error", { requestId: targetRequest.id, context: "combined", message: pickupResult.message });
             captureError(new Error("combined_pickup_failed: " + pickupResult.message), { projectId, elevatorId: operatorElevatorId, requestId: targetRequest.id, userType: "operator", action: "combined_pickup" });
             onPickupFailure?.(targetRequest);
           }
         })
         .catch((err) => {
-          const message = err instanceof Error && err.message.includes("timeout")
-            ? "Le serveur ne repond pas. Reessayez."
-            : "Action impossible. Verifiez la connexion et reessayez.";
-          setActionError(message);
+          // Real exception — rollback
+          setActionError("Action impossible. Verifiez la connexion et reessayez.");
+          structuredLog("Error", "pickup_exception", { requestId: targetRequest.id, context: "combined", error: String(err) });
           captureError(err, { projectId, elevatorId: operatorElevatorId, requestId: targetRequest.id, userType: "operator", action: "combined_pickup" });
           onPickupFailure?.(targetRequest);
         });
