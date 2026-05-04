@@ -14,6 +14,33 @@ import type { DispatchRecommendation, EnrichedRequest } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { SkipForward } from "lucide-react";
 
+/**
+ * A pickup is "opportunistic" when:
+ * - There is at least 1 boarded/onboard passenger for this elevator
+ * - AND the recommended action is a pickup (pending/assigned/arriving)
+ * - AND the pickup candidate was NOT the original reason the elevator started moving
+ *
+ * In other words: the operator already has passengers onboard and the dispatch
+ * suggests picking up more along the way. This is the ONLY case where "Sauter ce passage"
+ * makes sense — the operator may have already passed the floor.
+ *
+ * It is NOT opportunistic when:
+ * - The elevator is idle with no onboard passengers (normal pickup)
+ * - The only work is a pickup (no one onboard yet)
+ * - The action is a dropoff (always mandatory)
+ */
+function isOpportunisticPickup(
+  actionRequest: EnrichedRequest | null,
+  onboardRequests: EnrichedRequest[],
+): boolean {
+  if (!actionRequest) return false;
+  if (onboardRequests.length === 0) return false;
+  // The request must be a pickup candidate (pending/assigned/arriving)
+  const status = actionRequest.status;
+  if (status !== "pending" && status !== "assigned" && status !== "arriving") return false;
+  return true;
+}
+
 function capacityWarningTranslationKey(type: DispatchRecommendation["capacityWarnings"][number]["type"]): TranslationKey {
   switch (type) {
     case "insufficient_remaining":
@@ -36,6 +63,7 @@ export function RecommendedNextStop({
   onSkipSuccess,
   onDropoffSuccess,
   onDropoffFailure,
+  onboardRequests = [],
 }: {
   recommendation: DispatchRecommendation;
   actionRequests: EnrichedRequest[];
@@ -52,6 +80,8 @@ export function RecommendedNextStop({
   onDropoffSuccess?: (payload: { requestIds: string[]; dropFloorId: string }) => void;
   /** Rollback du dropoff : appele quand au moins un advanceRequestStatus echoue ou throw. */
   onDropoffFailure?: (payload: { requestIds: string[] }) => void;
+  /** Boarded requests for this elevator — used to detect opportunistic pickup and prevent Pause. */
+  onboardRequests?: EnrichedRequest[];
 }) {
   const [completedDropoffIds, setCompletedDropoffIds] = useState<Set<string>>(() => new Set());
   const [pendingDropoffIds, setPendingDropoffIds] = useState<Set<string>>(() => new Set());
@@ -131,19 +161,43 @@ export function RecommendedNextStop({
   }, [actionRequests, skippedIds, recommendation.primaryPickupRequestId]);
 
   const showDropoff = dropoffIds.length > 0 && dropFloorId !== "";
+  // Whether the brain recommends a pickup (before effective overrides).
+  // Used to decide if we should show dropoff from onboard when the
+  // pickup is skipped — without creating a circular reference with showPickup.
+  const hasPickupCandidate = actionRequest !== null;
+  // Compute dropoff from onboard requests INDEPENDENTLY of the brain.
+  // This ensures that after skipping a pickup, Déposer still appears if
+  // there are boarded passengers, instead of falling through to Pause.
+  const onboardDropoffIds = useMemo(() => {
+    if (onboardRequests.length === 0) return [];
+    // Find the nearest dropoff floor among onboard passengers
+    const allDestFloorIds = [...new Set(onboardRequests.map((r) => r.to_floor_id))];
+    return allDestFloorIds;
+  }, [onboardRequests]);
+
+  const onboardDropFloorId = onboardDropoffIds.length > 0 ? onboardDropoffIds[0] : "";
+
+  // If the brain says pickup but we've skipped it, AND we have onboard passengers,
+  // show dropoff instead of pause. This is the guard against "Pause after skip".
+  const effectiveShowDropoff = showDropoff || (onboardRequests.length > 0 && !hasPickupCandidate && onboardDropFloorId !== "");
+  const effectiveDropoffIds = effectiveShowDropoff && !showDropoff ? onboardDropoffIds : dropoffIds;
+  const effectiveDropFloorId = effectiveShowDropoff && !showDropoff ? onboardDropFloorId : dropFloorId;
   // Find any pickup at the dropoff floor, even if brain didn't recommend it as primary
-  const pickupCandidateAtDropFloor = showDropoff
+  const pickupCandidateAtDropFloor = effectiveShowDropoff
     ? actionRequests.find(
         (request) =>
           !skippedIds.has(request.id) &&
           (request.status === "pending" || request.status === "assigned" || request.status === "arriving") &&
-          request.from_floor_id === dropFloorId,
+          request.from_floor_id === effectiveDropFloorId,
       ) ?? null
     : null;
-  const pickupAtDropFloor = showDropoff && pickupCandidateAtDropFloor !== null;
-  const showPickup = !showDropoff && actionRequest !== null;
-  const showCombined = showDropoff && pickupAtDropFloor;
-  const showPrimaryAction = showDropoff || showPickup;
+  const pickupAtDropFloor = effectiveShowDropoff && pickupCandidateAtDropFloor !== null;
+  const showPickup = !effectiveShowDropoff && actionRequest !== null;
+  const showCombined = effectiveShowDropoff && pickupAtDropFloor;
+  const showPrimaryAction = effectiveShowDropoff || showPickup;
+
+  // Skip button only for opportunistic pickup (operator already has onboard passengers)
+  const isOpportunistic = isOpportunisticPickup(actionRequest, onboardRequests);
   const isActionPending = pendingDropoffIds.size > 0;
 
   const actionButton = showCombined ? (
@@ -173,7 +227,7 @@ export function RecommendedNextStop({
         )}
       </span>
     </button>
-  ) : showDropoff ? (
+  ) : effectiveShowDropoff ? (
     <button
       type="button"
       onClick={dropoff}
@@ -202,14 +256,16 @@ export function RecommendedNextStop({
           {t("operator.pickup")}
         </span>
       </button>
-      <button
-        type="button"
-        onClick={skipPickup}
-        className="touch-target flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-slate-300 transition hover:bg-white/10 active:scale-[0.98]"
-      >
-        <SkipForward size={16} />
-        {t("operator.skipPassage")}
-      </button>
+      {isOpportunistic && (
+        <button
+          type="button"
+          onClick={skipPickup}
+          className="touch-target flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-slate-300 transition hover:bg-white/10 active:scale-[0.98]"
+        >
+          <SkipForward size={16} />
+          {t("operator.skipPassage")}
+        </button>
+      )}
     </div>
   ) : recommendation.reasonDetail?.kind === "idle_manual_full" ? (
     <div className="flex min-h-36 w-full flex-col items-center justify-center gap-3 rounded-3xl border border-red-400/35 bg-red-950/45 px-5 py-6 text-center shadow-inner ring-2 ring-red-400/15">
@@ -342,8 +398,8 @@ export function RecommendedNextStop({
   }
 
   function dropoff() {
-    const ids = dropoffIds;
-    if (ids.length === 0 || !dropFloorId) {
+    const ids = effectiveDropoffIds;
+    if (ids.length === 0 || !effectiveDropFloorId) {
       return;
     }
 
@@ -361,7 +417,7 @@ export function RecommendedNextStop({
       for (const id of ids) next.add(id);
       return next;
     });
-    onDropoffSuccess?.({ requestIds: ids, dropFloorId });
+    onDropoffSuccess?.({ requestIds: ids, dropFloorId: effectiveDropFloorId });
 
     void Promise.all(ids.map((requestId) => advanceRequestStatus(requestId, "completed")))
       .then((results) => {
@@ -408,7 +464,7 @@ export function RecommendedNextStop({
 
     // 1. Dropoff
     const ids = dropoffIds;
-    if (ids.length === 0 || !dropFloorId) return;
+    if (ids.length === 0 || !effectiveDropFloorId) return;
 
     setActionError(null);
     setPendingDropoffIds((current) => {
@@ -421,7 +477,7 @@ export function RecommendedNextStop({
       for (const id of ids) next.add(id);
       return next;
     });
-    onDropoffSuccess?.({ requestIds: ids, dropFloorId });
+    onDropoffSuccess?.({ requestIds: ids, dropFloorId: effectiveDropFloorId });
 
     // 2. Pickup — optimistically update immediately (use pickupCandidateAtDropFloor for combined)
     const targetRequest = pickupCandidateAtDropFloor;

@@ -100,63 +100,74 @@ test("skip: clearSkippedRequestsForElevator exists for post-dropoff cleanup", ()
 });
 
 // ---------------------------------------------------------------------------
-// 9. Skip button visible only for pickup (not dropoff)
+// 9. Skip button visible ONLY for opportunistic pickup (with onboard passengers)
 // ---------------------------------------------------------------------------
-test("skip: skip button only visible for pickup, not dropoff", () => {
-  // Skip button is inside the showPickup branch only
-  const pickupSection = RECOMMENDED.match(/showPickup \? \([\s\S]*?\) : recommendation\.reasonDetail/m)?.[0] ?? "";
-  assert.match(pickupSection, /skipPickup/, "skipPickup in pickup section");
-  assert.match(pickupSection, /skipPassage/, "skip button text key in pickup section");
-  // Dropoff section should NOT have skipPassage
-  const dropoffSection = RECOMMENDED.match(/showDropoff \? \([\s\S]*?\) : showPickup/m)?.[0] ?? "";
-  assert.doesNotMatch(dropoffSection, /skipPickup/, "no skipPickup in dropoff section");
+test("skip: skip button only visible for opportunistic pickup with onboard passengers", () => {
+  // isOpportunisticPickup function must exist
+  assert.match(RECOMMENDED, /isOpportunisticPickup/, "isOpportunisticPickup function exists");
+  // isOpportunistic guards the skip button visibility
+  assert.match(RECOMMENDED, /isOpportunistic &&/, "skip button guarded by isOpportunistic");
+  // Function checks onboardRequests.length > 0
+  assert.match(RECOMMENDED, /onboardRequests\.length === 0/, "returns false when no onboard passengers");
 });
 
 // ---------------------------------------------------------------------------
-// 10. Skip button does not appear for boarded/onboard
+// 10. Skip button hidden when idle (no onboard passengers)
 // ---------------------------------------------------------------------------
-test("skip: skip button never appears for boarded requests", () => {
-  // actionRequest only includes pending/assigned/arriving
-  assert.match(RECOMMENDED, /request\.status === "pending" \|\| request\.status === "assigned" \|\| request\.status === "arriving"/, "actionRequest only non-boarded");
+test("skip: skip button hidden when no onboard passengers", () => {
+  // isOpportunisticPickup returns false when onboardRequests.length === 0
+  assert.match(RECOMMENDED, /onboardRequests\.length === 0.*return false/, "returns false for no onboard");
 });
 
 // ---------------------------------------------------------------------------
-// 11. Skip fires onSkipSuccess callback (optimistic)
+// 11. Skip button hidden on dropoff
 // ---------------------------------------------------------------------------
-test("skip: skip fires onSkipSuccess for optimistic UI update", () => {
-  assert.match(RECOMMENDED, /onSkipSuccess\?\.\(targetRequest\)/, "onSkipSuccess called in skipPickup");
+test("skip: skip button never visible on dropoff action", () => {
+  // The dropoff button section (effectiveShowDropoff branch) should NOT contain skipPickup
+  const dropoffBranch = RECOMMENDED.match(/effectiveShowDropoff \? \([\s\S]*?\) : showPickup/m)?.[0] ?? "";
+  assert.doesNotMatch(dropoffBranch, /skipPickup/, "no skipPickup in dropoff branch");
+  assert.doesNotMatch(dropoffBranch, /skipPassage/, "no skipPassage in dropoff branch");
 });
 
 // ---------------------------------------------------------------------------
-// 12. Dashboard handles onSkipSuccess — sets skipped fields in live state
+// 12. After skip with onboard passenger, Déposer shown instead of Pause
 // ---------------------------------------------------------------------------
-test("skip: Dashboard sets skipped_by_elevator_id in onSkipSuccess", () => {
-  assert.match(DASHBOARD, /onSkipSuccess/, "onSkipSuccess handler");
-  assert.match(DASHBOARD, /skipped_by_elevator_id: elevator\.id/, "sets skipped_by_elevator_id");
-  assert.match(DASHBOARD, /skipped_at: new Date\(\)\.toISOString\(\)/, "sets skipped_at");
+test("skip: after skip with onboard passengers, dropoff shown not pause", () => {
+  // onboardDropoffIds computed from onboard requests independently
+  assert.match(RECOMMENDED, /onboardDropoffIds/, "onboardDropoffIds computed independently");
+  assert.match(RECOMMENDED, /onboardDropFloorId/, "onboardDropFloorId computed independently");
+  // effectiveShowDropoff fallback when onboard exists and pickup was skipped
+  assert.match(RECOMMENDED, /effectiveShowDropoff/, "effectiveShowDropoff computed");
+  assert.match(RECOMMENDED, /onboardRequests\.length > 0 && !hasPickupCandidate/, "fallback to onboard dropoff when pickup skipped");
 });
 
 // ---------------------------------------------------------------------------
-// 13. Dashboard clears skips after dropoff
+// 13. Skipped pending request remains active (not cancelled, not boarded)
 // ---------------------------------------------------------------------------
-test("skip: Dashboard clears skips after dropoff", () => {
-  assert.match(DASHBOARD, /clearSkippedRequestsForElevator/, "clears skips on dropoff");
-  assert.match(DASHBOARD, /skipped_by_elevator_id === elevator\.id/, "clears skip fields in live state");
+test("skip: skipped pending request remains active, not cancelled or boarded", () => {
+  const skipFn = ACTIONS.match(/skipRequestForCurrentPassage[\s\S]*?^export async function clearSkipped/m)?.[0] ?? "";
+  assert.doesNotMatch(skipFn, /status.*cancelled/, "skip does not set cancelled");
+  assert.doesNotMatch(skipFn, /status.*completed/, "skip does not set completed");
+  assert.doesNotMatch(skipFn, /status.*boarded/, "skip does not set boarded");
 });
 
 // ---------------------------------------------------------------------------
-// 14. DispatchInput has elevatorId parameter
+// 14. Skipped request does not remove onboard request
 // ---------------------------------------------------------------------------
-test("skip: DispatchInput includes elevatorId for skip matching", () => {
-  assert.match(TYPES, /elevatorId\?: string/, "elevatorId in DispatchInput");
+test("skip: skip filter applies only to pickup candidates, not onboard/dropoff", () => {
+  // isSkippedForThisElevator only checks WAITING_STATUSES (pending/assigned/arriving)
+  // Boarded passengers are never filtered
+  assert.match(BRAIN, /!isSkippedForThisElevator\(request\)/, "skip filter on openRequests only");
+  // onboardPassengers are computed separately — not affected by skip
+  assert.doesNotMatch(BRAIN, /isSkippedForThisElevator.*boarded/, "skip filter never checks boarded");
 });
 
 // ---------------------------------------------------------------------------
-// 15. dispatchEngine passes elevatorId to brain
+// 15. onboardRequests prop passed from Dashboard
 // ---------------------------------------------------------------------------
-test("skip: dispatchEngine passes real elevator ID to brain", () => {
-  assert.match(DISPATCH_ENGINE, /elevatorId/, "elevatorId param in dispatchEngine");
-  assert.match(DISPATCH_ENGINE, /elevatorId \?\? "operator-current-elevator"/, "fallback to synthetic ID");
+test("skip: Dashboard passes onboardRequests to RecommendedNextStop", () => {
+  assert.match(DASHBOARD, /onboardRequests=\{enriched\.filter/, "onboardRequests prop passed");
+  assert.match(DASHBOARD, /r\.status === "boarded"/, "filtered by boarded status");
 });
 
 // ---------------------------------------------------------------------------
@@ -211,6 +222,6 @@ test("skip: skippedIds filters actionRequest (instant optimistic removal)", () =
 // 22. skippedIds state filters pickupCandidateAtDropFloor
 // ---------------------------------------------------------------------------
 test("skip: skippedIds filters pickupCandidateAtDropFloor", () => {
-  const candidateMatch = RECOMMENDED.match(/pickupCandidateAtDropFloor = showDropoff[\s\S]*?null;/)?.[0] ?? "";
+  const candidateMatch = RECOMMENDED.match(/pickupCandidateAtDropFloor[\s\S]*?null;/s)?.[0] ?? "";
   assert.match(candidateMatch, /skippedIds\.has/, "skippedIds filter in pickupCandidateAtDropFloor");
 });

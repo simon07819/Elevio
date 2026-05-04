@@ -821,6 +821,7 @@ export function OperatorDashboard({
         actionRequests={actionRequests}
         operatorElevatorId={elevator.id}
         projectId={projectId}
+        onboardRequests={enriched.filter((r) => r.status === "boarded")}
         onPickupSuccess={(req) => {
           const now = new Date().toISOString();
           logAction("pickupSuccess", { requestId: req.id, fromStatus: req.status, toStatus: "boarded" });

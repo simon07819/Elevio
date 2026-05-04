@@ -31,8 +31,8 @@ test("buttons state: showDropoff depends on dropoffIds and dropFloorId", () => {
 // ---------------------------------------------------------------------------
 // 2. Pickup hidden when dropoff is shown (priority)
 // ---------------------------------------------------------------------------
-test("buttons state: showPickup only when !showDropoff", () => {
-  assert.match(RECOMMENDED, /const showPickup = !showDropoff && actionRequest !== null/);
+test("buttons state: showPickup only when !effectiveShowDropoff", () => {
+  assert.match(RECOMMENDED, /const showPickup = !effectiveShowDropoff && actionRequest !== null/);
 });
 
 // ---------------------------------------------------------------------------

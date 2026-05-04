@@ -684,3 +684,35 @@ $$;
 
 grant execute on function public.passenger_has_open_request(uuid, uuid) to anon;
 grant execute on function public.passenger_has_open_request(uuid, uuid) to authenticated;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BILLING: Enterprise activation codes
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists enterprise_activation_codes (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique,
+  company_name text not null default '',
+  plan text not null default 'enterprise' check (plan in ('business', 'enterprise')),
+  max_projects integer,
+  max_operators integer,
+  expires_at timestamptz,
+  used_at timestamptz,
+  used_by_user_id uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_activation_codes_code on enterprise_activation_codes (code) where used_at is null;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BILLING: User entitlements (which plan each user is on)
+-- ═══════════════════════════════════════════════════════════════════════════
+create table if not exists user_entitlements (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null unique references auth.users(id) on delete cascade,
+  plan text not null default 'free' check (plan in ('free', 'starter', 'pro', 'business', 'enterprise')),
+  activated_via text not null default 'default' check (activated_via in ('default', 'iap', 'activation_code', 'admin')),
+  activation_code_id uuid references enterprise_activation_codes(id) on delete set null,
+  expires_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
