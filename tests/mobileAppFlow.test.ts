@@ -39,6 +39,27 @@ test("mobile: welcome has Apple sign-in button", () => {
   assert.match(WELCOME_SCREEN, /Apple/, "Apple icon");
 });
 
+test("mobile: welcome uses Capacitor Sign-In with Apple plugin", () => {
+  assert.match(WELCOME_SCREEN, /@capacitor-community\/apple-sign-in/, "imports Capacitor plugin");
+  assert.match(WELCOME_SCREEN, /SignInWithApple\.authorize/, "calls authorize()");
+  assert.match(WELCOME_SCREEN, /identityToken/, "extracts identityToken from response");
+});
+
+test("mobile: welcome detects Capacitor native vs web", () => {
+  assert.match(WELCOME_SCREEN, /isCapacitorNative/, "has native detection function");
+  assert.match(WELCOME_SCREEN, /Capacitor\.isNativePlatform/, "checks Capacitor.isNativePlatform()");
+});
+
+test("mobile: welcome sends identityToken to signInWithApple server action", () => {
+  assert.match(WELCOME_SCREEN, /signInWithApple\(identityToken/, "passes identityToken to server action");
+  assert.match(WELCOME_SCREEN, /givenName|familyName/, "passes name from Apple response");
+});
+
+test("mobile: welcome handles Apple cancellation gracefully", () => {
+  assert.match(WELCOME_SCREEN, /cancel|CANCELED/, "handles user cancellation");
+  assert.match(WELCOME_SCREEN, /1001/, "handles Apple error code 1001 (cancelled)");
+});
+
 test("mobile: welcome has email sign-in", () => {
   assert.match(WELCOME_SCREEN, /Se connecter/, "email sign-in button");
   assert.match(WELCOME_SCREEN, /signInMobile/, "calls signInMobile");
@@ -131,9 +152,21 @@ test("mobile: app-pricing has back link to /welcome", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // 4. Mobile auth abstraction
 // ═══════════════════════════════════════════════════════════════════════════
-test("mobile: signInWithApple exists (mock)", () => {
+test("mobile: signInWithApple uses Supabase signInWithIdToken", () => {
   assert.match(MOBILE_AUTH, /signInWithApple/, "signInWithApple function");
-  assert.match(MOBILE_AUTH, /bientôt disponible/, "Apple auth mock message");
+  assert.match(MOBILE_AUTH, /signInWithIdToken/, "uses Supabase signInWithIdToken");
+  assert.match(MOBILE_AUTH, /provider: "apple"/, "provider is apple");
+  assert.match(MOBILE_AUTH, /identityToken/, "accepts identityToken parameter");
+});
+
+test("mobile: signInWithApple updates profile with Apple name on first sign-in", () => {
+  assert.match(MOBILE_AUTH, /first_name.*fullName/, "updates first_name from Apple name");
+  assert.match(MOBILE_AUTH, /last_name.*fullName/, "updates last_name from Apple name");
+});
+
+test("mobile: signInWithApple routes new users to /onboarding", () => {
+  assert.match(MOBILE_AUTH, /isNewUser/, "checks if user is new");
+  assert.match(MOBILE_AUTH, /redirect\("\/onboarding"\)/, "redirects new users to onboarding");
 });
 
 test("mobile: signInMobile routes by role", () => {

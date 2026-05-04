@@ -1,15 +1,25 @@
 "use server";
 
 /**
- * Mobile auth abstraction.
+ * Mobile auth — real Apple Sign-In + email login.
  *
- * Provides:
- * - signInWithApple (mock until Capacitor plugin is wired)
- * - signInWithEmail (delegates to Supabase)
- * - signUpMobile (onboarding-aware signup)
+ * Apple Sign-In flow:
+ * 1. Client calls Capacitor @capacitor-community/apple-sign-in
+ *    → native Apple auth sheet on iOS, Apple JS SDK on web
+ * 2. Gets identityToken (JWT) + optional fullName
+ * 3. Posts to signInWithApple(identityToken, fullName) server action
+ * 4. Supabase verifies the id_token via signInWithIdToken({ provider: "apple" })
+ * 5. Profile ensured, user routed by role
  *
- * When the native Apple Sign-In plugin is ready, replace the mock
- * with the Capacitor call that returns an identityToken.
+ * Required Supabase config:
+ * - Auth → Providers → Apple → ENABLED
+ * - Service ID (client ID) for web (e.g. com.elevio.app.web)
+ * - Team ID, Key ID, private key for server-side verification
+ *
+ * Required Apple Developer config:
+ * - App ID with "Sign in with Apple" capability
+ * - Sign in with Apple capability in Xcode project
+ * - Service ID for web (if using Apple JS SDK fallback)
  */
 
 import { headers } from "next/headers";
@@ -23,29 +33,65 @@ async function appOrigin() {
 }
 
 /**
- * Sign in with Apple.
+ * Sign in with Apple using the identityToken from the native/JS SDK.
  *
- * Currently a MOCK — returns a placeholder result.
- * When Capacitor SignInWithApple plugin is wired:
- * 1. The native side gets the Apple identityToken
- * 2. It posts to this server action with { identityToken, fullName }
- * 3. This function verifies the token via Supabase auth
- *
- * For now, falls back to email+password flow.
+ * Called from the client after Capacitor's authorize() succeeds.
+ * The identityToken is a JWT that Supabase verifies server-side.
  */
-export async function signInWithApple(_identityToken?: string, _fullName?: { firstName?: string; lastName?: string }) {
-  // TODO: Wire native Apple Sign-In via Capacitor plugin
-  // const supabase = await createClient();
-  // const { data, error } = await supabase.auth.signInWithIdToken({
-  //   provider: "apple",
-  //   token: identityToken,
-  // });
-  // For now, return mock indicating Apple auth is not yet available
-  return {
-    ok: false,
-    message: "Connexion Apple bientôt disponible. Utilisez votre courriel pour l'instant.",
-    provider: "apple" as const,
-  };
+export async function signInWithApple(identityToken: string, fullName?: { firstName?: string | null; familyName?: string | null }) {
+  if (!identityToken) {
+    return { ok: false as const, message: "Jeton Apple manquant. Réessayez.", provider: "apple" as const };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { ok: false as const, message: "Service indisponible.", provider: "apple" as const };
+  }
+
+  // Supabase verifies the Apple id_token and creates/finds the user
+  const { data, error } = await supabase.auth.signInWithIdToken({
+    provider: "apple",
+    token: identityToken,
+  });
+
+  if (error) {
+    return { ok: false as const, message: `Erreur Apple : ${error.message}`, provider: "apple" as const };
+  }
+
+  if (data.user) {
+    await ensureProfileForUser(supabase, data.user);
+
+    // Apple only shares the user's name on first sign-in.
+    // If we have it from the native response, update the profile now.
+    if (fullName?.firstName || fullName?.familyName) {
+      const updates: Record<string, string> = {};
+      if (fullName.firstName) updates.first_name = fullName.firstName;
+      if (fullName.familyName) updates.last_name = fullName.familyName;
+      if (Object.keys(updates).length > 0) {
+        await supabase.from("profiles").update(updates).eq("id", data.user.id);
+      }
+    }
+  }
+
+  // Determine if user is new (no profile yet) or existing
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("account_role, first_name")
+    .eq("id", data.user?.id ?? "")
+    .maybeSingle();
+
+  const isNewUser = !profile?.first_name;
+
+  if (isNewUser) {
+    redirect("/onboarding");
+  }
+
+  // Route based on role
+  const role = profile?.account_role;
+  if (role === "operator") {
+    redirect("/operator");
+  }
+  redirect("/admin/projects");
 }
 
 /**
