@@ -20,10 +20,10 @@ const DASHBOARD = readFileSync(join(root, "components/operator/OperatorDashboard
 
 test("broadcast fix: RecommendedNextStop expose onPickupConfirmed appele seulement apres ok=true", () => {
   assert.match(RECOMMENDED, /onPickupConfirmed\?:\s*\(request: EnrichedRequest\) => void/);
-  // Appele dans .then quand result.ok est true, PAS avant.
+  // Appele dans .then quand result.ok est true, with analytics before it.
   assert.match(
     RECOMMENDED,
-    /if \(result\.ok\) \{\s*onPickupConfirmed\?\.\(targetRequest\)/,
+    /if \(result\.ok\) \{[\s\S]*?onPickupConfirmed\?\.\(targetRequest\)/,
   );
 });
 

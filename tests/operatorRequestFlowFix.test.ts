@@ -38,17 +38,17 @@ test("operator flow fix: RecommendedNextStop expose les props onPickupFailure et
 });
 
 test("operator flow fix: pickup() appelle onPickupFailure quand advanceRequestStatus retourne ok=false", () => {
-  // Branche `then` : si result.ok -> onPickupConfirmed, else -> setActionError + onPickupFailure.
+  // Branche `then` : si result.ok -> onPickupConfirmed + analytics, else -> setActionError + captureError + onPickupFailure.
   assert.match(
     RECOMMENDED,
-    /if \(result\.ok\) \{\s*onPickupConfirmed\?\.\(targetRequest\);\s*\} else \{\s*setActionError\(result\.message\);\s*onPickupFailure\?\.\(targetRequest\);/,
+    /if \(result\.ok\) \{[\s\S]*?onPickupConfirmed\?\.\(targetRequest\);[\s\S]*?\} else \{[\s\S]*?setActionError[\s\S]*?onPickupFailure\?\.\(targetRequest\);/,
   );
 });
 
 test("operator flow fix: pickup() appelle onPickupFailure aussi dans le catch (network throw)", () => {
   assert.match(
     RECOMMENDED,
-    /\.catch\(\(\) => \{\s*setActionError\("Action impossible[\s\S]*?"\);\s*onPickupFailure\?\.\(targetRequest\);/,
+    /\.catch\([\s\S]*?setActionError\("Action impossible[\s\S]*?"\);[\s\S]*?onPickupFailure\?\.\(targetRequest\);/,
   );
 });
 
@@ -56,12 +56,12 @@ test("operator flow fix: dropoff() appelle onDropoffFailure dans then et catch",
   // Then : if (failed) -> setActionError + setCompletedDropoffIds.delete + onDropoffFailure.
   assert.match(
     RECOMMENDED,
-    /if \(failed\) \{[\s\S]*?onDropoffFailure\?\.\(\{ requestIds: ids \}\);[\s\S]*?\}/,
+    /if \(failed\) \{[\s\S]*?onDropoffFailure\?\.\(\{ requestIds: ids \}\);/,
   );
   // Catch : setActionError + setCompletedDropoffIds.delete + onDropoffFailure.
   assert.match(
     RECOMMENDED,
-    /\.catch\(\(\) => \{[\s\S]*?onDropoffFailure\?\.\(\{ requestIds: ids \}\);[\s\S]*?\}\)/,
+    /\.catch\([\s\S]*?onDropoffFailure\?\.\(\{ requestIds: ids \}\);/,
   );
 });
 

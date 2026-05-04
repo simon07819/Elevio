@@ -1,0 +1,104 @@
+/**
+ * Sentry error tracking wrapper for Elevio.
+ *
+ * Captures client errors, server action errors, and Supabase errors
+ * with Elevio-specific metadata.
+ * Gracefully degrades if NEXT_PUBLIC_SENTRY_DSN is not set or Sentry not available.
+ */
+
+const SENTRY_DSN = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_SENTRY_DSN ?? "") : "";
+
+let initialized = false;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let SentryLib: any = null;
+
+async function loadSentry() {
+  if (SentryLib) return;
+  try {
+    SentryLib = await import("@sentry/nextjs");
+  } catch {
+    // Sentry not available (e.g. Node test runner) — non-critical
+  }
+}
+
+export function initSentry() {
+  if (initialized) return;
+  if (!SENTRY_DSN) return;
+  void loadSentry().then(() => {
+    if (!SentryLib || initialized) return;
+    try {
+      SentryLib.init({
+        dsn: SENTRY_DSN,
+        tracesSampleRate: 0.1,
+        replaysSessionSampleRate: 0,
+        replaysOnErrorSampleRate: 0.5,
+        environment: typeof process !== "undefined" ? (process.env.NODE_ENV ?? "production") : "production",
+        enabled: typeof process !== "undefined" ? process.env.NODE_ENV === "production" : true,
+      });
+      initialized = true;
+      structuredLog("Error", "Sentry initialized");
+    } catch {
+      // Sentry init failure is non-critical
+    }
+  });
+}
+
+type UserType = "operator" | "passenger" | "admin" | "unknown";
+
+interface ElevioErrorContext {
+  projectId?: string;
+  elevatorId?: string;
+  requestId?: string;
+  userType?: UserType;
+  action?: string;
+  [key: string]: unknown;
+}
+
+export function captureError(error: unknown, context: ElevioErrorContext = {}) {
+  initSentry();
+  structuredLog("Error", context.action ?? "unknown_error", {
+    message: error instanceof Error ? error.message : String(error),
+    ...context,
+  });
+  if (initialized && SentryLib) {
+    try {
+      SentryLib.withScope((scope: typeof SentryLib.Scope) => {
+        if (context.projectId) scope.setTag("projectId", context.projectId);
+        if (context.elevatorId) scope.setTag("elevatorId", context.elevatorId);
+        if (context.requestId) scope.setTag("requestId", context.requestId);
+        if (context.userType) scope.setTag("userType", context.userType);
+        if (context.action) scope.setTag("action", context.action);
+        for (const [key, value] of Object.entries(context)) {
+          if (!["projectId", "elevatorId", "requestId", "userType", "action"].includes(key)) {
+            scope.setExtra(key, value);
+          }
+        }
+        SentryLib.captureException(error);
+      });
+    } catch {
+      // Sentry capture failure is non-critical
+    }
+  }
+}
+
+/** Wrap a server action with error tracking. */
+export async function trackedAction<T>(
+  action: string,
+  fn: () => Promise<T>,
+  context: ElevioErrorContext = {},
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    captureError(error, { ...context, action });
+    throw error;
+  }
+}
+
+function structuredLog(tag: string, action: string, data?: Record<string, unknown>) {
+  if (typeof window === "undefined") return;
+  const debug = window.localStorage.getItem("elevio_debug_sync") === "true"
+    || process.env.NEXT_PUBLIC_DEBUG_SYNC === "true";
+  if (!debug) return;
+  console.log(`[Elevio ${tag}]`, action, data ?? "");
+}

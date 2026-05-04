@@ -10,6 +10,10 @@ import {
   heartbeatOperatorElevator,
   releaseOperatorElevator,
 } from "@/lib/actions";
+import { trackOperatorActivated, trackOperatorReleased } from "@/lib/analytics";
+import { captureError } from "@/lib/errorTracking";
+import { startReleaseToActivateTimer } from "@/lib/performanceMonitor";
+import { structuredLog } from "@/lib/structuredLogger";
 import { createClient } from "@/lib/supabase/client";
 import { bindRealtimeWithAuthSession, subscribeToTable, type ElevatorRealtimePayload } from "@/lib/realtime";
 import {
@@ -460,7 +464,16 @@ export function OperatorWorkspace({
         );
         setMessage(result.ok ? null : result.message);
 
-        if (!result.ok) {
+        if (result.ok) {
+          trackOperatorActivated(project.id, elevator.id);
+          structuredLog("Analytics", "operator_activated", { projectId: project.id, elevatorId: elevator.id });
+        } else {
+          captureError(new Error("activate_failed: " + result.message), {
+            projectId: project.id,
+            elevatorId: elevator.id,
+            userType: "operator",
+            action: "activate",
+          });
           const rollbackMs = Date.parse(new Date().toISOString());
           window.localStorage.removeItem(elevatorStorageKey(project.id));
           setSelectedElevatorId(null);
@@ -481,9 +494,10 @@ export function OperatorWorkspace({
             ),
           );
         }
-      } catch {
+      } catch (err) {
         const rollbackMs = Date.parse(new Date().toISOString());
         setMessage("Impossible d'activer cette tablette. Verifiez la connexion et reessayez.");
+        captureError(err, { projectId: project.id, elevatorId: elevator.id, userType: "operator", action: "activate" });
         window.localStorage.removeItem(elevatorStorageKey(project.id));
         setSelectedElevatorId(null);
         setLocalSessionClaim({ elevatorId: null, updatedAt: rollbackMs });
@@ -516,6 +530,7 @@ export function OperatorWorkspace({
     if (activatingElevatorId || releasingElevatorId) return;
 
     logAction("releaseStart", { elevatorId: selectedElevator.id, elevatorName: selectedElevator.name });
+    const stopReleaseTimer = startReleaseToActivateTimer({ projectId: project.id, elevatorId: selectedElevator.id });
 
     const releasingElevator = selectedElevator;
     const releaseMs = Date.parse(new Date().toISOString());
@@ -573,6 +588,9 @@ export function OperatorWorkspace({
             ),
           );
         } else {
+          const releaseDurationMs = stopReleaseTimer();
+          trackOperatorReleased(project.id, releasingElevator.id);
+          structuredLog("Analytics", "operator_released", { projectId: project.id, elevatorId: releasingElevator.id, releaseDurationMs: Math.round(releaseDurationMs) });
           logAction("releaseSuccess", { elevatorId: releasingElevator.id, hasOtherOperator: result.hasOtherOperator });
           // Broadcast release to other operators always.
           // Broadcast to passengers only if no other operator is available
@@ -590,9 +608,10 @@ export function OperatorWorkspace({
             }
           }
         }
-      } catch {
+      } catch (err) {
         const rollbackMs = Date.parse(new Date().toISOString());
         setMessage("Impossible de liberer cette tablette. Verifiez la connexion et reessayez.");
+        captureError(err, { projectId: project.id, elevatorId: releasingElevator.id, userType: "operator", action: "release" });
         window.localStorage.setItem(elevatorStorageKey(project.id), releasingElevator.id);
         setSelectedElevatorId(releasingElevator.id);
         setLocalSessionClaim({ elevatorId: releasingElevator.id, updatedAt: rollbackMs });

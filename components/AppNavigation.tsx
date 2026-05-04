@@ -8,6 +8,7 @@ const navItems = [
   { href: "/", label: "nav.home" },
   { href: "/operator", label: "nav.operator" },
   { href: "/admin", label: "nav.admin" },
+  { href: "/admin/metrics", label: "nav.metrics" },
   { href: "/admin/profile", label: "nav.profile" },
   { href: "/support", label: "nav.support" },
 ] satisfies Array<{ href: string; label: TranslationKey }>;

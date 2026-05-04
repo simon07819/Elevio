@@ -3,6 +3,10 @@
 import { useMemo, useState } from "react";
 import { Ban, DoorOpen, Loader2, Pause, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
+import { trackRequestPickedUp, trackRequestDroppedOff } from "@/lib/analytics";
+import { captureError } from "@/lib/errorTracking";
+import { startPickupToDbTimer } from "@/lib/performanceMonitor";
+import { structuredLog } from "@/lib/structuredLogger";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatDispatchRecommendationReason } from "@/lib/recommendationReason";
 import { resolveRequestState, logAction } from "@/lib/stateResolution";
@@ -24,6 +28,7 @@ export function RecommendedNextStop({
   recommendation,
   actionRequests,
   operatorElevatorId,
+  projectId,
   onPickupSuccess,
   onPickupFailure,
   onPickupConfirmed,
@@ -33,6 +38,7 @@ export function RecommendedNextStop({
   recommendation: DispatchRecommendation;
   actionRequests: EnrichedRequest[];
   operatorElevatorId: string;
+  projectId?: string;
   onPickupSuccess?: (request: EnrichedRequest) => void;
   /** Rollback du pickup : appele quand advanceRequestStatus retourne ok=false ou throw. */
   onPickupFailure?: (request: EnrichedRequest) => void;
@@ -260,6 +266,7 @@ export function RecommendedNextStop({
     });
     setPendingPickupIds((current) => new Set(current).add(requestId));
     onPickupSuccess?.(targetRequest);
+    const stopPickupDbTimer = startPickupToDbTimer({ projectId: projectId ?? "", elevatorId: operatorElevatorId, requestId });
 
     void advanceRequestStatus(requestId, "boarded", {
       assignElevatorId: operatorElevatorId,
@@ -273,14 +280,21 @@ export function RecommendedNextStop({
           timestamp: new Date().toISOString(),
         });
         if (result.ok) {
+          const pickupDbMs = stopPickupDbTimer();
+          trackRequestPickedUp(requestId, projectId ?? "", operatorElevatorId);
+          structuredLog("Performance", "pickup_to_db", { requestId, durationMs: Math.round(pickupDbMs) });
           onPickupConfirmed?.(targetRequest);
         } else {
+          stopPickupDbTimer();
           setActionError(result.message);
+          captureError(new Error("pickup_failed: " + result.message), { projectId, elevatorId: operatorElevatorId, requestId, userType: "operator", action: "pickup" });
           onPickupFailure?.(targetRequest);
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        stopPickupDbTimer();
         setActionError("Action impossible. Verifiez la connexion et reessayez.");
+        captureError(err, { projectId, elevatorId: operatorElevatorId, requestId, userType: "operator", action: "pickup" });
         onPickupFailure?.(targetRequest);
       })
       .finally(() => {
@@ -319,16 +333,23 @@ export function RecommendedNextStop({
         const failed = results.find((result) => !result.ok);
         if (failed) {
           setActionError(failed.message);
+          captureError(new Error("dropoff_failed: " + failed.message), { projectId, elevatorId: operatorElevatorId, requestIds: ids, userType: "operator", action: "dropoff" });
           setCompletedDropoffIds((current) => {
             const next = new Set(current);
             for (const id of ids) next.delete(id);
             return next;
           });
           onDropoffFailure?.({ requestIds: ids });
+        } else {
+          for (const requestId of ids) {
+            trackRequestDroppedOff(requestId, projectId ?? "", operatorElevatorId);
+          }
+          structuredLog("Analytics", "request_dropped_off", { projectId, elevatorId: operatorElevatorId, requestIds: ids });
         }
       })
-      .catch(() => {
+      .catch((err) => {
         setActionError("Action impossible. Verifiez la connexion et reessayez.");
+        captureError(err, { projectId, elevatorId: operatorElevatorId, requestIds: ids, userType: "operator", action: "dropoff" });
         setCompletedDropoffIds((current) => {
           const next = new Set(current);
           for (const id of ids) next.delete(id);
@@ -392,14 +413,19 @@ export function RecommendedNextStop({
             timestamp: new Date().toISOString(),
           });
           if (pickupResult.ok) {
+            trackRequestPickedUp(targetRequest.id, projectId ?? "", operatorElevatorId);
             onPickupConfirmed?.(targetRequest);
           } else {
             setActionError(pickupResult.message);
+            captureError(new Error("combined_pickup_failed: " + pickupResult.message), { projectId, elevatorId: operatorElevatorId, requestId: targetRequest.id, userType: "operator", action: "combined_pickup" });
             onPickupFailure?.(targetRequest);
           }
         })
-        .catch(() => {
-          if (targetRequest) onPickupFailure?.(targetRequest);
+        .catch((err) => {
+          if (targetRequest) {
+            captureError(err, { projectId, elevatorId: operatorElevatorId, requestId: targetRequest.id, userType: "operator", action: "combined_pickup" });
+            onPickupFailure?.(targetRequest);
+          }
         });
     }
     // Fire dropoff separately (don't block pickup confirmation)
@@ -408,15 +434,21 @@ export function RecommendedNextStop({
         const dropoffFailed = results.find((result) => !result.ok);
         if (dropoffFailed) {
           setActionError(dropoffFailed.message);
+          captureError(new Error("combined_dropoff_failed: " + dropoffFailed.message), { projectId, elevatorId: operatorElevatorId, requestIds: ids, userType: "operator", action: "combined_dropoff" });
           setCompletedDropoffIds((current) => {
             const next = new Set(current);
             for (const id of ids) next.delete(id);
             return next;
           });
           onDropoffFailure?.({ requestIds: ids });
+        } else {
+          for (const requestId of ids) {
+            trackRequestDroppedOff(requestId, projectId ?? "", operatorElevatorId);
+          }
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        captureError(err, { projectId, elevatorId: operatorElevatorId, requestIds: ids, userType: "operator", action: "combined_dropoff" });
         setActionError("Action impossible. Verifiez la connexion et reessayez.");
         setCompletedDropoffIds((current) => {
           const next = new Set(current);

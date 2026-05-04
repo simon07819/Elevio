@@ -4,6 +4,17 @@ import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import type { Elevator, HoistRequest, RequestStatus } from "@/types/hoist";
 import { statusPriority, isTerminalStatus, resolveMerge, logSync, logMerge } from "./stateResolution";
 
+/** Log realtime errors via logSync + structured [Elevio Error] tag. */
+function captureRealtimeError(message: string, details: Record<string, unknown>) {
+  logSync("realtimeError", { message, ...details });
+  // Structured log for admin metrics page
+  if (typeof window !== "undefined") {
+    const debug = window.localStorage.getItem("elevio_debug_sync") === "true"
+      || process.env.NEXT_PUBLIC_DEBUG_SYNC === "true";
+    if (debug) console.log(`[Elevio Error]`, message, details);
+  }
+}
+
 const TERMINAL_REQUEST_STATUSES: RequestStatus[] = ["completed", "cancelled"];
 
 /** Re-export statusPriority for backward compatibility. */
@@ -144,7 +155,11 @@ export function subscribeToTable<T>({
       },
       (payload) => onChange(payload as T),
     )
-    .subscribe();
+    .subscribe((status: string) => {
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        captureRealtimeError(`realtime_subscribe_failed: ${status}`, { table, filter, status });
+      }
+    });
 
   return channel;
 }

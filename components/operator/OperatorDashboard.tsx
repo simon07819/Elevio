@@ -817,6 +817,7 @@ export function OperatorDashboard({
         recommendation={visibleRecommendation}
         actionRequests={actionRequests}
         operatorElevatorId={elevator.id}
+        projectId={projectId}
         onPickupSuccess={(req) => {
           const now = new Date().toISOString();
           logAction("pickupSuccess", { requestId: req.id, fromStatus: req.status, toStatus: "boarded" });

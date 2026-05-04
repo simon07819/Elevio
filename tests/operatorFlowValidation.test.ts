@@ -139,7 +139,7 @@ test("validation 7: broadcast envoye IMMEDIATEMENT dans onPickupSuccess pour ret
   // BUG 3 FIX: broadcast is sent immediately in onPickupSuccess (optimistic)
   // so the passenger gets instant feedback. If server action fails, onPickupFailure rolls back.
   // onPickupConfirmed also broadcasts (belt-and-suspenders).
-  assert.match(RECOMMENDED, /if \(result\.ok\) \{\s*onPickupConfirmed\?\.\(targetRequest\)/);
+  assert.match(RECOMMENDED, /if \(result\.ok\) \{[\s\S]*?onPickupConfirmed\?\.\(targetRequest\)/);
   const successBlock = DASHBOARD.match(/onPickupSuccess=\{[\s\S]*?\}\}/)?.[0] ?? "";
   assert.match(successBlock, /broadcastPassengerRequestBoarded/);
 });

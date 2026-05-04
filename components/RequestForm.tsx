@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Clock, Loader2, Navigation, Send, ShieldAlert, UserCheck, Users, XCircle } from "lucide-react";
 import { createPassengerRequest, resumePassengerRequest, updateRequestStatus } from "@/lib/actions";
+import { trackRequestCreated, trackRequestCancelled, trackPassengerQRScanned } from "@/lib/analytics";
+import { captureError } from "@/lib/errorTracking";
 import { createClient } from "@/lib/supabase/client";
 import { cancelPassengerRequestClient } from "@/lib/passengerCancelClient";
 import { resumePassengerRequestClient } from "@/lib/passengerResumeClient";
@@ -198,6 +200,13 @@ export function RequestForm({
       passengerBroadcastRef.current = null;
     };
   }, [project.id]);
+
+  // Track QR scan event (passenger landed on request page)
+  useEffect(() => {
+    trackPassengerQRScanned(project.id, currentFloor.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Keep requestIdRef in sync with submittedRequest so that the .on() handlers
   // registered on the pre-subscribed channel (at mount time) always check the
   // correct request ID — no race condition.
@@ -553,6 +562,7 @@ export function RequestForm({
             note,
           );
           if (rpcResult.ok) {
+            trackRequestCancelled(submittedRequestId, project.id, "passenger_cancel_rpc");
             clearPassengerPendingRequest(project.id, submittedRequestId);
             setSubmittedRequest(null);
             setMessage(t("request.cancelled"));
@@ -574,6 +584,7 @@ export function RequestForm({
           },
         });
         if (result.ok) {
+          trackRequestCancelled(submittedRequestId, project.id, "passenger_cancel");
           clearPassengerPendingRequest(project.id, submittedRequestId);
           setSubmittedRequest(null);
           setMessage(t("request.cancelled"));
@@ -779,6 +790,7 @@ export function RequestForm({
               console.log("[PASSENGER-REQUEST-RESULT]", { ok: result.ok, requestId: result.requestId?.slice(0, 8), message: result.message?.slice(0, 80) });
               setMessage(result.message);
               if (result.ok && result.requestId) {
+                trackRequestCreated(result.requestId, project.id, undefined);
                 savePassengerPendingRequest(project.id, {
                   requestId: result.requestId,
                   waitStartedAt: result.waitStartedAt ?? new Date().toISOString(),
