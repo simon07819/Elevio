@@ -334,7 +334,10 @@ export function OperatorWorkspace({
 
     const onPageShow = (event: PageTransitionEvent) => {
       if (event.persisted) {
+        // bfcache restore: force full re-sync from DB
         bump();
+        // Also re-merge SSR props to clear stale bfcache state
+        setLocalElevators((current) => mergeWithLocalClaim(current, elevators));
       }
     };
 
@@ -349,7 +352,7 @@ export function OperatorWorkspace({
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("online", onOnline);
     };
-  }, [router]);
+  }, [elevators, mergeWithLocalClaim, router]);
 
   const selectedElevator = useMemo(() => {
     const elevator = localElevators.find((item) => item.id === selectedElevatorId) ?? null;

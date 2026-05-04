@@ -5,7 +5,17 @@ import type { Elevator, HoistRequest, RequestStatus } from "@/types/hoist";
 
 const TERMINAL_REQUEST_STATUSES: RequestStatus[] = ["completed", "cancelled"];
 
-/** Fusionne une ligne du poll operateur avec l’état local : évite de réinjecter une ligne encore « ouverte » après annulation / fin côté realtime. */
+/** Status priority: terminal > boarded > arriving > assigned > pending. Higher-priority status always wins over lower. */
+const STATUS_PRIORITY: Record<RequestStatus, number> = {
+  pending: 0,
+  assigned: 1,
+  arriving: 2,
+  boarded: 3,
+  completed: 4,
+  cancelled: 4,
+};
+
+/** Fusionne une ligne du poll operateur avec l\u2019\u00e9tat local : \u00e9vite de r\u00e9injecter une ligne encore \u00ab ouverte \u00bb apr\u00e8s annulation / fin c\u00f4t\u00e9 realtime. Boarded beats pending/assigned. */
 export function mergeOperatorPollRequest(existing: HoistRequest | undefined, incoming: HoistRequest): HoistRequest {
   if (!existing) {
     return incoming;
@@ -18,6 +28,16 @@ export function mergeOperatorPollRequest(existing: HoistRequest | undefined, inc
   if (!existingTerminal && incomingTerminal) {
     return incoming;
   }
+  // Higher status priority always wins (boarded > assigned > pending)
+  const existingPriority = STATUS_PRIORITY[existing.status] ?? 0;
+  const incomingPriority = STATUS_PRIORITY[incoming.status] ?? 0;
+  if (existingPriority > incomingPriority) {
+    return existing;
+  }
+  if (incomingPriority > existingPriority) {
+    return incoming;
+  }
+  // Same priority: newer updated_at wins
   return new Date(incoming.updated_at) >= new Date(existing.updated_at) ? incoming : existing;
 }
 

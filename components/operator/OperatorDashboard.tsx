@@ -113,6 +113,17 @@ export function OperatorDashboard({
     return () => window.clearTimeout(id);
   }, [requests]);
 
+  // Re-sync requests from SSR props on bfcache restore (browser back/forward)
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        setLiveRequests((current) => mergeRequestsPropIntoLive(current, requests));
+      }
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, [requests]);
+
   useEffect(() => {
     const client = createClient();
     return bindRealtimeWithAuthSession(client, () =>
@@ -484,8 +495,7 @@ export function OperatorDashboard({
           request.elevator_id === elevator.id &&
           (request.status === "pending" ||
             request.status === "assigned" ||
-            request.status === "arriving" ||
-            request.status === "boarded"),
+            request.status === "arriving"),
       )
       .map((request) => request.id);
     const previousRequests = liveRequests;
@@ -500,8 +510,7 @@ export function OperatorDashboard({
           request.elevator_id === elevator.id &&
           (request.status === "pending" ||
             request.status === "assigned" ||
-            request.status === "arriving" ||
-            request.status === "boarded")
+            request.status === "arriving")
             ? { ...request, status: "cancelled" as const, completed_at: now, updated_at: now }
             : request,
         ),
@@ -529,7 +538,7 @@ export function OperatorDashboard({
             .update(payload)
             .eq("project_id", projectId)
             .eq("elevator_id", elevator.id)
-            .in("status", [...OPERATOR_VISIBLE_REQUEST_STATUSES]),
+            .in("status", ["pending", "assigned", "arriving"]),
           client
             .from("elevators")
             .update({ current_load: 0, direction: "idle" })

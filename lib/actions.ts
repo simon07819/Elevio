@@ -383,7 +383,21 @@ async function cancelActiveProjectRequestsIfNoLiveOperators(
   );
 
   if (!hasLiveOperator) {
-    await cancelActiveProjectRequests(supabase, projectId, "Annule automatiquement: aucun operateur actif.");
+    // Boarded passengers are IN the elevator — NEVER cancel them.
+    // Only cancel pending/assigned/arriving requests.
+    const cancellableStatuses: RequestStatus[] = ["pending", "assigned", "arriving"];
+    const now = new Date().toISOString();
+    await supabase
+      .from("requests")
+      .update({
+        status: "cancelled",
+        completed_at: now,
+        updated_at: now,
+        note: "Annule automatiquement: aucun operateur actif.",
+      })
+      .eq("project_id", projectId)
+      .in("status", cancellableStatuses);
+    // Do NOT reset elevator load/direction — boarded passengers still need dropoff
   }
 }
 

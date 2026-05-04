@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Elevator, Floor, Project } from "@/types/hoist";
 
 const PASSENGER_ELEVATORS_SELECT =
-  "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_display_name,operator_session_heartbeat_at,service_start_time,service_end_time,manual_full";
+  "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_display_name,operator_session_heartbeat_at,service_start_time,service_end_time,manual_full";
 const PUBLIC_PROJECT_SELECT_WITH_CAPACITY =
   "id,owner_id,name,address,active,created_at,updated_at,archived_at,service_timezone,priorities_enabled,capacity_enabled";
 const PUBLIC_PROJECT_SELECT_LEGACY =

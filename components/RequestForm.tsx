@@ -56,7 +56,7 @@ type SubmittedRequest = {
 };
 
 const PASSENGER_ELEVATORS_SELECT =
-  "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_display_name,operator_session_heartbeat_at,service_start_time,service_end_time,manual_full";
+  "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_display_name,operator_session_heartbeat_at,service_start_time,service_end_time,manual_full";
 const PASSENGER_ACTIVE_REQUEST_POLL_MS = 250;
 
 function isTerminalPassengerRequestStatus(status: RequestStatus): boolean {
