@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Ban, DoorOpen, Loader2, Pause, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus, skipRequestForCurrentPassage } from "@/lib/actions";
 import { trackRequestPickedUp, trackRequestDroppedOff } from "@/lib/analytics";
@@ -196,9 +196,43 @@ export function RecommendedNextStop({
   const showCombined = effectiveShowDropoff && pickupAtDropFloor;
   const showPrimaryAction = effectiveShowDropoff || showPickup;
 
+  // ── Debug: log when recommendation recalculates after key actions ──
+  const prevActionTypeRef = useRef<string>("");
+  useEffect(() => {
+    const actionType = showCombined ? "combined"
+      : effectiveShowDropoff ? "dropoff"
+      : showPickup ? "pickup"
+      : "pause";
+    if (prevActionTypeRef.current && prevActionTypeRef.current !== actionType) {
+      structuredLog("Performance", "recalculated_after_action", {
+        from: prevActionTypeRef.current,
+        to: actionType,
+        onboardCount: onboardRequests.length,
+        skippedIdsSize: skippedIds.size,
+        primaryPickupId: recommendation.primaryPickupRequestId?.slice(0, 8),
+      });
+    }
+    prevActionTypeRef.current = actionType;
+  }, [showCombined, effectiveShowDropoff, showPickup, onboardRequests.length, skippedIds.size, recommendation.primaryPickupRequestId]);
+
   // Skip button only for opportunistic pickup (operator already has onboard passengers)
   const isOpportunistic = isOpportunisticPickup(actionRequest, onboardRequests);
   const isActionPending = pendingDropoffIds.size > 0;
+
+  // ── SAFETY: Clear stuck "En cours" after 10 seconds ──
+  // If pendingDropoffIds stays non-empty for >10s (server timeout, network error
+  // that doesn't reach .catch/.finally), force-clear to unstick the button.
+  const pendingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  if (isActionPending && !pendingTimeoutRef.current) {
+    pendingTimeoutRef.current = setTimeout(() => {
+      setPendingDropoffIds(new Set());
+      pendingTimeoutRef.current = null;
+    }, 10_000);
+  }
+  if (!isActionPending && pendingTimeoutRef.current) {
+    clearTimeout(pendingTimeoutRef.current);
+    pendingTimeoutRef.current = null;
+  }
 
   const actionButton = showCombined ? (
     <button
@@ -305,6 +339,19 @@ export function RecommendedNextStop({
         status: actionRequest.status,
         resolvedAction: resolved.action,
       });
+      // Clear any stuck loading state — this is a guard, not a user error
+      setActionError(null);
+      return;
+    }
+
+    // ── GUARD: Don't fire pickup if request is already boarded ──
+    // This can happen if the user double-clicks or if optimistic state
+    // hasn't updated yet. Fire-and-forget might still be in-flight.
+    if (actionRequest.status === "boarded") {
+      console.warn("[Elevio Guard] duplicate pickup ignored", {
+        requestId: actionRequest.id,
+        status: actionRequest.status,
+      });
       return;
     }
 
@@ -377,6 +424,7 @@ export function RecommendedNextStop({
     setSkippedIds((current) => new Set(current).add(requestId));
     onSkipSuccess?.(targetRequest);
     setSkipConfirmation(t("operator.skipConfirmation"));
+    structuredLog("Performance", "skip_optimistic_success", { requestId, elevatorId: operatorElevatorId });
     // Clear confirmation after 3 seconds
     setTimeout(() => setSkipConfirmation(null), 3000);
 

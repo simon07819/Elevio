@@ -538,6 +538,51 @@ export function computeNextOperatorAction({
   const serviceDirection = effectiveServiceDirection(currentSort, elevator.direction, onboardPassengers);
   const nextDropSort = nextBoardedDropoffSortOrder(currentSort, serviceDirection, onboardPassengers);
 
+  // ── RULE 1: Onboard passengers exist → NEVER return wait/pause ──────
+  // If we have boarded passengers, we MUST show either pickup (opportunistic,
+  // same direction, not yet passed) or dropoff. Never pause.
+  const hasOnboard = onboardPassengers.length > 0;
+
+  // ── RULE 2: Compute pickup candidates in same direction (opportunistic) ──
+  // If we have onboard passengers going in a direction, check for pending
+  // requests whose pickup floor is on the way to the next dropoff.
+  // These take priority over the dropoff itself (we pick them up en route).
+  const opportunisticPickups = hasOnboard && nextDropSort !== null
+    ? (() => {
+        const travelDirection = directionToward(currentSort, nextDropSort);
+        const geographic = openPickupsTowardNextDropoff(openRequests, currentSort, nextDropSort);
+        const capacityOk = manualFull
+          ? []
+          : capacityEnabled
+            ? geographic.filter((request) => request.passenger_count <= remainingCapacity && request.passenger_count <= elevator.capacity)
+            : geographic;
+        const priorityPool = filterPriorityPickupPool(capacityOk, prioritiesEnabled);
+        // ── RULE 3: Don't propose pickups at floors already passed ──
+        // If the elevator has already passed the pickup floor in the current
+        // direction, that pickup is NOT opportunistic for this cycle.
+        const directionPool = travelDirection === "idle"
+          ? priorityPool
+          : priorityPool.filter((request) => request.direction === travelDirection);
+        return { directionPool, travelDirection };
+      })()
+    : null;
+
+  // ── Debug logging ──
+  console.log("[Elevio Brain]", {
+    onboardRequests: onboardPassengers.map(p => ({ id: p.requestId.slice(0,8), to: p.to_sort_order })),
+    pickupCandidates: openRequests.map(r => ({ id: r.id.slice(0,8), from: r.from_sort_order, to: r.to_sort_order, dir: r.direction, skipped: isSkippedForThisElevator(r) })),
+    skippedCandidates: assignedRequests.filter(r => isSkippedForThisElevator(r)).map(r => r.id.slice(0,8)),
+    serviceDirection,
+    nextDropSort,
+    currentSort,
+    hasOnboard,
+    selectedNextAction: hasOnboard && opportunisticPickups && opportunisticPickups.directionPool.length > 0
+      ? "pickup (opportunistic)"
+      : hasOnboard
+        ? "dropoff"
+        : "calculating...",
+  });
+
   // Dépose au palier courant : si un passager à bord a sa destination = palier courant, on
   // déclenche le dropoff immédiatement, sinon le brain part en idle/wait et l'UI ne propose
   // pas le bouton « déposer » alors que l'opérateur est arrivé.
@@ -678,6 +723,28 @@ export function computeNextOperatorAction({
   );
 
   if (idleTargetFloor === null) {
+    // ── RULE 5: Never PAUSE when onboard passengers exist ──
+    // If we have boarded passengers, always show dropoff, never wait/pause.
+    if (hasOnboard && onboardPassengers.length > 0) {
+      const dropSort = nextBoardedDropoffSortOrder(currentSort, serviceDirection, onboardPassengers);
+      if (dropSort !== null) {
+        const dropoffs = onboardPassengers.filter((p) => Number(p.to_sort_order) === Number(dropSort));
+        const passengers = dropoffs.reduce((sum, p) => sum + p.passenger_count, 0);
+        const dropDetail: DispatchRecommendationReason = { kind: "dropoff_before_pickups", passengers };
+        return {
+          action: "dropoff",
+          nextFloor: resolveFloorEntity(projectFloors, dropSort),
+          nextFloorSortOrder: dropSort,
+          primaryPickupRequestId: null,
+          reasonDetail: dropDetail,
+          reason: formatDispatchRecommendationReason(dropDetail, "fr", ""),
+          requestsToPickup: [],
+          requestsToDropoff: dropoffs,
+          suggestedDirection: directionToward(currentSort, dropSort),
+          capacityWarnings: [],
+        };
+      }
+    }
     let waitDetail: DispatchRecommendationReason;
     if (openRequests.length === 0) {
       waitDetail = { kind: "idle_empty" };
@@ -705,6 +772,27 @@ export function computeNextOperatorAction({
   );
   const idlePrimary = idleAtFloor[0];
   if (!idlePrimary) {
+    // ── RULE 5: Never PAUSE when onboard passengers exist ──
+    if (hasOnboard && onboardPassengers.length > 0) {
+      const dropSort = nextBoardedDropoffSortOrder(currentSort, serviceDirection, onboardPassengers);
+      if (dropSort !== null) {
+        const dropoffs = onboardPassengers.filter((p) => Number(p.to_sort_order) === Number(dropSort));
+        const passengers = dropoffs.reduce((sum, p) => sum + p.passenger_count, 0);
+        const dropDetail: DispatchRecommendationReason = { kind: "dropoff_before_pickups", passengers };
+        return {
+          action: "dropoff",
+          nextFloor: resolveFloorEntity(projectFloors, dropSort),
+          nextFloorSortOrder: dropSort,
+          primaryPickupRequestId: null,
+          reasonDetail: dropDetail,
+          reason: formatDispatchRecommendationReason(dropDetail, "fr", ""),
+          requestsToPickup: [],
+          requestsToDropoff: dropoffs,
+          suggestedDirection: directionToward(currentSort, dropSort),
+          capacityWarnings: [],
+        };
+      }
+    }
     let waitDetail: DispatchRecommendationReason;
     if (openRequests.length === 0) {
       waitDetail = { kind: "idle_empty" };

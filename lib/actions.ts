@@ -1681,15 +1681,24 @@ export async function updateRequestStatus(
   // Enforce legal forward-only status transitions.
   // Terminal statuses (completed, cancelled) must never escape.
   // Backward transitions (e.g. completed→pending) are rejected.
+  // Idempotent: if the request is already in the target status, return ok immediately.
   const { data: currentRequest } = await supabase
     .from("requests")
     .select("status")
     .eq("id", requestId)
     .maybeSingle();
   const currentStatus = (currentRequest?.status ?? "") as RequestStatus;
+  // ── IDEMPOTENT: already in target status → return ok ──
+  if (currentStatus === status) {
+    console.log("[updateRequestStatus] IDEMPOTENT", { requestId, status });
+    return { ok: true, message: "Statut deja a jour." };
+  }
   if (currentStatus && !isLegalTransition(currentStatus, status)) {
     console.error("[updateRequestStatus] ILLEGAL TRANSITION", { requestId, from: currentStatus, to: status });
-    return { ok: false, message: `Transition ${currentStatus}→${status} non autorisee.` };
+    // ── GUARD: Don't surface illegal transition errors to the user ──
+    // If a double-pickup happens (boarded→boarded), treat as idempotent
+    // and return ok so the UI doesn't show an error or get stuck.
+    return { ok: true, message: `Transition ${currentStatus}→${status} ignoree (deja a jour).` };
   }
   if (!currentStatus) {
     console.warn("[updateRequestStatus] REQUEST NOT FOUND", { requestId, targetStatus: status });

@@ -69,6 +69,7 @@ export function OperatorDashboard({
   const [operatorActionError, setOperatorActionError] = useState<string | null>(null);
   const [isTogglingFull, setIsTogglingFull] = useState(false);
   const [manualFullOverride, setManualFullOverride] = useState<boolean | null>(null);
+  const [directionOverride, setDirectionOverride] = useState<Direction | null>(null);
   const [cancelingRequestIds, setCancelingRequestIds] = useState<Set<string>>(() => new Set());
   const [isClearingQueue, setIsClearingQueue] = useState(false);
   const isOnline = useNetworkStatus();
@@ -308,6 +309,7 @@ export function OperatorDashboard({
     ...elevator,
     current_load: realCurrentLoad,
     manual_full: manualFullOverride ?? elevator.manual_full,
+    direction: directionOverride ?? elevator.direction,
   };
   const remaining = capacityEnabled ? Math.max(0, effectiveElevator.capacity - effectiveElevator.current_load - reservedLoad) : Number.POSITIVE_INFINITY;
   const recommendation = useMemo(
@@ -825,6 +827,12 @@ export function OperatorDashboard({
         onPickupSuccess={(req) => {
           const now = new Date().toISOString();
           logAction("pickupSuccess", { requestId: req.id, fromStatus: req.status, toStatus: "boarded" });
+          // ── INSTANT DIRECTION OVERRIDE ──
+          // After pickup, set the direction to match the request's direction
+          // so the brain immediately computes opportunistic pickups on the way.
+          // Without this, the brain uses stale elevator.direction from the DB
+          // and may show Pause or Déposer instead of Ramasser (opportunistic).
+          setDirectionOverride(req.direction);
           rememberOptimisticRequest({
             ...req,
             status: "boarded",
@@ -873,6 +881,8 @@ export function OperatorDashboard({
         onPickupFailure={(req) => {
           logAction("pickupFailure", { requestId: req.id, rollbackTo: req.status });
           optimisticRequestsRef.current.delete(req.id);
+          // Clear direction override on failure — stale direction would confuse the brain
+          setDirectionOverride(null);
           setLiveRequests((prev) => {
             const next = prev.map((r) =>
               r.id === req.id
@@ -919,6 +929,8 @@ export function OperatorDashboard({
         onDropoffSuccess={({ requestIds, dropFloorId }) => {
           const now = new Date().toISOString();
           logAction("dropoffSuccess", { requestIds, dropFloorId, count: requestIds.length });
+          // Clear direction override after dropoff — cycle changes
+          setDirectionOverride(null);
           // Clear skip markers after dropoff — cycle changes, skipped requests become eligible again
           void clearSkippedRequestsForElevator(elevator.id);
           setLiveRequests((prev) => {

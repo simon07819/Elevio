@@ -142,7 +142,7 @@ test("BUG3: updateRequestStatus revalidates /request path (no stale cache)", () 
   // Find the updateRequestStatus function's revalidatePath calls
   const fnStart = src.indexOf("export async function updateRequestStatus(");
   assert.ok(fnStart > 0, "updateRequestStatus found");
-  const fnBody = src.slice(fnStart, fnStart + 5000);
+  const fnBody = src.slice(fnStart, fnStart + 8000);
   // Must revalidate /request so passenger pages aren't stale
   assert.ok(fnBody.includes('revalidatePath("/request")'), "/request revalidated after status update");
   // Must revalidate /operator and /admin too

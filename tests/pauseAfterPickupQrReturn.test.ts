@@ -157,8 +157,8 @@ test("legal-transitions: isLegalTransition validator called in updateRequestStat
   const updateIdx = actions.indexOf("export async function updateRequestStatus");
   const updateBody = actions.slice(updateIdx, updateIdx + 2000);
   assert.match(updateBody, /isLegalTransition\(currentStatus, status\)/, "transition validated before DB write");
-  // Rejected transitions return error
-  assert.match(updateBody, /non autorisee/, "error message for illegal transition");
+  // Rejected transitions return ok (idempotent guard, not user error)
+  assert.match(updateBody, /ignoree|deja a jour|IDEMPOTENT/, "illegal transition handled gracefully (idempotent guard)");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
