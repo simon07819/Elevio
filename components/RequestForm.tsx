@@ -764,6 +764,7 @@ export function RequestForm({
               }
 
               const result = await createPassengerRequest(formData);
+              console.log("[PASSENGER-REQUEST-RESULT]", { ok: result.ok, requestId: result.requestId?.slice(0, 8), message: result.message?.slice(0, 80) });
               setMessage(result.message);
               if (result.ok && result.requestId) {
                 savePassengerPendingRequest(project.id, {

@@ -1194,10 +1194,11 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
 }
 
 export async function createPassengerRequest(formData: FormData) {
-  const supabase = await createClient();
   const projectId = String(formData.get("projectId") ?? "");
   const fromFloorId = String(formData.get("fromFloorId") ?? "");
   const toFloorId = String(formData.get("toFloorId") ?? "");
+  console.error("[createPassengerRequest]", { projectId: projectId.slice(0, 8), fromFloorId: fromFloorId.slice(0, 8), toFloorId: toFloorId.slice(0, 8) });
+  const supabase = await createClient();
   const passengerCountRaw = Number(formData.get("passengerCount") ?? 1);
   const priorityRequested = formData.get("priority") === "on";
   const priorityReasonRaw = normalizeText(formData.get("priorityReason"));
@@ -1380,13 +1381,13 @@ export async function createPassengerRequest(formData: FormData) {
         syntheticReservations = [];
         continue;
       }
+      console.error("[createPassengerRequest] NO ELEVATOR ASSIGNED", { reason: assignment.reason, score: assignment.score, onlineCount: elevators.filter(e => e.operator_session_id).length });
       return {
         ok: false,
         message:
           "Aucun ascenseur en ligne n’a assez de places libres pour votre groupe pour le moment. Réessayez dans quelques minutes.",
       };
     }
-
     const chunkSize =
       !capacityEnabled
         ? remainingPassengers
@@ -1452,6 +1453,7 @@ export async function createPassengerRequest(formData: FormData) {
   }
 
   revalidatePath("/operator");
+  console.error("[createPassengerRequest] SUCCESS", { requestId: firstRow.id, status: firstRow.status, elevatorId: firstRow.elevator_id?.slice(0, 8) });
   return {
     ok: true,
     message: "Demande envoyee.",
