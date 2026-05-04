@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "tsc -p tsconfig.test.json && node --test .test-build/tests/*.test.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "cleanup:requests": "curl -s -X POST \"$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/cleanup_terminal_requests\" -H \"apikey: $SUPABASE_SERVICE_ROLE_KEY\" -H \"Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY\" -H \"Content-Type: application/json\" -d '{}' | jq ."
   },
   "dependencies": {
     "@capacitor/cli": "^8.3.1",

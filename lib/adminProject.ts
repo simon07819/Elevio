@@ -31,6 +31,9 @@ export type AdminProjectData = {
   branding: AdminProjectBranding;
 };
 
+/** Statuses the operator terminal and dispatch brain need at runtime. */
+const ACTIVE_REQUEST_STATUSES = ["pending", "assigned", "arriving", "boarded"] as const;
+
 function demoProjectData(projectId: string): AdminProjectData {
   const project = demoProjects.find((item) => item.id === projectId) ?? demoProject;
 
@@ -44,7 +47,10 @@ function demoProjectData(projectId: string): AdminProjectData {
   };
 }
 
-export async function getAdminProjectData(projectId: string): Promise<AdminProjectData> {
+export async function getAdminProjectData(
+  projectId: string,
+  options?: { activeRequestsOnly?: boolean },
+): Promise<AdminProjectData> {
   const supabase = await createClient();
 
   if (!supabase) {
@@ -101,14 +107,24 @@ export async function getAdminProjectData(projectId: string): Promise<AdminProje
       .eq("project_id", projectId)
       .eq("role", "operator")
       .order("name", { ascending: true }),
-    supabase
-      .from("requests")
-      .select(
-        "id,project_id,elevator_id,from_floor_id,to_floor_id,direction,passenger_count,original_passenger_count,remaining_passenger_count,split_required,priority,priority_reason,note,status,sequence_number,wait_started_at,created_at,updated_at,completed_at",
-      )
-      .eq("project_id", projectId)
-      .order("created_at", { ascending: false })
-      .limit(80),
+    // Operator terminal: only active requests, no completed/cancelled
+    // Admin pages: all requests (limited to 80 newest)
+    options?.activeRequestsOnly
+      ? supabase
+          .from("requests")
+          .select(
+            "id,project_id,elevator_id,from_floor_id,to_floor_id,direction,passenger_count,original_passenger_count,remaining_passenger_count,split_required,priority,priority_reason,note,status,sequence_number,wait_started_at,created_at,updated_at,completed_at",
+          )
+          .eq("project_id", projectId)
+          .in("status", [...ACTIVE_REQUEST_STATUSES])
+      : supabase
+          .from("requests")
+          .select(
+            "id,project_id,elevator_id,from_floor_id,to_floor_id,direction,passenger_count,original_passenger_count,remaining_passenger_count,split_required,priority,priority_reason,note,status,sequence_number,wait_started_at,created_at,updated_at,completed_at",
+          )
+          .eq("project_id", projectId)
+          .order("created_at", { ascending: false })
+          .limit(80),
   ]);
 
   const { data: project, error: projectError } = projectQuery;

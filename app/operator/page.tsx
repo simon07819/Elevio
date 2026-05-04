@@ -28,7 +28,7 @@ export default async function OperatorPage() {
 
   const { projects, loadError } = await getProjects();
   const project = pickOperatorProject(projects);
-  const data = project ? await getAdminProjectData(project.id) : null;
+  const data = project ? await getAdminProjectData(project.id, { activeRequestsOnly: true }) : null;
 
   const configured = project ? isProjectConfigured(project, data?.floors.length ?? 0, data?.elevators.length ?? 0) : false;
 
