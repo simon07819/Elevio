@@ -13,7 +13,7 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const root = resolve(__dirname, "..");
+const root = resolve(__dirname, "..", "..");
 const read = (p: string) => readFileSync(resolve(root, p), "utf-8");
 
 // ── 1. Operator terminal never loads completed/cancelled ──────────────────
@@ -138,12 +138,15 @@ console.log("# 8  daily stats: table + compute RPC ── PASS");
 
 // ── 9. Vercel cron config ────────────────────────────────────────────────
 
-const nextConfig = read("next.config.ts");
-if (!nextConfig.includes("/api/cron/cleanup-requests")) {
+const vercelConfig = read("vercel.json");
+if (!vercelConfig.includes("/api/cron/cleanup-requests")) {
   throw new Error("FAIL: Vercel cron missing cleanup-requests");
 }
-if (!nextConfig.includes("/api/cron/compute-stats")) {
+if (!vercelConfig.includes("/api/cron/compute-stats")) {
   throw new Error("FAIL: Vercel cron missing compute-stats");
+}
+if (!vercelConfig.includes("0 4 * * *")) {
+  throw new Error("FAIL: Vercel cron missing daily schedule for cleanup");
 }
 console.log("# 9  Vercel cron: hourly cleanup + daily stats ── PASS");
 

@@ -110,6 +110,7 @@ begin
   get diagnostics deleted_requests = row_count;
 
   -- 3. Release stale operator sessions (no heartbeat for 10 min)
+  -- Clear session fields but keep elevator active (admin controls active flag)
   update elevators
   set
     operator_session_id = null,
@@ -120,8 +121,7 @@ begin
     operator_display_name = null,
     current_load = 0,
     direction = 'idle'::elevator_direction,
-    manual_full = false,
-    active = false
+    manual_full = false
   where operator_session_id is not null
     and operator_session_heartbeat_at < heartbeat_cutoff;
   get diagnostics expired_sessions = row_count;
