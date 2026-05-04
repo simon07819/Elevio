@@ -100,9 +100,10 @@ test("validation 4: applyOptimisticRequest supprime l'entree optimistic si le st
 // ---------------------------------------------------------------------------
 // 5. Deux actions rapides operateur → pas de desynchronisation
 // ---------------------------------------------------------------------------
-test("validation 5: pendingPickupIds empeche le double-clic pickup", () => {
-  // Si l'ID est deja dans pendingPickupIds, pickup() retourne immediatement.
-  assert.match(RECOMMENDED, /if \(pendingPickupIds\.has\(requestId\)\) return/);
+test("validation 5: optimistic pickup prevents double-click — button disappears instantly", () => {
+  // Pickup fires onPickupSuccess before server call → request becomes "boarded"
+  // → actionRequest memo won't match it → button disappears. No pendingPickupIds needed.
+  assert.match(RECOMMENDED, /onPickupSuccess\?\.\(targetRequest\)/);
 });
 
 test("validation 5: pendingDropoffIds empeche le double-clic dropoff", () => {

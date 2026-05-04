@@ -36,11 +36,17 @@ test("buttons state: showPickup only when !showDropoff", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Pending pickup guard (double-click)
+// 3. Pickup double-click protection (optimistic UI: button disappears instantly)
 // ---------------------------------------------------------------------------
-test("buttons state: actionRequest excludes pendingPickupIds", () => {
-  assert.match(RECOMMENDED, /!pendingPickupIds\.has\(request\.id\)/);
-  assert.match(RECOMMENDED, /if \(pendingPickupIds\.has\(requestId\)\) return/);
+test("buttons state: pickup is instant optimistic — onPickupSuccess called before server", () => {
+  // onPickupSuccess fires before the server call — the request becomes "boarded"
+  // instantly in client state, so the pickup button disappears on its own.
+  // No need for a separate pendingPickupIds guard.
+  assert.match(RECOMMENDED, /onPickupSuccess\?\.\(targetRequest\)/);
+  // Server call is fire-and-forget (void + withTimeout)
+  assert.match(RECOMMENDED, /void withTimeout\(/);
+  // Timeout for server call
+  assert.match(RECOMMENDED, /SERVER_ACTION_TIMEOUT_MS/);
 });
 
 // ---------------------------------------------------------------------------

@@ -87,14 +87,12 @@ test("pause-interdict-v2: kept filter protects optimistic boarded from poll disc
 // DEBUG DIAGNOSTICS
 // ═══════════════════════════════════════════════════════════════════════════
 
-test("debug-diag: Ramasser click logs requestId, fromFloor, toFloor, oldStatus, newStatus", () => {
+test("debug-diag: Ramasser click logs performance (pickup_click_to_ui)", () => {
   const comp = readFileSync(join(root, "components/operator/RecommendedNextStop.tsx"), "utf8");
-  assert.match(comp, /\[RAMASSER\]/, "RAMASSER diagnostic tag");
-  assert.match(comp, /requestId/, "logs requestId");
-  assert.match(comp, /fromFloor/, "logs fromFloor");
-  assert.match(comp, /toFloor/, "logs toFloor");
-  assert.match(comp, /oldStatus/, "logs oldStatus");
-  assert.match(comp, /newStatus.*boarded/, "logs newStatus");
+  assert.match(comp, /pickup_click_to_ui/, "pickup performance event name");
+  assert.match(comp, /pickupClickTimeRef/, "click time ref for performance logging");
+  assert.match(comp, /target: "<200ms"/, "200ms target logged");
+  assert.match(comp, /onPickupSuccess/, "optimistic success callback");
 });
 
 test("debug-diag: PAUSE computation logs reason, boarded count, session info", () => {

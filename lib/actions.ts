@@ -1768,6 +1768,39 @@ export async function updateRequestStatus(
     }
   }
 
+  // For pickup (boarded): return success IMMEDIATELY after DB commit.
+  // The client already has optimistic UI — syncElevator, event insert,
+  // and revalidation happen in the background without blocking the response.
+  const isFastPath = status === "boarded" || status === "completed";
+
+  if (isFastPath) {
+    // Fire post-commit tasks in background — don't block the client response.
+    void (async () => {
+      try {
+        await syncElevatorWithRequestStatus(supabase, requestId, status);
+      } catch (err) {
+        console.error("[updateRequestStatus] background syncElevator error", { requestId, status, error: String(err) });
+      }
+      if (message) {
+        try {
+          const eventType = statusEventMap[status];
+          await supabase.from("request_events").insert({
+            request_id: requestId,
+            event_type: eventType,
+            message,
+          });
+        } catch (err) {
+          console.error("[updateRequestStatus] background insertEvent error", { requestId, status, error: String(err) });
+        }
+      }
+      revalidatePath("/operator");
+      revalidatePath("/admin");
+      revalidatePath("/request");
+    })();
+    return { ok: true, message: "Statut mis a jour." };
+  }
+
+  // For other statuses: keep blocking (cancelled needs immediate sync for split handling)
   await syncElevatorWithRequestStatus(supabase, requestId, status);
 
   if (message) {

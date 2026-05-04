@@ -77,8 +77,10 @@ test("terminal accuracy: isOperatorMovementQueueStatus excludes completed/cancel
 // ---------------------------------------------------------------------------
 // 5. double-click protection exists in RecommendedNextStop
 // ---------------------------------------------------------------------------
-test("terminal accuracy: pendingPickupIds prevents double-click pickup", () => {
-  assert.match(RECOMMENDED, /if \(pendingPickupIds\.has\(requestId\)\) return/);
+test("terminal accuracy: pickup is optimistic — button disappears instantly, no double-click possible", () => {
+  // Pickup fires onPickupSuccess immediately → request status = "boarded" →
+  // actionRequest memo skips it → pickup button gone. No pendingPickupIds needed.
+  assert.match(RECOMMENDED, /onPickupSuccess\?\.\(targetRequest\)/);
   assert.match(RECOMMENDED, /const alreadyPending = ids\.some\(\(id\) => pendingDropoffIds\.has\(id\)\)/);
 });
 

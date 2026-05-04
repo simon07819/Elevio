@@ -178,8 +178,9 @@ test("UX7: Terminal request cards fade out", () => {
 
 // ── 8. Performance perçue (optimistic UI) ─────────────────────────────────
 
-test("UX8: RecommendedNextStop computes isActionPending from pending sets", () => {
-  assert.match(RECOMMENDED, /isActionPending = pendingPickupIds\.size > 0 \|\| pendingDropoffIds\.size > 0/, "isActionPending computed from pending IDs");
+test("UX8: RecommendedNextStop computes isActionPending from dropoff only", () => {
+  // Pickup is instant (optimistic) — no pending state. Only dropoff has pending state.
+  assert.match(RECOMMENDED, /isActionPending = pendingDropoffIds\.size > 0/, "isActionPending from dropoff pending only");
 });
 
 test("UX8: OperatorWorkspace optimistic activation before server response", () => {

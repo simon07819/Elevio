@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Ban, DoorOpen, Loader2, Pause, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
 import { trackRequestPickedUp, trackRequestDroppedOff } from "@/lib/analytics";
@@ -12,6 +12,23 @@ import { formatDispatchRecommendationReason } from "@/lib/recommendationReason";
 import { resolveRequestState, logAction } from "@/lib/stateResolution";
 import type { DispatchRecommendation, EnrichedRequest } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
+
+/** Maximum time to wait for server confirmation before showing error + rollback. */
+const SERVER_ACTION_TIMEOUT_MS = 3_000;
+
+/**
+ * Wrap a promise with a timeout. If the promise doesn't resolve within
+ * `ms` milliseconds, reject with a timeout error.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Action timeout after ${ms}ms`)), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
 
 function capacityWarningTranslationKey(type: DispatchRecommendation["capacityWarnings"][number]["type"]): TranslationKey {
   switch (type) {
@@ -50,10 +67,11 @@ export function RecommendedNextStop({
   onDropoffFailure?: (payload: { requestIds: string[] }) => void;
 }) {
   const [completedDropoffIds, setCompletedDropoffIds] = useState<Set<string>>(() => new Set());
-  const [pendingPickupIds, setPendingPickupIds] = useState<Set<string>>(() => new Set());
   const [pendingDropoffIds, setPendingDropoffIds] = useState<Set<string>>(() => new Set());
   const [actionError, setActionError] = useState<string | null>(null);
   const { t, locale } = useLanguage();
+  // Track pickup click time for performance logging (<200ms target)
+  const pickupClickTimeRef = useRef<number>(0);
 
   const reasonLine = formatDispatchRecommendationReason(
     recommendation.reasonDetail,
@@ -112,7 +130,6 @@ export function RecommendedNextStop({
   const actionRequest = useMemo(() => {
     const candidates = actionRequests.filter(
       (request) =>
-        !pendingPickupIds.has(request.id) &&
         (request.status === "pending" || request.status === "assigned" || request.status === "arriving"),
     );
     const primaryId = recommendation.primaryPickupRequestId;
@@ -121,14 +138,13 @@ export function RecommendedNextStop({
     }
     const primary = candidates.find((request) => request.id === primaryId);
     return primary ?? null;
-  }, [actionRequests, pendingPickupIds, recommendation.primaryPickupRequestId]);
+  }, [actionRequests, recommendation.primaryPickupRequestId]);
 
   const showDropoff = dropoffIds.length > 0 && dropFloorId !== "";
   // Find any pickup at the dropoff floor, even if brain didn't recommend it as primary
   const pickupCandidateAtDropFloor = showDropoff
     ? actionRequests.find(
         (request) =>
-          !pendingPickupIds.has(request.id) &&
           (request.status === "pending" || request.status === "assigned" || request.status === "arriving") &&
           request.from_floor_id === dropFloorId,
       ) ?? null
@@ -137,20 +153,7 @@ export function RecommendedNextStop({
   const showPickup = !showDropoff && actionRequest !== null;
   const showCombined = showDropoff && pickupAtDropFloor;
   const showPrimaryAction = showDropoff || showPickup;
-  const isActionPending = pendingPickupIds.size > 0 || pendingDropoffIds.size > 0;
-  // ── DEBUG: Combined button diagnostic ──
-  console.log("[COMBINED-BTN]", {
-    showDropoff,
-    showPickup,
-    showCombined,
-    pickupAtDropFloor,
-    dropFloorId,
-    pickupCandidateId: pickupCandidateAtDropFloor?.id ?? null,
-    pickupCandidateStatus: pickupCandidateAtDropFloor?.status ?? null,
-    actionRequestsLen: actionRequests.length,
-    boardedAtDrop: actionRequests.filter(r => r.status === "boarded" && r.to_floor_id === dropFloorId).length,
-    waitingAtDrop: actionRequests.filter(r => ["pending","assigned","arriving"].includes(r.status) && r.from_floor_id === dropFloorId).length,
-  });
+  const isActionPending = pendingDropoffIds.size > 0;
 
   const actionButton = showCombined ? (
     <button
@@ -249,36 +252,39 @@ export function RecommendedNextStop({
     }
 
     const requestId = actionRequest.id;
-    if (pendingPickupIds.has(requestId)) return;
-
     const targetRequest = actionRequest;
     setActionError(null);
-    // ── DEBUG: Ramasser diagnostic (always log, even in prod) ──
-    console.log("[RAMASSER]", {
-      requestId,
-      fromFloor: targetRequest.from_floor_id,
-      toFloor: targetRequest.to_floor_id,
-      oldStatus: targetRequest.status,
-      newStatus: "boarded",
-      passengerCount: targetRequest.passenger_count,
-      operatorElevatorId,
-      timestamp: new Date().toISOString(),
-    });
-    setPendingPickupIds((current) => new Set(current).add(requestId));
+
+    // ── PERFORMANCE: measure pickup click → UI update ──
+    pickupClickTimeRef.current = performance.now();
+
+    // ── INSTANT OPTIMISTIC UPDATE ──────────────────────────────
+    // The UI must update IMMEDIATELY. No spinner, no waiting.
+    // onPickupSuccess sets status "boarded" in client state,
+    // hides Ramasser, shows Déposer — all before server responds.
     onPickupSuccess?.(targetRequest);
+
+    // ── Performance log: click → UI update time ────────────────
+    const uiUpdateMs = Math.round(performance.now() - pickupClickTimeRef.current);
+    structuredLog("Performance", "pickup_click_to_ui", {
+      requestId,
+      durationMs: uiUpdateMs,
+      target: "<200ms",
+    });
+    if (uiUpdateMs > 200) {
+      console.warn("[Elevio Performance] pickup click → UI update SLOW", { uiUpdateMs, target: "<200ms" });
+    }
+
+    // ── FIRE-AND-FORGET SERVER CALL WITH TIMEOUT ────────────────
+    // The server action does: DB update + syncElevator + insertEvent + revalidate
+    // This can take 500ms–2s but the user already sees the optimistic result.
     const stopPickupDbTimer = startPickupToDbTimer({ projectId: projectId ?? "", elevatorId: operatorElevatorId, requestId });
 
-    void advanceRequestStatus(requestId, "boarded", {
-      assignElevatorId: operatorElevatorId,
-    })
+    void withTimeout(
+      advanceRequestStatus(requestId, "boarded", { assignElevatorId: operatorElevatorId }),
+      SERVER_ACTION_TIMEOUT_MS,
+    )
       .then((result) => {
-        // ── DEBUG: always log server result ──
-        console.log("[RAMASSER-RESULT]", {
-          requestId,
-          ok: result.ok,
-          message: result.message,
-          timestamp: new Date().toISOString(),
-        });
         if (result.ok) {
           const pickupDbMs = stopPickupDbTimer();
           trackRequestPickedUp(requestId, projectId ?? "", operatorElevatorId);
@@ -293,16 +299,12 @@ export function RecommendedNextStop({
       })
       .catch((err) => {
         stopPickupDbTimer();
-        setActionError("Action impossible. Verifiez la connexion et reessayez.");
+        const message = err instanceof Error && err.message.includes("timeout")
+          ? "Le serveur ne repond pas. Reessayez."
+          : "Action impossible. Verifiez la connexion et reessayez.";
+        setActionError(message);
         captureError(err, { projectId, elevatorId: operatorElevatorId, requestId, userType: "operator", action: "pickup" });
         onPickupFailure?.(targetRequest);
-      })
-      .finally(() => {
-        setPendingPickupIds((current) => {
-          const next = new Set(current);
-          next.delete(requestId);
-          return next;
-        });
       });
   }
 
@@ -370,12 +372,6 @@ export function RecommendedNextStop({
     // Combined action: first dropoff, then pickup — one click for same-floor actions.
     // Order: Déposer (dropoff) first, then Ramasser (pickup).
     // Dropoff completes the boarded passengers; pickup boards the waiting ones.
-    console.log("[COMBINED-ACTION]", {
-      dropoffIds: dropoffIds.length,
-      dropFloorId: dropFloorId?.slice(0,8),
-      pickupCandidateId: pickupCandidateAtDropFloor?.id?.slice(0,8) ?? null,
-      pickupCandidateStatus: pickupCandidateAtDropFloor?.status ?? null,
-    });
 
     // 1. Dropoff
     const ids = dropoffIds;
@@ -397,21 +393,25 @@ export function RecommendedNextStop({
     // 2. Pickup — optimistically update immediately (use pickupCandidateAtDropFloor for combined)
     const targetRequest = pickupCandidateAtDropFloor;
     if (targetRequest) {
-      const requestId = targetRequest.id;
-      setPendingPickupIds((current) => new Set(current).add(requestId));
+      // Instant optimistic pickup — no spinner, no delay
+      pickupClickTimeRef.current = performance.now();
       onPickupSuccess?.(targetRequest);
+      const uiUpdateMs = Math.round(performance.now() - pickupClickTimeRef.current);
+      structuredLog("Performance", "pickup_click_to_ui", {
+        requestId: targetRequest.id,
+        durationMs: uiUpdateMs,
+        context: "combined",
+        target: "<200ms",
+      });
     }
 
     // 3. Fire server actions — pickup FIRST for instant passenger QR return
     if (targetRequest) {
-      advanceRequestStatus(targetRequest.id, "boarded", { assignElevatorId: operatorElevatorId })
+      void withTimeout(
+        advanceRequestStatus(targetRequest.id, "boarded", { assignElevatorId: operatorElevatorId }),
+        SERVER_ACTION_TIMEOUT_MS,
+      )
         .then((pickupResult) => {
-          console.log("[RAMASSER-RESULT]", {
-            requestId: targetRequest.id,
-            ok: pickupResult.ok,
-            message: pickupResult.message,
-            timestamp: new Date().toISOString(),
-          });
           if (pickupResult.ok) {
             trackRequestPickedUp(targetRequest.id, projectId ?? "", operatorElevatorId);
             onPickupConfirmed?.(targetRequest);
@@ -422,10 +422,12 @@ export function RecommendedNextStop({
           }
         })
         .catch((err) => {
-          if (targetRequest) {
-            captureError(err, { projectId, elevatorId: operatorElevatorId, requestId: targetRequest.id, userType: "operator", action: "combined_pickup" });
-            onPickupFailure?.(targetRequest);
-          }
+          const message = err instanceof Error && err.message.includes("timeout")
+            ? "Le serveur ne repond pas. Reessayez."
+            : "Action impossible. Verifiez la connexion et reessayez.";
+          setActionError(message);
+          captureError(err, { projectId, elevatorId: operatorElevatorId, requestId: targetRequest.id, userType: "operator", action: "combined_pickup" });
+          onPickupFailure?.(targetRequest);
         });
     }
     // Fire dropoff separately (don't block pickup confirmation)
