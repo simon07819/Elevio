@@ -61,11 +61,12 @@ test("reassign: queue_cleared broadcast sent when no other operator (hasOtherOpe
 test("reassign: reassignOrphanedRequestsToActiveOperator exists and called before cancel", () => {
   const actions = readFileSync(join(root, "lib/actions.ts"), "utf8");
   assert.match(actions, /reassignOrphanedRequestsToActiveOperator/);
-  // Called BEFORE cancelActiveProjectRequestsIfNoLiveOperators
-  const releaseFn = actions.match(/async function releaseOperatorElevator[\s\S]{0,2000}/);
-  assert.ok(releaseFn, "releaseOperatorElevator found");
-  const reassignPos = releaseFn![0].indexOf("reassignOrphanedRequestsToActiveOperator");
-  const cancelPos = releaseFn![0].indexOf("cancelActiveProjectRequestsIfNoLiveOperators");
+  // Called BEFORE cancelActiveProjectRequestsIfNoLiveOperators in releaseOperatorElevator
+  const releaseIdx = actions.indexOf("export async function releaseOperatorElevator");
+  assert.ok(releaseIdx > 0, "releaseOperatorElevator found");
+  const releaseBody = actions.slice(releaseIdx, releaseIdx + 3000);
+  const reassignPos = releaseBody.indexOf("reassignOrphanedRequestsToActiveOperator");
+  const cancelPos = releaseBody.indexOf("cancelActiveProjectRequestsIfNoLiveOperators");
   assert.ok(reassignPos > 0, "reassign called");
   assert.ok(cancelPos > 0, "cancel called");
   assert.ok(reassignPos < cancelPos, "reassign called BEFORE cancel");
@@ -84,16 +85,16 @@ test("reassign: elevator_id updated via assignRequestToBestElevator scoring", ()
 });
 
 // ---------------------------------------------------------------------------
-// 4. Boarded request NOT reassigned (ORPHAN_REASSIGN_STATUSES excludes boarded)
+// 4. Boarded requests ARE reassigned — another operator CAN drop off boarded passengers
 // ---------------------------------------------------------------------------
-test("reassign: ORPHAN_REASSIGN_STATUSES excludes boarded/completed/cancelled", () => {
+test("reassign: ORPHAN_REASSIGN_STATUSES includes boarded (another operator can drop off)", () => {
   const actions = readFileSync(join(root, "lib/actions.ts"), "utf8");
   const match = actions.match(/ORPHAN_REASSIGN_STATUSES[^;]+;/);
   assert.ok(match, "ORPHAN_REASSIGN_STATUSES defined");
   assert.ok(match![0].includes("pending"), "includes pending");
   assert.ok(match![0].includes("assigned"), "includes assigned");
   assert.ok(match![0].includes("arriving"), "includes arriving");
-  assert.ok(!match![0].includes("boarded"), "excludes boarded");
+  assert.ok(match![0].includes("boarded"), "includes boarded — another operator CAN drop off");
   assert.ok(!match![0].includes("completed"), "excludes completed");
   assert.ok(!match![0].includes("cancelled"), "excludes cancelled");
 });

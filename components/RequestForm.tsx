@@ -125,12 +125,63 @@ export function RequestForm({
   const prioritiesEnabled = project.priorities_enabled !== false;
   const capacityEnabled = project.capacity_enabled !== false;
   // Pre-subscribed passenger broadcast channel for instant QR reset on pickup.
+  // requestIdRef is always current so the .on() handlers registered at mount time
+  // can check against the latest request — no race with the submittedRequest effect.
+  const requestIdRef = useRef<string | null>(null);
   const passengerBroadcastRef = useRef<{ channel: unknown; ready: boolean } | null>(null);
   useEffect(() => {
     const client = createClient();
     if (!client) return;
     const ch = client.channel(passengerProjectBroadcastChannel(project.id));
     const ref = { channel: ch, ready: false };
+
+    // Register .on() handlers IMMEDIATELY on the pre-subscribed channel.
+    // This eliminates the race where the broadcast arrives between channel
+    // subscription and the submittedRequest effect attaching handlers.
+    (ch as ReturnType<typeof client.channel>)
+      .on(
+        "broadcast",
+        { event: PASSENGER_BROADCAST_REQUEST_BOARDED },
+        (msg: { payload?: { requestIds?: string[] } | string[] }) => {
+          const rid = requestIdRef.current;
+          if (!rid) return;
+          const raw = msg.payload;
+          const ids = Array.isArray(raw) ? raw : raw?.requestIds;
+          if (!ids?.includes(rid)) return;
+          clearPassengerPendingRequest(project.id, rid);
+          setSubmittedRequest(null);
+          router.replace("/");
+        },
+      )
+      .on(
+        "broadcast",
+        { event: PASSENGER_BROADCAST_QUEUE_CLEARED },
+        (msg: { payload?: { requestIds?: string[] } | string[] }) => {
+          const rid = requestIdRef.current;
+          if (!rid) return;
+          const raw = msg.payload;
+          const ids = Array.isArray(raw) ? raw : raw?.requestIds;
+          if (!ids?.includes(rid)) return;
+          clearPassengerPendingRequest(project.id, rid);
+          setSubmittedRequest(null);
+          setMessage(t("request.cancelled"));
+        },
+      )
+      .on(
+        "broadcast",
+        { event: PASSENGER_BROADCAST_REQUEST_CANCELLED },
+        (msg: { payload?: { requestIds?: string[] } | string[] }) => {
+          const rid = requestIdRef.current;
+          if (!rid) return;
+          const raw = msg.payload;
+          const ids = Array.isArray(raw) ? raw : raw?.requestIds;
+          if (!ids?.includes(rid)) return;
+          clearPassengerPendingRequest(project.id, rid);
+          setSubmittedRequest(null);
+          setMessage(t("request.cancelledByOperator"));
+        },
+      );
+
     ch.subscribe((status: string) => {
       if (status === "SUBSCRIBED") ref.ready = true;
     });
@@ -140,6 +191,12 @@ export function RequestForm({
       passengerBroadcastRef.current = null;
     };
   }, [project.id]);
+  // Keep requestIdRef in sync with submittedRequest so that the .on() handlers
+  // registered on the pre-subscribed channel (at mount time) always check the
+  // correct request ID — no race condition.
+  useEffect(() => {
+    requestIdRef.current = submittedRequest?.requestId ?? null;
+  }, [submittedRequest?.requestId]);
   const passengerMax = useMemo(
     () => maxPassengerPartySize(capacityEnabled, liveElevators),
     [capacityEnabled, liveElevators],
@@ -336,23 +393,26 @@ export function RequestForm({
       return;
     }
 
-    // Use pre-subscribed channel for instant delivery (already subscribed).
-    // If not available, fall back to creating a new channel.
+    // The pre-subscribed channel already has .on() handlers registered at mount
+    // time (using requestIdRef). Only create a fallback channel if the
+    // pre-subscribed channel wasn't ready when this effect runs.
     const preSubbed = passengerBroadcastRef.current;
-    const channel = (preSubbed?.channel && preSubbed.ready)
-      ? preSubbed.channel as ReturnType<typeof client.channel>
-      : client.channel(passengerProjectBroadcastChannel(project.id));
+    if (preSubbed?.channel && preSubbed.ready) {
+      // Pre-subscribed channel is already listening — no extra work needed.
+      return;
+    }
 
-    const unsub = channel
+    // Fallback: create a new channel with its own .on() handlers.
+    const channel = client.channel(passengerProjectBroadcastChannel(project.id));
+
+    channel
       .on(
         "broadcast",
         { event: PASSENGER_BROADCAST_QUEUE_CLEARED },
         (msg: { payload?: { requestIds?: string[] } | string[] }) => {
           const raw = msg.payload;
           const ids = Array.isArray(raw) ? raw : raw?.requestIds;
-          if (!ids?.includes(rid)) {
-            return;
-          }
+          if (!ids?.includes(rid)) return;
           clearPassengerPendingRequest(project.id, rid);
           setSubmittedRequest(null);
           setMessage(t("request.cancelled"));
@@ -364,9 +424,7 @@ export function RequestForm({
         (msg: { payload?: { requestIds?: string[] } | string[] }) => {
           const raw = msg.payload;
           const ids = Array.isArray(raw) ? raw : raw?.requestIds;
-          if (!ids?.includes(rid)) {
-            return;
-          }
+          if (!ids?.includes(rid)) return;
           clearPassengerPendingRequest(project.id, rid);
           setSubmittedRequest(null);
           router.replace("/");
@@ -378,25 +436,16 @@ export function RequestForm({
         (msg: { payload?: { requestIds?: string[] } | string[] }) => {
           const raw = msg.payload;
           const ids = Array.isArray(raw) ? raw : raw?.requestIds;
-          if (!ids?.includes(rid)) {
-            return;
-          }
+          if (!ids?.includes(rid)) return;
           clearPassengerPendingRequest(project.id, rid);
           setSubmittedRequest(null);
           setMessage(t("request.cancelledByOperator"));
         },
-      );
-
-    // Only subscribe if using a new channel (pre-subscribed is already listening)
-    if (!preSubbed?.ready) {
-      channel.subscribe();
-    }
+      )
+      .subscribe();
 
     return () => {
-      // Only remove channel if we created it (not the pre-subscribed one)
-      if (!preSubbed?.ready) {
-        client.removeChannel(channel);
-      }
+      client.removeChannel(channel);
     };
   }, [submittedRequest?.requestId, project.id, router]);
 
@@ -715,6 +764,7 @@ export function RequestForm({
               }
 
               const result = await createPassengerRequest(formData);
+              console.log("[PASSENGER-REQUEST-RESULT]", { ok: result.ok, requestId: result.requestId?.slice(0, 8), message: result.message?.slice(0, 80) });
               setMessage(result.message);
               if (result.ok && result.requestId) {
                 savePassengerPendingRequest(project.id, {

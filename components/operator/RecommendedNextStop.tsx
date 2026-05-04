@@ -117,10 +117,50 @@ export function RecommendedNextStop({
   }, [actionRequests, pendingPickupIds, recommendation.primaryPickupRequestId]);
 
   const showDropoff = dropoffIds.length > 0 && dropFloorId !== "";
+  // Find any pickup at the dropoff floor, even if brain didn't recommend it as primary
+  const pickupCandidateAtDropFloor = showDropoff
+    ? actionRequests.find(
+        (request) =>
+          !pendingPickupIds.has(request.id) &&
+          (request.status === "pending" || request.status === "assigned" || request.status === "arriving") &&
+          request.from_floor_id === dropFloorId,
+      ) ?? null
+    : null;
+  const pickupAtDropFloor = showDropoff && pickupCandidateAtDropFloor !== null;
   const showPickup = !showDropoff && actionRequest !== null;
+  const showCombined = showDropoff && pickupAtDropFloor;
   const showPrimaryAction = showDropoff || showPickup;
+  // ── DEBUG: Combined button diagnostic ──
+  console.log("[COMBINED-BTN]", {
+    showDropoff,
+    showPickup,
+    showCombined,
+    pickupAtDropFloor,
+    dropFloorId,
+    pickupCandidateId: pickupCandidateAtDropFloor?.id ?? null,
+    pickupCandidateStatus: pickupCandidateAtDropFloor?.status ?? null,
+    actionRequestsLen: actionRequests.length,
+    boardedAtDrop: actionRequests.filter(r => r.status === "boarded" && r.to_floor_id === dropFloorId).length,
+    waitingAtDrop: actionRequests.filter(r => ["pending","assigned","arriving"].includes(r.status) && r.from_floor_id === dropFloorId).length,
+  });
 
-  const actionButton = showDropoff ? (
+  const actionButton = showCombined ? (
+    <button
+      type="button"
+      onClick={dropoffAndPickup}
+      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(16,185,129,0.42)] ring-4 ring-teal-100/40 transition active:scale-[0.98]"
+    >
+      <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.55),transparent)] opacity-70 motion-safe:animate-[action-shine_1.45s_ease-in-out_infinite]" />
+      <span className="relative flex w-full flex-col items-center justify-center gap-1">
+        <span className="flex w-full items-center justify-center gap-4 text-4xl font-black uppercase tracking-wide">
+          <DoorOpen size={36} strokeWidth={2.8} />
+          <span>+</span>
+          <UserCheck size={36} strokeWidth={2.8} />
+        </span>
+        <span className="text-lg font-black uppercase tracking-wide">{t("operator.dropoffAndPickup")}</span>
+      </span>
+    </button>
+  ) : showDropoff ? (
     <button
       type="button"
       onClick={dropoff}
@@ -179,6 +219,17 @@ export function RecommendedNextStop({
 
     const targetRequest = actionRequest;
     setActionError(null);
+    // ── DEBUG: Ramasser diagnostic (always log, even in prod) ──
+    console.log("[RAMASSER]", {
+      requestId,
+      fromFloor: targetRequest.from_floor_id,
+      toFloor: targetRequest.to_floor_id,
+      oldStatus: targetRequest.status,
+      newStatus: "boarded",
+      passengerCount: targetRequest.passenger_count,
+      operatorElevatorId,
+      timestamp: new Date().toISOString(),
+    });
     setPendingPickupIds((current) => new Set(current).add(requestId));
     onPickupSuccess?.(targetRequest);
 
@@ -186,6 +237,13 @@ export function RecommendedNextStop({
       assignElevatorId: operatorElevatorId,
     })
       .then((result) => {
+        // ── DEBUG: always log server result ──
+        console.log("[RAMASSER-RESULT]", {
+          requestId,
+          ok: result.ok,
+          message: result.message,
+          timestamp: new Date().toISOString(),
+        });
         if (result.ok) {
           onPickupConfirmed?.(targetRequest);
         } else {
@@ -233,6 +291,95 @@ export function RecommendedNextStop({
         const failed = results.find((result) => !result.ok);
         if (failed) {
           setActionError(failed.message);
+          setCompletedDropoffIds((current) => {
+            const next = new Set(current);
+            for (const id of ids) next.delete(id);
+            return next;
+          });
+          onDropoffFailure?.({ requestIds: ids });
+        }
+      })
+      .catch(() => {
+        setActionError("Action impossible. Verifiez la connexion et reessayez.");
+        setCompletedDropoffIds((current) => {
+          const next = new Set(current);
+          for (const id of ids) next.delete(id);
+          return next;
+        });
+        onDropoffFailure?.({ requestIds: ids });
+      })
+      .finally(() => {
+        setPendingDropoffIds((current) => {
+          const next = new Set(current);
+          for (const id of ids) next.delete(id);
+          return next;
+        });
+      });
+  }
+
+  function dropoffAndPickup() {
+    // Combined action: first dropoff, then pickup — one click for same-floor actions.
+    // Order: Déposer (dropoff) first, then Ramasser (pickup).
+    // Dropoff completes the boarded passengers; pickup boards the waiting ones.
+    console.log("[COMBINED-ACTION]", {
+      dropoffIds: dropoffIds.length,
+      dropFloorId: dropFloorId?.slice(0,8),
+      pickupCandidateId: pickupCandidateAtDropFloor?.id?.slice(0,8) ?? null,
+      pickupCandidateStatus: pickupCandidateAtDropFloor?.status ?? null,
+    });
+
+    // 1. Dropoff
+    const ids = dropoffIds;
+    if (ids.length === 0 || !dropFloorId) return;
+
+    setActionError(null);
+    setPendingDropoffIds((current) => {
+      const next = new Set(current);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+    setCompletedDropoffIds((current) => {
+      const next = new Set(current);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+    onDropoffSuccess?.({ requestIds: ids, dropFloorId });
+
+    // 2. Pickup — optimistically update immediately (use pickupCandidateAtDropFloor for combined)
+    const targetRequest = pickupCandidateAtDropFloor;
+    if (targetRequest) {
+      const requestId = targetRequest.id;
+      setPendingPickupIds((current) => new Set(current).add(requestId));
+      onPickupSuccess?.(targetRequest);
+    }
+
+    // 3. Fire server actions — pickup FIRST for instant passenger QR return
+    if (targetRequest) {
+      advanceRequestStatus(targetRequest.id, "boarded", { assignElevatorId: operatorElevatorId })
+        .then((pickupResult) => {
+          console.log("[RAMASSER-RESULT]", {
+            requestId: targetRequest.id,
+            ok: pickupResult.ok,
+            message: pickupResult.message,
+            timestamp: new Date().toISOString(),
+          });
+          if (pickupResult.ok) {
+            onPickupConfirmed?.(targetRequest);
+          } else {
+            setActionError(pickupResult.message);
+            onPickupFailure?.(targetRequest);
+          }
+        })
+        .catch(() => {
+          if (targetRequest) onPickupFailure?.(targetRequest);
+        });
+    }
+    // Fire dropoff separately (don't block pickup confirmation)
+    void Promise.all(ids.map((requestId) => advanceRequestStatus(requestId, "completed")))
+      .then((results) => {
+        const dropoffFailed = results.find((result) => !result.ok);
+        if (dropoffFailed) {
+          setActionError(dropoffFailed.message);
           setCompletedDropoffIds((current) => {
             const next = new Set(current);
             for (const id of ids) next.delete(id);

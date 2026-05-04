@@ -98,6 +98,14 @@ export function OperatorDashboard({
     return { ...request, ...optimistic.request };
   }
 
+  /** Check if there are optimistic "boarded" requests (pickup just happened, server may not have confirmed yet). */
+  function hasOptimisticBoardedRequests(): boolean {
+    for (const entry of optimisticRequestsRef.current.values()) {
+      if (entry.request.status === "boarded" && Date.now() <= entry.expiresAt) return true;
+    }
+    return false;
+  }
+
   useEffect(() => {
     const id = window.setTimeout(() => {
       setLiveRequests((current) => mergeRequestsPropIntoLive(current, requests));
@@ -163,12 +171,16 @@ export function OperatorDashboard({
 
       if (cancelled || !data) return;
       setLiveRequests((current) => {
-        const liveById = new Map((data as HoistRequest[]).map((request) => [request.id, applyOptimisticRequest(request)]));
+        // Compute kept BEFORE liveById so that applyOptimisticRequest
+        // side-effects (deleting confirmed optimistic entries) don't
+        // cause the kept filter to discard requests that were just confirmed.
         const kept = current.filter(
           (request) =>
             request.elevator_id !== elevator.id ||
-            !OPERATOR_VISIBLE_REQUEST_STATUSES.includes(request.status as (typeof OPERATOR_VISIBLE_REQUEST_STATUSES)[number]),
+            !OPERATOR_VISIBLE_REQUEST_STATUSES.includes(request.status as (typeof OPERATOR_VISIBLE_REQUEST_STATUSES)[number]) ||
+            optimisticRequestsRef.current.has(request.id),
         );
+        const liveById = new Map((data as HoistRequest[]).map((request) => [request.id, applyOptimisticRequest(request)]));
         const mergedById = new Map<string, HoistRequest>();
         for (const row of kept) {
           mergedById.set(row.id, row);
@@ -190,6 +202,22 @@ export function OperatorDashboard({
         }
         if (next.length === current.length && next.every((r, i) => r.id === current[i]?.id && r.status === current[i]?.status && r.elevator_id === current[i]?.elevator_id)) {
           return current;
+        }
+        // ── DEBUG: poll merge diagnostic (always log boarded changes) ──
+        {
+          const prevBoarded = current.filter(r => r.elevator_id === elevator.id && r.status === "boarded");
+          const nextBoarded = next.filter(r => r.elevator_id === elevator.id && r.status === "boarded");
+          const dropped = prevBoarded.filter(pb => !nextBoarded.find(nb => nb.id === pb.id));
+          if (dropped.length > 0 || prevBoarded.length !== nextBoarded.length) {
+            console.warn("[POLL-MERGE] boarded changed", {
+              prevBoarded: prevBoarded.length,
+              nextBoarded: nextBoarded.length,
+              droppedIds: dropped.map(r => r.id),
+              pollDataLen: (data as HoistRequest[])?.length ?? 0,
+              optimisticCount: optimisticRequestsRef.current.size,
+              keptLen: kept.length,
+            });
+          }
         }
         return next;
       });
@@ -313,7 +341,87 @@ export function OperatorDashboard({
         ? "down"
         : "idle";
   let visibleRecommendation = recommendation;
-  if (!hasOperatorWork) {
+  // ── PAUSE INTERDICT ──────────────────────────────────────────────────────
+  // If the brain returns "wait" (PAUSE) but we have boarded passengers on the
+  // elevator, the brain MUST show a dropoff action instead.  This can happen
+  // when the elevator direction / current_floor_id from the server is stale
+  // (not yet updated by syncElevatorWithRequestStatus), causing the brain's
+  // pendingBoardedDestinations() to return empty and the idle branch to fire.
+  // Guard: boarded passengers = active work = NEVER PAUSE.
+  // Also check optimistic boarded: pickup just happened, poll/realtime may
+  // have overwritten with stale data before server confirmation.
+  const hasAnyBoardedWork = hasBoardedPassengers || hasOptimisticBoardedRequests();
+  if (!recommendation.nextFloor && recommendation.requestsToDropoff.length === 0 && hasAnyBoardedWork) {
+    const boardedSource = liveActivePassengers.length > 0 ? liveActivePassengers : (
+      // Reconstruct from optimistic requests if live state was overwritten
+      [...optimisticRequestsRef.current.values()]
+        .filter(e => e.request.status === "boarded" && Date.now() <= e.expiresAt)
+        .map(e => {
+          const r = e.request;
+          const from = floorById.get(r.from_floor_id);
+          const to = floorById.get(r.to_floor_id);
+          return {
+            requestId: r.id,
+            from_floor_id: r.from_floor_id,
+            to_floor_id: r.to_floor_id,
+            from_sort_order: from?.sort_order ?? 0,
+            to_sort_order: to?.sort_order ?? 0,
+            passenger_count: r.passenger_count,
+            boarded_at: r.updated_at,
+          };
+        })
+    );
+    const currentSort = Number(currentFloor.sort_order);
+    const sortedPassengers = [...boardedSource].sort((a, b) =>
+      Math.abs(Number(a.to_sort_order) - currentSort) -
+      Math.abs(Number(b.to_sort_order) - currentSort),
+    );
+    const nearest = sortedPassengers[0];
+    if (nearest) {
+      const dropSort = Number(nearest.to_sort_order);
+      const dropFloor = floors.find((f) => Number(f.sort_order) === dropSort) ?? currentFloor;
+      const dropoffs = boardedSource.filter((p) => Number(p.to_sort_order) === dropSort);
+      const passengers = dropoffs.reduce((s, p) => s + p.passenger_count, 0);
+      const dropDetail: { kind: "dropoff_before_pickups"; passengers: number } = {
+        kind: "dropoff_before_pickups",
+        passengers,
+      };
+      const travelDir: Direction =
+        dropSort > currentSort ? "up" : dropSort < currentSort ? "down" : "idle";
+      visibleRecommendation = {
+        ...recommendation,
+        nextFloor: dropFloor,
+        nextFloorSortOrder: Number(dropFloor.sort_order),
+        primaryPickupRequestId: null,
+        reasonDetail: dropDetail,
+        reason: formatDispatchRecommendationReason(dropDetail, locale, ""),
+        requestsToPickup: [],
+        requestsToDropoff: dropoffs,
+        suggestedDirection: travelDir,
+        capacityWarnings: [],
+      };
+    }
+  }
+  // ── PAUSE INTERDICT (hasOperatorWork guard) ──────────────────────────────
+  // Also prevent idle_empty PAUSE when optimistic boarded requests exist
+  // but poll/realtime haven't caught up yet.
+  const realHasOperatorWork = activeQueue.length > 0 || hasAnyBoardedWork;
+  if (!realHasOperatorWork) {
+    // ── DEBUG: PAUSE diagnostic (always log, even in prod) ──
+    console.warn("[PAUSE-DIAG]", {
+        reason: "idle_empty",
+        activeQueueLen: activeQueue.length,
+        hasBoardedPassengers,
+        hasOptimisticBoarded: hasOptimisticBoardedRequests(),
+        liveRequestsLen: liveRequests.filter(r => r.elevator_id === elevator.id).length,
+        liveRequestsStatuses: liveRequests.filter(r => r.elevator_id === elevator.id).map(r => r.status),
+        elevatorDir: elevator.direction,
+        elevatorLoad: elevator.current_load,
+        elevatorFloorId: elevator.current_floor_id,
+        sessionId: elevator.operator_session_id,
+        heartbeatAt: elevator.operator_session_heartbeat_at,
+        now: new Date().toISOString(),
+      });
     const idleDetail = { kind: "idle_empty" as const };
     visibleRecommendation = {
       ...recommendation,
@@ -725,20 +833,25 @@ export function OperatorDashboard({
           });
         }}
         onPickupConfirmed={(req) => {
-          // Use persistent broadcast channel (already subscribed) for near-instant delivery.
+          // Broadcast passenger pickup confirmation via pre-subscribed channel
+          // for near-instant delivery (already subscribed → no subscribe wait).
           const ref = broadcastChannelRef.current;
+          let sentViaPreSubbed = false;
           if (ref?.ready && ref.channel && typeof (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send === "function") {
             void (ref.channel as { send: (msg: unknown) => Promise<unknown> }).send({
               type: "broadcast",
               event: "request_boarded",
               payload: { requestIds: [req.id] },
             });
-          } else {
-            // Fallback: create a one-shot channel (slower but still works)
-            const client = createClient();
-            if (client) {
-              broadcastPassengerRequestBoarded(client, projectId, [req.id]);
-            }
+            sentViaPreSubbed = true;
+          }
+          // Belt-and-suspenders: ALSO send via one-shot channel as backup.
+          // The pre-subscribed channel is fast but might miss if the passenger
+          // just refreshed or the channel subscription lapsed. The one-shot
+          // channel creates a fresh subscribe (500ms–5s) but is more reliable.
+          const client = createClient();
+          if (client) {
+            broadcastPassengerRequestBoarded(client, projectId, [req.id]);
           }
         }}
         onDropoffSuccess={({ requestIds, dropFloorId }) => {

@@ -329,6 +329,20 @@ function revalidateAdminProject(projectId: string) {
 
 const REQUESTS_OPEN_DURING_SERVICE: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"];
 
+/** Legal forward-only status transitions. Terminal statuses (completed, cancelled) have no outgoing edges. */
+const LEGAL_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
+  pending: ["assigned", "boarded", "cancelled"],
+  assigned: ["arriving", "boarded", "pending", "cancelled"],
+  arriving: ["boarded", "pending", "cancelled"],
+  boarded: ["completed", "cancelled"],
+  completed: [],
+  cancelled: [],
+};
+
+function isLegalTransition(from: RequestStatus, to: RequestStatus): boolean {
+  return LEGAL_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
 async function cancelActiveProjectRequests(
   supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
   projectId: string,
@@ -373,8 +387,8 @@ async function cancelActiveProjectRequestsIfNoLiveOperators(
   }
 }
 
-/** Statuts orphelins : demandes actives non embarquées, réassignables. */
-const ORPHAN_REASSIGN_STATUSES: RequestStatus[] = ["pending", "assigned", "arriving"];
+/** Statuts orphelins : demandes actives incluant boarded — un autre opérateur peut déposer les passagers embarqués. */
+const ORPHAN_REASSIGN_STATUSES: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"];
 
 /**
  * Réassigne les demandes orphelines (assignées à l'ascenseur libéré, non boarded)
@@ -1104,6 +1118,15 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
   }
 
   const hasOtherOperator = await reassignOrphanedRequestsToActiveOperator(supabase, projectId, elevatorId);
+  // Reset elevator state on release — ghost load/direction causes PAUSE on next session.
+  const stateReset: Record<string, unknown> = { current_load: 0, direction: "idle" };
+  // Try including manual_full; if the column doesn't exist yet, the update still succeeds for the other fields.
+  const fullReset = { ...stateReset, manual_full: false };
+  const resetResult = await supabase.from("elevators").update(fullReset).eq("id", elevatorId).eq("project_id", projectId);
+  if (resetResult.error) {
+    // Fallback without manual_full (missing column)
+    await supabase.from("elevators").update(stateReset).eq("id", elevatorId).eq("project_id", projectId);
+  }
   await cancelActiveProjectRequestsIfNoLiveOperators(supabase, projectId);
   revalidateAdminProject(projectId);
   return { ok: true as const, message: "Tablette operateur liberee.", hasOtherOperator };
@@ -1156,16 +1179,26 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
     return { ok: false, message: error.message };
   }
 
+  // Reassign orphaned requests (including boarded) before canceling
+  await reassignOrphanedRequestsToActiveOperator(supabase, projectId, elevatorId);
+  // Reset elevator state — ghost load/direction/manual_full causes PAUSE on next session.
+  const stateReset: Record<string, unknown> = { current_load: 0, direction: "idle" };
+  const fullReset = { ...stateReset, manual_full: false };
+  const resetResult = await supabase.from("elevators").update(fullReset).eq("id", elevatorId).eq("project_id", projectId);
+  if (resetResult.error) {
+    await supabase.from("elevators").update(stateReset).eq("id", elevatorId).eq("project_id", projectId);
+  }
   await cancelActiveProjectRequestsIfNoLiveOperators(supabase, projectId);
   revalidateAdminProject(projectId);
   return { ok: true, message: "Tablette desactivee. L’operateur devra reactiver depuis son appareil." };
 }
 
 export async function createPassengerRequest(formData: FormData) {
-  const supabase = await createClient();
   const projectId = String(formData.get("projectId") ?? "");
   const fromFloorId = String(formData.get("fromFloorId") ?? "");
   const toFloorId = String(formData.get("toFloorId") ?? "");
+  console.error("[createPassengerRequest]", { projectId: projectId.slice(0, 8), fromFloorId: fromFloorId.slice(0, 8), toFloorId: toFloorId.slice(0, 8) });
+  const supabase = await createClient();
   const passengerCountRaw = Number(formData.get("passengerCount") ?? 1);
   const priorityRequested = formData.get("priority") === "on";
   const priorityReasonRaw = normalizeText(formData.get("priorityReason"));
@@ -1348,13 +1381,13 @@ export async function createPassengerRequest(formData: FormData) {
         syntheticReservations = [];
         continue;
       }
+      console.error("[createPassengerRequest] NO ELEVATOR ASSIGNED", { reason: assignment.reason, score: assignment.score, onlineCount: elevators.filter(e => e.operator_session_id).length });
       return {
         ok: false,
         message:
           "Aucun ascenseur en ligne n’a assez de places libres pour votre groupe pour le moment. Réessayez dans quelques minutes.",
       };
     }
-
     const chunkSize =
       !capacityEnabled
         ? remainingPassengers
@@ -1420,6 +1453,7 @@ export async function createPassengerRequest(formData: FormData) {
   }
 
   revalidatePath("/operator");
+  console.error("[createPassengerRequest] SUCCESS", { requestId: firstRow.id, status: firstRow.status, elevatorId: firstRow.elevator_id?.slice(0, 8) });
   return {
     ok: true,
     message: "Demande envoyee.",
@@ -1627,6 +1661,24 @@ export async function updateRequestStatus(
     return staleIdsAction();
   }
 
+  // Enforce legal forward-only status transitions.
+  // Terminal statuses (completed, cancelled) must never escape.
+  // Backward transitions (e.g. completed→pending) are rejected.
+  const { data: currentRequest } = await supabase
+    .from("requests")
+    .select("status")
+    .eq("id", requestId)
+    .maybeSingle();
+  const currentStatus = (currentRequest?.status ?? "") as RequestStatus;
+  if (currentStatus && !isLegalTransition(currentStatus, status)) {
+    console.error("[updateRequestStatus] ILLEGAL TRANSITION", { requestId, from: currentStatus, to: status });
+    return { ok: false, message: `Transition ${currentStatus}→${status} non autorisee.` };
+  }
+  if (!currentStatus) {
+    console.warn("[updateRequestStatus] REQUEST NOT FOUND", { requestId, targetStatus: status });
+  }
+  console.log("[updateRequestStatus]", { requestId, from: currentStatus || "(not found)", to: status, elevatorId: options?.assignElevatorId });
+
   const updates: Record<string, unknown> = {
     status,
     updated_at: new Date().toISOString(),
@@ -1672,12 +1724,15 @@ export async function updateRequestStatus(
     .select("id")
     .maybeSingle();
 
-  if (error) {
+    if (error) {
+    console.error("[updateRequestStatus] DB UPDATE ERROR", { requestId, status, error: error.message });
     return { ok: false, message: error.message };
   }
   if (!updatedRequest) {
+    console.error("[updateRequestStatus] DB UPDATE NO ROW", { requestId, status });
     return { ok: false, message: "Impossible de mettre a jour cette demande." };
   }
+  console.log("[updateRequestStatus] SUCCESS", { requestId, status });
 
   if (status === "cancelled" && options?.cancelRelatedSplit) {
     const group = options.cancelRelatedSplit;
