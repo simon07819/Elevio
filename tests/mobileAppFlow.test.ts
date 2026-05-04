@@ -23,6 +23,7 @@ const APP_PRICING = readFileSync(join(root, "app/app-pricing/page.tsx"), "utf8")
 const APP_PRICING_SCREEN = readFileSync(join(root, "components/mobile/AppPricingScreen.tsx"), "utf8");
 const MOBILE_AUTH = readFileSync(join(root, "lib/mobileAuth.ts"), "utf8");
 const HOME = readFileSync(join(root, "app/page.tsx"), "utf8");
+const HOME_CONTENT = readFileSync(join(root, "components/public/HomeContent.tsx"), "utf8");
 const WEB_PRICING = readFileSync(join(root, "app/pricing/page.tsx"), "utf8");
 const OPERATOR = readFileSync(join(root, "app/operator/page.tsx"), "utf8");
 
@@ -156,7 +157,9 @@ test("mobile: signUpMobile creates account with onboarding data", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 test("mobile: web landing page / is NOT the welcome screen", () => {
   assert.doesNotMatch(HOME, /WelcomeScreen/, "home page is NOT WelcomeScreen");
-  assert.match(HOME, /PublicNav/, "home page uses PublicNav (web nav)");
+  assert.match(HOME, /HomeContent/, "home page renders HomeContent");
+  assert.match(HOME_CONTENT, /PublicNav/, "HomeContent uses PublicNav (web nav)");
+  assert.match(HOME_CONTENT, /useCapacitorRedirect/, "HomeContent uses Capacitor redirect hook");
 });
 
 test("mobile: web /pricing is NOT the app-pricing screen", () => {
@@ -171,4 +174,46 @@ test("mobile: /operator page unchanged", () => {
   assert.match(OPERATOR, /OperatorWorkspace/, "OperatorWorkspace in operator page");
   assert.doesNotMatch(OPERATOR, /WelcomeScreen/, "no WelcomeScreen in operator page");
   assert.doesNotMatch(OPERATOR, /OnboardingFlow/, "no OnboardingFlow in operator page");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 7. Capacitor iOS entry = /welcome
+// ═══════════════════════════════════════════════════════════════════════════
+const CAPACITOR_CONFIG = readFileSync(join(root, "capacitor.config.ts"), "utf8");
+const APP_DELEGATE = readFileSync(join(root, "ios/App/App/AppDelegate.swift"), "utf8");
+const CAP_REDIRECT_HOOK = readFileSync(join(root, "hooks/useCapacitorRedirect.ts"), "utf8");
+const OUT_INDEX = readFileSync(join(root, "out/index.html"), "utf8");
+const IOS_PUBLIC_INDEX = readFileSync(join(root, "ios/App/App/public/index.html"), "utf8");
+
+test("capacitor: config uses server.url from env (production Vercel URL)", () => {
+  assert.match(CAPACITOR_CONFIG, /CAPACITOR_SERVER_URL/, "dev server URL from env");
+  assert.match(CAPACITOR_CONFIG, /NEXT_PUBLIC_SITE_URL/, "production URL from env");
+});
+
+test("capacitor: useCapacitorRedirect hook exists", () => {
+  assert.match(CAP_REDIRECT_HOOK, /isNativePlatform/, "checks Capacitor.isNativePlatform");
+  assert.match(CAP_REDIRECT_HOOK, /\/welcome/, "redirects to /welcome");
+  assert.match(CAP_REDIRECT_HOOK, /router\.replace/, "uses router.replace (no history)");
+});
+
+test("capacitor: HomeContent uses Capacitor redirect", () => {
+  assert.match(HOME_CONTENT, /useCapacitorRedirect/, "imports redirect hook");
+  assert.match(HOME_CONTENT, /ready/, "checks ready state before rendering");
+});
+
+test("capacitor: AppDelegate navigates to /welcome on iOS launch", () => {
+  assert.match(APP_DELEGATE, /\/welcome/, "navigates to /welcome");
+  assert.match(APP_DELEGATE, /CAPBridgeViewController/, "accesses Capacitor bridge");
+  assert.match(APP_DELEGATE, /evaluateJavaScript/, "uses JS evaluation for navigation");
+});
+
+test("capacitor: out/index.html fallback redirects Capacitor to /welcome", () => {
+  assert.match(OUT_INDEX, /Capacitor/, "checks for Capacitor global");
+  assert.match(OUT_INDEX, /\/welcome/, "redirects to /welcome");
+  assert.match(OUT_INDEX, /isNativePlatform/, "checks isNativePlatform");
+});
+
+test("capacitor: ios/App/App/public/index.html fallback also redirects", () => {
+  assert.match(IOS_PUBLIC_INDEX, /Capacitor/, "checks for Capacitor global");
+  assert.match(IOS_PUBLIC_INDEX, /\/welcome/, "redirects to /welcome");
 });
