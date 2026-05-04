@@ -1,0 +1,174 @@
+/**
+ * Mobile app entry flow tests.
+ *
+ * Verifies:
+ * - Welcome screen exists at /welcome
+ * - Onboarding flow at /onboarding
+ * - In-app pricing at /app-pricing
+ * - Mobile auth abstraction exists (signInWithApple mock)
+ * - Web vitrine remains intact (/, /pricing)
+ * - /operator unchanged
+ */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import test from "node:test";
+import assert from "node:assert/strict";
+
+const root = process.cwd();
+const WELCOME = readFileSync(join(root, "app/welcome/page.tsx"), "utf8");
+const WELCOME_SCREEN = readFileSync(join(root, "components/mobile/WelcomeScreen.tsx"), "utf8");
+const ONBOARDING = readFileSync(join(root, "app/onboarding/page.tsx"), "utf8");
+const ONBOARDING_FLOW = readFileSync(join(root, "components/mobile/OnboardingFlow.tsx"), "utf8");
+const APP_PRICING = readFileSync(join(root, "app/app-pricing/page.tsx"), "utf8");
+const APP_PRICING_SCREEN = readFileSync(join(root, "components/mobile/AppPricingScreen.tsx"), "utf8");
+const MOBILE_AUTH = readFileSync(join(root, "lib/mobileAuth.ts"), "utf8");
+const HOME = readFileSync(join(root, "app/page.tsx"), "utf8");
+const WEB_PRICING = readFileSync(join(root, "app/pricing/page.tsx"), "utf8");
+const OPERATOR = readFileSync(join(root, "app/operator/page.tsx"), "utf8");
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 1. Welcome screen at /welcome
+// ═══════════════════════════════════════════════════════════════════════════
+test("mobile: /welcome page exists", () => {
+  assert.match(WELCOME, /WelcomeScreen/, "WelcomeScreen imported");
+});
+
+test("mobile: welcome has Apple sign-in button", () => {
+  assert.match(WELCOME_SCREEN, /Continuer avec Apple/, "Apple button text");
+  assert.match(WELCOME_SCREEN, /Apple/, "Apple icon");
+});
+
+test("mobile: welcome has email sign-in", () => {
+  assert.match(WELCOME_SCREEN, /Se connecter/, "email sign-in button");
+  assert.match(WELCOME_SCREEN, /signInMobile/, "calls signInMobile");
+});
+
+test("mobile: welcome links to onboarding and pricing", () => {
+  assert.match(WELCOME_SCREEN, /\/onboarding/, "link to onboarding");
+  assert.match(WELCOME_SCREEN, /\/app-pricing/, "link to in-app pricing");
+});
+
+test("mobile: welcome has operator/passager/admin shortcuts", () => {
+  assert.match(WELCOME_SCREEN, /\/operator/, "operator shortcut");
+  assert.match(WELCOME_SCREEN, /\/scan/, "passenger shortcut");
+  assert.match(WELCOME_SCREEN, /\/admin\/login/, "admin shortcut");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 2. Onboarding flow at /onboarding
+// ═══════════════════════════════════════════════════════════════════════════
+test("mobile: /onboarding page exists", () => {
+  assert.match(ONBOARDING, /OnboardingFlow/, "OnboardingFlow imported");
+});
+
+test("mobile: onboarding has 4 steps: account, company, role, plan", () => {
+  assert.match(ONBOARDING_FLOW, /"account"/, "account step");
+  assert.match(ONBOARDING_FLOW, /"company"/, "company step");
+  assert.match(ONBOARDING_FLOW, /"role"/, "role step");
+  assert.match(ONBOARDING_FLOW, /"plan"/, "plan step");
+});
+
+test("mobile: onboarding collects firstName, lastName, email, password", () => {
+  assert.match(ONBOARDING_FLOW, /firstName/, "firstName field");
+  assert.match(ONBOARDING_FLOW, /lastName/, "lastName field");
+  assert.match(ONBOARDING_FLOW, /email/, "email field");
+  assert.match(ONBOARDING_FLOW, /password/, "password field");
+});
+
+test("mobile: onboarding collects company, phone, siteCount", () => {
+  assert.match(ONBOARDING_FLOW, /company/, "company field");
+  assert.match(ONBOARDING_FLOW, /phone/, "phone field");
+  assert.match(ONBOARDING_FLOW, /siteCount/, "siteCount field");
+});
+
+test("mobile: onboarding has 3 roles: owner, admin, operator", () => {
+  assert.match(ONBOARDING_FLOW, /"owner"/, "owner role");
+  assert.match(ONBOARDING_FLOW, /"admin"/, "admin role");
+  assert.match(ONBOARDING_FLOW, /"operator"/, "operator role");
+});
+
+test("mobile: onboarding has 4 plans", () => {
+  assert.match(ONBOARDING_FLOW, /"free"/, "free plan");
+  assert.match(ONBOARDING_FLOW, /"starter"/, "starter plan");
+  assert.match(ONBOARDING_FLOW, /"pro"/, "pro plan");
+  assert.match(ONBOARDING_FLOW, /"enterprise"/, "enterprise plan");
+});
+
+test("mobile: onboarding calls signUpMobile on completion", () => {
+  assert.match(ONBOARDING_FLOW, /signUpMobile/, "calls signUpMobile");
+});
+
+test("mobile: onboarding has progress dots", () => {
+  assert.match(ONBOARDING_FLOW, /w-8 bg-yellow-400/, "active progress dot");
+  assert.match(ONBOARDING_FLOW, /w-4 bg-white/, "inactive progress dot");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3. In-app pricing at /app-pricing
+// ═══════════════════════════════════════════════════════════════════════════
+test("mobile: /app-pricing page exists", () => {
+  assert.match(APP_PRICING, /AppPricingScreen/, "AppPricingScreen imported");
+});
+
+test("mobile: app-pricing shows 4 plans (mobile-optimized stacked layout)", () => {
+  assert.match(APP_PRICING_SCREEN, /free/, "free plan");
+  assert.match(APP_PRICING_SCREEN, /starter/, "starter plan");
+  assert.match(APP_PRICING_SCREEN, /pro/, "pro plan");
+  assert.match(APP_PRICING_SCREEN, /enterprise/, "enterprise plan");
+  assert.match(APP_PRICING_SCREEN, /space-y-4/, "stacked layout (space-y-4)");
+});
+
+test("mobile: app-pricing links to onboarding and contact-enterprise", () => {
+  assert.match(APP_PRICING_SCREEN, /\/onboarding/, "link to onboarding");
+  assert.match(APP_PRICING_SCREEN, /\/contact-enterprise/, "link to contact-enterprise");
+});
+
+test("mobile: app-pricing has back link to /welcome", () => {
+  assert.match(APP_PRICING_SCREEN, /\/welcome/, "back to welcome");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 4. Mobile auth abstraction
+// ═══════════════════════════════════════════════════════════════════════════
+test("mobile: signInWithApple exists (mock)", () => {
+  assert.match(MOBILE_AUTH, /signInWithApple/, "signInWithApple function");
+  assert.match(MOBILE_AUTH, /bientôt disponible/, "Apple auth mock message");
+});
+
+test("mobile: signInMobile routes by role", () => {
+  assert.match(MOBILE_AUTH, /signInMobile/, "signInMobile function");
+  assert.match(MOBILE_AUTH, /role === .operator./, "checks operator role");
+  assert.match(MOBILE_AUTH, /\/operator/, "redirects operator to /operator");
+  assert.match(MOBILE_AUTH, /\/admin\/projects/, "redirects admin to /admin/projects");
+});
+
+test("mobile: signUpMobile creates account with onboarding data", () => {
+  assert.match(MOBILE_AUTH, /signUpMobile/, "signUpMobile function");
+  assert.match(MOBILE_AUTH, /firstName/, "firstName in signup");
+  assert.match(MOBILE_AUTH, /lastName/, "lastName in signup");
+  assert.match(MOBILE_AUTH, /company/, "company in signup");
+  assert.match(MOBILE_AUTH, /account_role/, "account_role in signup metadata");
+  assert.match(MOBILE_AUTH, /selected_plan/, "selected_plan in signup metadata");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 5. Web vitrine NOT broken
+// ═══════════════════════════════════════════════════════════════════════════
+test("mobile: web landing page / is NOT the welcome screen", () => {
+  assert.doesNotMatch(HOME, /WelcomeScreen/, "home page is NOT WelcomeScreen");
+  assert.match(HOME, /PublicNav/, "home page uses PublicNav (web nav)");
+});
+
+test("mobile: web /pricing is NOT the app-pricing screen", () => {
+  assert.doesNotMatch(WEB_PRICING, /AppPricingScreen/, "web pricing is NOT AppPricingScreen");
+  assert.match(WEB_PRICING, /PublicNav/, "web pricing uses PublicNav (web nav)");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. /operator unchanged
+// ═══════════════════════════════════════════════════════════════════════════
+test("mobile: /operator page unchanged", () => {
+  assert.match(OPERATOR, /OperatorWorkspace/, "OperatorWorkspace in operator page");
+  assert.doesNotMatch(OPERATOR, /WelcomeScreen/, "no WelcomeScreen in operator page");
+  assert.doesNotMatch(OPERATOR, /OnboardingFlow/, "no OnboardingFlow in operator page");
+});
