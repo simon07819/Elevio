@@ -392,7 +392,7 @@ async function cancelActiveProjectRequestsIfNoLiveOperators(
     const now = new Date().toISOString();
     logAction("cancelActiveNoLiveOps", { projectId, cancellableStatuses, reason: "zero_live_operators" });
     // Cancel all active requests for this project
-    await supabase
+    const { error: cancelError } = await supabase
       .from("requests")
       .update({
         status: "cancelled",
@@ -402,18 +402,27 @@ async function cancelActiveProjectRequestsIfNoLiveOperators(
       })
       .eq("project_id", projectId)
       .in("status", cancellableStatuses);
+    if (cancelError) {
+      logAction("cancelActiveNoLiveOps_ERROR", { projectId, error: cancelError.message });
+    }
     // Clear skip markers on all remaining requests for this project
-    await supabase
+    const { error: skipClearError } = await supabase
       .from("requests")
       .update({ skipped_by_elevator_id: null, skipped_at: null })
       .eq("project_id", projectId)
       .not("skipped_by_elevator_id", "is", null);
+    if (skipClearError) {
+      logAction("cancelActiveNoLiveOps_skipClear_ERROR", { projectId, error: skipClearError.message });
+    }
     // Reset ALL elevators — no operator means no load, no direction, no manual_full
     const stateReset: Record<string, unknown> = { current_load: 0, direction: "idle" };
     const fullReset = { ...stateReset, manual_full: false };
     const resetResult = await supabase.from("elevators").update(fullReset).eq("project_id", projectId);
     if (resetResult.error) {
-      await supabase.from("elevators").update(stateReset).eq("project_id", projectId);
+      const fallbackResult = await supabase.from("elevators").update(stateReset).eq("project_id", projectId);
+      if (fallbackResult.error) {
+        logAction("cancelActiveNoLiveOps_elevReset_ERROR", { projectId, error: fallbackResult.error.message });
+      }
     }
   }
 }

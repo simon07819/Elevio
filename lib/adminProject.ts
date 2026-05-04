@@ -166,7 +166,7 @@ export async function getAdminProjectData(
         });
         // Cancel ALL orphaned requests in DB (AWAIT so DB is consistent)
         const cancelNow = new Date().toISOString();
-        await supabase
+        const { error: cancelError } = await supabase
           .from("requests")
           .update({
             status: "cancelled",
@@ -176,12 +176,18 @@ export async function getAdminProjectData(
           })
           .eq("project_id", projectId)
           .in("status", cancellableStatuses);
+        if (cancelError) {
+          logAction("autoCleanupOrphanedRequests_ERROR", { projectId, error: cancelError.message });
+        }
         // Clear skip markers
-        await supabase
+        const { error: skipClearError } = await supabase
           .from("requests")
           .update({ skipped_by_elevator_id: null, skipped_at: null })
           .eq("project_id", projectId)
           .not("skipped_by_elevator_id", "is", null);
+        if (skipClearError) {
+          logAction("autoCleanupOrphanedRequests_skipClear_ERROR", { projectId, error: skipClearError.message });
+        }
         // Reset all elevators
         const stateReset: Record<string, unknown> = { current_load: 0, direction: "idle" };
         const fullReset = { ...stateReset, manual_full: false };

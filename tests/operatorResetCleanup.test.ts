@@ -122,3 +122,44 @@ test("reset: force-release API also triggers cleanup", () => {
   assert.match(forceRelease, /current_load: 0/, "resets elevator load");
   assert.match(forceRelease, /direction: "idle"/, "resets elevator direction");
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Scenario 13-18: Additional hardening — poll filter, router.refresh, error checking
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("reset: poll query filters by sessionStartedAt (gte created_at)", () => {
+  // The poll now adds .gte("created_at", sessionStartIso) to prevent
+  // old requests from being returned even if DB cancellation failed
+  assert.match(DASHBOARD, /gte\("created_at"/, "poll filters by created_at >= session start");
+  assert.match(DASHBOARD, /sessionStartIso/, "session start ISO computed for poll filter");
+});
+
+test("reset: poll useEffect depends on sessionStartedAt", () => {
+  // When sessionStartedAt changes, the poll restarts with the new filter
+  assert.match(DASHBOARD, /sessionStartedAt\]/, "sessionStartedAt in poll useEffect deps");
+});
+
+test("reset: router.refresh() called after successful activation", () => {
+  // After activation, SSR data is refreshed so the requests prop is up-to-date
+  assert.match(WORKSPACE, /router\.refresh\(\)/, "router.refresh called after activation");
+});
+
+test("reset: router.refresh() called after successful release", () => {
+  // After release, SSR data is refreshed so stale requests don't linger
+  const matches = WORKSPACE.match(/router\.refresh\(\)/g);
+  assert.ok(matches && matches.length >= 2, "router.refresh called in at least 2 places (activate + release)");
+});
+
+test("reset: cancelActiveProjectRequestsIfNoLiveOperators checks for DB errors", () => {
+  assert.match(ACTIONS, /cancelError/, "checks cancel error");
+  assert.match(ACTIONS, /cancelActiveNoLiveOps_ERROR/, "logs cancel error");
+  assert.match(ACTIONS, /skipClearError/, "checks skip clear error");
+  assert.match(ACTIONS, /cancelActiveNoLiveOps_skipClear_ERROR/, "logs skip clear error");
+});
+
+test("reset: SSR auto-cleanup also checks for DB errors", () => {
+  assert.match(ADMIN_PROJECT, /cancelError/, "SSR checks cancel error");
+  assert.match(ADMIN_PROJECT, /autoCleanupOrphanedRequests_ERROR/, "SSR logs cancel error");
+  assert.match(ADMIN_PROJECT, /skipClearError/, "SSR checks skip clear error");
+  assert.match(ADMIN_PROJECT, /autoCleanupOrphanedRequests_skipClear_ERROR/, "SSR logs skip clear error");
+});

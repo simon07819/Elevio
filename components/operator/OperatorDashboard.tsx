@@ -192,14 +192,22 @@ export function OperatorDashboard({
 
     async function syncRequests() {
       if (!client) return;
-      const { data } = await client
+      let query = client
         .from("requests")
         .select(
           "id,project_id,elevator_id,from_floor_id,to_floor_id,direction,passenger_count,original_passenger_count,remaining_passenger_count,split_required,priority,priority_reason,note,status,sequence_number,wait_started_at,created_at,updated_at,completed_at,skipped_by_elevator_id,skipped_at",
         )
         .eq("project_id", projectId)
         .eq("elevator_id", elevator.id)
-        .in("status", OPERATOR_VISIBLE_REQUEST_STATUSES)
+        .in("status", OPERATOR_VISIBLE_REQUEST_STATUSES);
+      // ── SESSION FILTER: Only fetch requests created after this session started.
+      // Prevents old requests from a previous session (that should have been
+      // cancelled but maybe weren't due to silent DB errors) from being returned.
+      if (sessionStartedAt) {
+        const sessionStartIso = new Date(new Date(sessionStartedAt).getTime() - 5000).toISOString();
+        query = query.gte("created_at", sessionStartIso);
+      }
+      const { data } = await query
         .order("created_at", { ascending: false })
         .limit(250);
 
@@ -268,7 +276,7 @@ export function OperatorDashboard({
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [elevator.id, projectId]);
+  }, [elevator.id, projectId, sessionStartedAt]);
 
   const floorById = useMemo(() => new Map(floors.map((floor) => [floor.id, floor])), [floors]);
   const elevatorRequests = useMemo(

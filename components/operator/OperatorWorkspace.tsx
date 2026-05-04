@@ -467,6 +467,9 @@ export function OperatorWorkspace({
         if (result.ok) {
           trackOperatorActivated(project.id, elevator.id);
           structuredLog("Analytics", "operator_activated", { projectId: project.id, elevatorId: elevator.id });
+          // Refresh SSR data so the requests prop reflects the DB state
+          // after the previous session's cleanup
+          router.refresh();
         } else {
           captureError(new Error("activate_failed: " + result.message), {
             projectId: project.id,
@@ -592,6 +595,8 @@ export function OperatorWorkspace({
           trackOperatorReleased(project.id, releasingElevator.id);
           structuredLog("Analytics", "operator_released", { projectId: project.id, elevatorId: releasingElevator.id, releaseDurationMs: Math.round(releaseDurationMs) });
           logAction("releaseSuccess", { elevatorId: releasingElevator.id, hasOtherOperator: result.hasOtherOperator });
+          // Refresh SSR data so the requests prop is updated after cleanup
+          router.refresh();
           // Broadcast release to other operators always.
           // Broadcast to passengers only if no other operator is available
           // (otherwise requests were reassigned — passenger should NOT be reset).
