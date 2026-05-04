@@ -109,11 +109,11 @@ test("mobile: onboarding has 3 roles: owner, admin, operator", () => {
   assert.match(ONBOARDING_FLOW, /"operator"/, "operator role");
 });
 
-test("mobile: onboarding has 4 plans", () => {
-  assert.match(ONBOARDING_FLOW, /"free"/, "free plan");
-  assert.match(ONBOARDING_FLOW, /"starter"/, "starter plan");
-  assert.match(ONBOARDING_FLOW, /"pro"/, "pro plan");
-  assert.match(ONBOARDING_FLOW, /"enterprise"/, "enterprise plan");
+test("mobile: onboarding has 3 plans (Free removed)", () => {
+  assert.doesNotMatch(ONBOARDING_FLOW, /id: "free"/, "free plan removed from onboarding");
+  assert.match(ONBOARDING_FLOW, /id: "starter"/, "starter plan");
+  assert.match(ONBOARDING_FLOW, /id: "pro"/, "pro plan");
+  assert.match(ONBOARDING_FLOW, /id: "enterprise"/, "enterprise plan");
 });
 
 test("mobile: onboarding calls signUpMobile on completion", () => {
@@ -132,11 +132,11 @@ test("mobile: /app-pricing page exists", () => {
   assert.match(APP_PRICING, /AppPricingScreen/, "AppPricingScreen imported");
 });
 
-test("mobile: app-pricing shows 4 plans (mobile-optimized stacked layout)", () => {
-  assert.match(APP_PRICING_SCREEN, /free/, "free plan");
-  assert.match(APP_PRICING_SCREEN, /starter/, "starter plan");
-  assert.match(APP_PRICING_SCREEN, /pro/, "pro plan");
-  assert.match(APP_PRICING_SCREEN, /enterprise/, "enterprise plan");
+test("mobile: app-pricing shows 3 plans (Free removed)", () => {
+  assert.doesNotMatch(APP_PRICING_SCREEN, /id: "free"/, "free plan removed");
+  assert.match(APP_PRICING_SCREEN, /id: "starter"/, "starter plan");
+  assert.match(APP_PRICING_SCREEN, /id: "pro"/, "pro plan");
+  assert.match(APP_PRICING_SCREEN, /id: "enterprise"/, "enterprise plan");
   assert.match(APP_PRICING_SCREEN, /space-y-4/, "stacked layout (space-y-4)");
 });
 

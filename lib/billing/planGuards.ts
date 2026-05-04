@@ -10,13 +10,13 @@
  *   if (!guard.ok) return guard;
  */
 
-import { PLANS, type PlanId, type PlanLimit } from "./plans";
+import { PLANS, effectivePlanId, type PlanId, type PlanLimit } from "./plans";
 import { createClient } from "@/lib/supabase/server";
 
-/** Get the plan ID for a user from user_entitlements. Defaults to "free". */
+/** Get the plan ID for a user from user_entitlements. Defaults to "starter". */
 export async function getPlanForUser(userId: string): Promise<PlanId> {
   const supabase = await createClient();
-  if (!supabase) return "free";
+  if (!supabase) return "starter";
 
   const { data } = await supabase
     .from("user_entitlements")
@@ -24,7 +24,8 @@ export async function getPlanForUser(userId: string): Promise<PlanId> {
     .eq("user_id", userId)
     .maybeSingle();
 
-  return (data?.plan as PlanId) ?? "free";
+  const raw = (data?.plan as PlanId) ?? "starter";
+  return effectivePlanId(raw);
 }
 
 /** Count non-archived projects for a user */

@@ -56,21 +56,6 @@ function PlanCard({ name, price, period, description, features, popular, cta, ct
 
 const PLANS: PlanProps[] = [
   {
-    name: "Free",
-    price: "0 $",
-    period: "/ toujours",
-    description: "Essai gratuit — 1 chantier test",
-    features: [
-      "1 chantier test",
-      "1 opérateur",
-      "Demandes limitées",
-      "QR par étage",
-      "Terminal passager",
-    ],
-    cta: "Essayer gratuitement",
-    ctaHref: "/admin/login",
-  },
-  {
     name: "Starter",
     price: "29 $",
     period: "/mois",

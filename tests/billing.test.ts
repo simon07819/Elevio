@@ -188,9 +188,9 @@ test("billing: RevenueCat purchaseProduct returns not-available message", () => 
 // ═══════════════════════════════════════════════════════════════════
 // 13. IAP_PLANS and SALES_PLANS arrays
 // ═══════════════════════════════════════════════════════════════════
-test("billing: IAP_PLANS = [starter, pro], SALES_PLANS = [business, enterprise]", () => {
+test("billing: IAP_PLANS = [starter, pro], SALES_PLANS = [enterprise]", () => {
   assert.match(PLANS, /IAP_PLANS.*"starter".*"pro"/, "IAP_PLANS contains starter + pro");
-  assert.match(PLANS, /SALES_PLANS.*"business".*"enterprise"/, "SALES_PLANS contains business + enterprise");
+  assert.match(PLANS, /SALES_PLANS.*"enterprise"/, "SALES_PLANS contains enterprise");
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -266,8 +266,9 @@ test("billing: createPassengerRequest checks enforceRequestLimit", () => {
 // 17. Free plan has daily request limit
 // ═══════════════════════════════════════════════════════════════════
 
-test("billing: Free plan has maxRequestsPerDay limit", () => {
-  assert.match(PLANS, /maxRequestsPerDay: 20/, "Free maxRequestsPerDay = 20");
+test("billing: Free (legacy) mapped to Starter has no daily request limit", () => {
+  assert.match(PLANS, /effectivePlanId/, "effectivePlanId function maps free → starter");
+  assert.doesNotMatch(PLANS, /free.*maxRequestsPerDay: 20/, "Free no longer has 20 req/day limit");
 });
 
 test("billing: Starter+ plans have no daily request limit", () => {

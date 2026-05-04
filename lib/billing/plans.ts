@@ -1,50 +1,57 @@
 /**
  * Elevio plan definitions and limits.
  *
- * Hybrid model:
- * - Free / Starter / Pro → IAP (Apple, later Google)
- * - Business / Enterprise → Contact sales or activation code
+ * Plans: Starter / Pro / Enterprise
+ * Free is REMOVED from new sign-ups — existing "free" users are
+ * grandfathered as "starter" via backward-compatible mapping.
  */
 
 export type PlanId = "free" | "starter" | "pro" | "business" | "enterprise";
 
 export type BillingPeriod = "monthly" | "annual";
 
+/** Plans visible to users (Free excluded from new sign-ups) */
+export const VISIBLE_PLAN_IDS: PlanId[] = ["starter", "pro", "enterprise"];
+
+/** Legacy "free" maps to "starter" for all limit checks */
+const FREE_EQUIVALENT: PlanId = "starter";
+
 export interface PlanLimit {
-  maxProjects: number | null; // null = unlimited
+  maxProjects: number | null;
   maxOperators: number | null;
-  maxRequestsPerDay: number | null; // null = unlimited
+  maxRequestsPerDay: number | null;
   analytics: "none" | "simple" | "advanced";
   multiOperator: boolean;
   prioritySupport: boolean;
   customContract: boolean;
-  activationCode: boolean; // activated via code, not IAP
+  activationCode: boolean;
 }
 
 export interface Plan {
   id: PlanId;
   label: string;
   description: string;
-  priceMonthly: number | null; // null = contact sales or free
+  priceMonthly: number | null;
   priceAnnual: number | null;
   limits: PlanLimit;
   popular?: boolean;
-  iapAvailable: boolean; // true = can be purchased via App Store
-  contactSales: boolean; // true = requires sales contact
+  iapAvailable: boolean;
+  contactSales: boolean;
 }
 
 export const PLANS: Record<PlanId, Plan> = {
   free: {
+    // LEGACY — not offered to new users. Treated as Starter for all checks.
     id: "free",
-    label: "Free",
-    description: "Essai gratuit — 1 chantier, 1 opérateur",
+    label: "Starter",
+    description: "Petite équipe — 1 chantier, 2 opérateurs",
     priceMonthly: 0,
     priceAnnual: 0,
     limits: {
       maxProjects: 1,
-      maxOperators: 1,
-      maxRequestsPerDay: 20,
-      analytics: "none",
+      maxOperators: 2,
+      maxRequestsPerDay: null,
+      analytics: "simple",
       multiOperator: false,
       prioritySupport: false,
       customContract: false,
@@ -132,19 +139,32 @@ export const PLANS: Record<PlanId, Plan> = {
   },
 };
 
-/** Ordered list for display */
-export const PLAN_ORDER: PlanId[] = ["free", "starter", "pro", "business", "enterprise"];
+/** Ordered list for display (excludes legacy "free") */
+export const PLAN_ORDER: PlanId[] = ["starter", "pro", "enterprise"];
 
 /** IAP-eligible plans (purchasable via App Store) */
 export const IAP_PLANS: PlanId[] = ["starter", "pro"];
 
 /** Plans requiring sales contact or activation code */
-export const SALES_PLANS: PlanId[] = ["business", "enterprise"];
+export const SALES_PLANS: PlanId[] = ["enterprise"];
+
+/** Default plan for new sign-ups */
+export const DEFAULT_PLAN: PlanId = "starter";
+
+/** Resolve legacy "free" to its effective plan */
+export function effectivePlanId(planId: PlanId): PlanId {
+  return planId === "free" ? FREE_EQUIVALENT : planId;
+}
 
 export function getPlan(id: PlanId): Plan {
-  return PLANS[id];
+  return PLANS[effectivePlanId(id)];
 }
 
 export function getPlanLimit(id: PlanId): PlanLimit {
-  return PLANS[id].limits;
+  return PLANS[effectivePlanId(id)].limits;
+}
+
+/** Plans to display in pricing UIs */
+export function getVisiblePlans(): Plan[] {
+  return VISIBLE_PLAN_IDS.map((id) => PLANS[id]);
 }

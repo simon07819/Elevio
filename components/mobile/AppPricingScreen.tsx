@@ -6,22 +6,6 @@ import Link from "next/link";
 
 const PLANS = [
   {
-    id: "free",
-    name: "Free",
-    price: "0 $",
-    period: "pour toujours",
-    desc: "Essai gratuit — 1 chantier test",
-    features: [
-      "1 chantier test",
-      "1 opérateur",
-      "Demandes limitées",
-      "QR par étage",
-      "Terminal passager",
-    ],
-    cta: "Commencer",
-    ctaHref: "/onboarding",
-  },
-  {
     id: "starter",
     name: "Starter",
     price: "29 $",
