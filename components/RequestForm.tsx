@@ -15,6 +15,7 @@ import {
   passengerProjectBroadcastChannel,
 } from "@/lib/passengerNotifyBroadcast";
 import { subscribeToTable, unsubscribe, type ElevatorRealtimePayload } from "@/lib/realtime";
+import { logSync, logAction } from "@/lib/stateResolution";
 import { formatFloorLabel } from "@/lib/utils";
 import { demoProject } from "@/lib/demoData";
 import type { Elevator, Floor, Project, RequestStatus } from "@/types/hoist";
@@ -144,10 +145,12 @@ export function RequestForm({
         { event: PASSENGER_BROADCAST_REQUEST_BOARDED },
         (msg: { payload?: { requestIds?: string[] } | string[] }) => {
           const rid = requestIdRef.current;
-          if (!rid) return;
           const raw = msg.payload;
           const ids = Array.isArray(raw) ? raw : raw?.requestIds;
+          logSync("passengerBroadcast", { event: "request_boarded", rid: rid?.slice(0,8), match: ids?.includes(rid ?? "") });
+          if (!rid) return;
           if (!ids?.includes(rid)) return;
+          logAction("passengerPickupRedirect", { requestId: rid.slice(0,8), source: "broadcast_pre_subbed" });
           clearPassengerPendingRequest(project.id, rid);
           setSubmittedRequest(null);
           router.replace("/");
@@ -158,10 +161,12 @@ export function RequestForm({
         { event: PASSENGER_BROADCAST_QUEUE_CLEARED },
         (msg: { payload?: { requestIds?: string[] } | string[] }) => {
           const rid = requestIdRef.current;
-          if (!rid) return;
           const raw = msg.payload;
           const ids = Array.isArray(raw) ? raw : raw?.requestIds;
+          logSync("passengerBroadcast", { event: "queue_cleared", rid: rid?.slice(0,8), match: ids?.includes(rid ?? "") });
+          if (!rid) return;
           if (!ids?.includes(rid)) return;
+          logAction("passengerQueueCleared", { requestId: rid.slice(0,8), source: "broadcast_pre_subbed" });
           clearPassengerPendingRequest(project.id, rid);
           setSubmittedRequest(null);
           setMessage(t("request.cancelled"));
@@ -172,10 +177,12 @@ export function RequestForm({
         { event: PASSENGER_BROADCAST_REQUEST_CANCELLED },
         (msg: { payload?: { requestIds?: string[] } | string[] }) => {
           const rid = requestIdRef.current;
-          if (!rid) return;
           const raw = msg.payload;
           const ids = Array.isArray(raw) ? raw : raw?.requestIds;
+          logSync("passengerBroadcast", { event: "request_cancelled", rid: rid?.slice(0,8), match: ids?.includes(rid ?? "") });
+          if (!rid) return;
           if (!ids?.includes(rid)) return;
+          logAction("passengerRequestCancelled", { requestId: rid.slice(0,8), source: "broadcast_pre_subbed" });
           clearPassengerPendingRequest(project.id, rid);
           setSubmittedRequest(null);
           setMessage(t("request.cancelledByOperator"));
@@ -463,7 +470,9 @@ export function RequestForm({
       const res = await fetchPassengerResumeSnapshot(project.id, originQr, trackedRequestId);
       if (!res.ok || !res.snapshot) return;
       const snap = res.snapshot;
+      logSync("passengerPollOnce", { requestId: trackedRequestId.slice(0,8), status: snap.status });
       if (snap.status === "boarded") {
+        logAction("passengerPickupRedirect", { requestId: trackedRequestId.slice(0,8), source: "poll" });
         clearPassengerPendingRequest(project.id, trackedRequestId);
         setSubmittedRequest(null);
         router.replace("/");

@@ -10,7 +10,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { isUuid } from "@/lib/utils";
 import { notFound } from "next/navigation";
-import type { Elevator, Floor, HoistRequest, HoistUser, Project } from "@/types/hoist";
+import { logAction } from "@/lib/stateResolution";
+import type { Elevator, Floor, HoistRequest, HoistUser, Project, RequestStatus } from "@/types/hoist";
 
 const PROJECT_SELECT_WITH_CAPACITY =
   "id,owner_id,name,address,active,created_at,updated_at,archived_at,logo_url,service_timezone,priorities_enabled,capacity_enabled";
@@ -138,12 +139,54 @@ export async function getAdminProjectData(
     project_logo_url: profileBranding?.project_logo_url ?? null,
   };
 
+  // ── BUG 1 FIX: Auto-cleanup orphaned requests when zero live operators ──
+  // If this is the operator terminal (activeRequestsOnly) and NO elevator has
+  // a live operator session, cancel pending/assigned/arriving requests and
+  // filter them from the returned data. Boarded passengers are NEVER cancelled.
+  let cleanedRequests = (requests ?? []) as HoistRequest[];
+  if (options?.activeRequestsOnly) {
+    const now = new Date();
+    const elevatorsData = (elevators ?? []) as Elevator[];
+    const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 min
+    const hasLiveOperator = elevatorsData.some((e) =>
+      Boolean(e.operator_session_id) &&
+      e.operator_session_heartbeat_at != null &&
+      (now.getTime() - new Date(e.operator_session_heartbeat_at).getTime()) < STALE_THRESHOLD_MS,
+    );
+
+    if (!hasLiveOperator) {
+      const cancellableStatuses: RequestStatus[] = ["pending", "assigned", "arriving"];
+      const orphaned = cleanedRequests.filter(r => cancellableStatuses.includes(r.status));
+      if (orphaned.length > 0) {
+        logAction("autoCleanupOrphanedRequests", {
+          projectId,
+          orphanedCount: orphaned.length,
+          sparedBoarded: cleanedRequests.filter(r => r.status === "boarded").length,
+        });
+        // Cancel orphaned requests in DB (async — don't block SSR)
+        const now = new Date().toISOString();
+        void supabase
+          .from("requests")
+          .update({
+            status: "cancelled",
+            completed_at: now,
+            updated_at: now,
+            note: "Annule automatiquement: aucun operateur actif.",
+          })
+          .eq("project_id", projectId)
+          .in("status", cancellableStatuses);
+        // Filter out cancelled requests from the response immediately
+        cleanedRequests = cleanedRequests.filter(r => !cancellableStatuses.includes(r.status));
+      }
+    }
+  }
+
   return {
     project: { ...(project as Project), capacity_enabled: (project as Project).capacity_enabled ?? true },
     floors: (floors ?? []) as Floor[],
     elevators: (elevators ?? []) as Elevator[],
     operators: (operators ?? []) as HoistUser[],
-    requests: (requests ?? []) as HoistRequest[],
+    requests: cleanedRequests,
     branding,
   };
 }

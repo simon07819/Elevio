@@ -29,6 +29,7 @@ import { formatStoredTabletLabel, getOperatorDeviceLabel } from "@/lib/deviceLab
 import type { Elevator, Floor, HoistRequest, Project } from "@/types/hoist";
 import { OperatorDashboard } from "@/components/operator/OperatorDashboard";
 import { OperatorTabletSessionsPanel } from "@/components/operator/OperatorTabletSessionsPanel";
+import { logAction } from "@/lib/stateResolution";
 
 function sessionStorageKey(projectId: string) {
   return `elevio-operator-session-id:${projectId}`;
@@ -252,7 +253,10 @@ export function OperatorWorkspace({
       const rows = data as Elevator[];
       const current = localElevatorsRef.current;
       for (const row of rows) {
-        if (activatingElevatorId === row.id || releasingElevatorId === row.id) {
+        // Only skip poll merge for elevators being ACTIVATED (not released).
+        // For releasing: the locallyReleasedElevatorIds handles stale session data;
+        // we want to confirm the DB update as soon as it happens.
+        if (activatingElevatorId === row.id) {
           continue;
         }
         const prev = current.find((e) => e.id === row.id);
@@ -511,6 +515,8 @@ export function OperatorWorkspace({
     // Guard: don't release if another operation is already in progress
     if (activatingElevatorId || releasingElevatorId) return;
 
+    logAction("releaseStart", { elevatorId: selectedElevator.id, elevatorName: selectedElevator.name });
+
     const releasingElevator = selectedElevator;
     const releaseMs = Date.parse(new Date().toISOString());
     window.localStorage.removeItem(elevatorStorageKey(project.id));
@@ -567,6 +573,7 @@ export function OperatorWorkspace({
             ),
           );
         } else {
+          logAction("releaseSuccess", { elevatorId: releasingElevator.id, hasOtherOperator: result.hasOtherOperator });
           // Broadcast release to other operators always.
           // Broadcast to passengers only if no other operator is available
           // (otherwise requests were reassigned — passenger should NOT be reset).

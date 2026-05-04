@@ -164,12 +164,19 @@ export function logState(context: string, data: Record<string, unknown>) {
 
 export function logSync(context: string, data: Record<string, unknown>) {
   if (!shouldLog()) return;
-  console.log(`[Elevio Sync] ${context}`, data);
+  const tag = context.includes("passenger") ? "[Elevio Passenger Sync]" :
+              context.includes("bfcache") || context.includes("visibility") ? "[Elevio Sync]" :
+              "[Elevio Sync]";
+  console.log(`${tag} ${context}`, data);
 }
 
 export function logAction(context: string, data: Record<string, unknown>) {
   if (!shouldLog()) return;
-  console.log(`[Elevio Action] ${context}`, data);
+  const tag = context.includes("Cleanup") || context.includes("Orphaned") ? "[Elevio Cleanup]" :
+              context.includes("release") ? "[Elevio Release]" :
+              context.includes("Pickup") || context.includes("pickup") ? "[Elevio Pickup Redirect]" :
+              "[Elevio Action]";
+  console.log(`${tag} ${context}`, data);
 }
 
 export function logMerge(context: string, data: Record<string, unknown>) {
