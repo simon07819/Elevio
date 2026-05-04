@@ -2,43 +2,27 @@
 
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import type { Elevator, HoistRequest, RequestStatus } from "@/types/hoist";
+import { statusPriority, isTerminalStatus, resolveMerge, logSync, logMerge } from "./stateResolution";
 
 const TERMINAL_REQUEST_STATUSES: RequestStatus[] = ["completed", "cancelled"];
 
-/** Status priority: terminal > boarded > arriving > assigned > pending. Higher-priority status always wins over lower. */
-const STATUS_PRIORITY: Record<RequestStatus, number> = {
-  pending: 0,
-  assigned: 1,
-  arriving: 2,
-  boarded: 3,
-  completed: 4,
-  cancelled: 4,
-};
+/** Re-export statusPriority for backward compatibility. */
+export { statusPriority as STATUS_PRIORITY_NUMBER } from "./stateResolution";
 
-/** Fusionne une ligne du poll operateur avec l\u2019\u00e9tat local : \u00e9vite de r\u00e9injecter une ligne encore \u00ab ouverte \u00bb apr\u00e8s annulation / fin c\u00f4t\u00e9 realtime. Boarded beats pending/assigned. */
+/** Fusionne une ligne du poll operateur avec l'état local : évite de réinjecter une ligne encore « ouverte » après annulation / fin côté realtime. Boarded beats pending/assigned. */
 export function mergeOperatorPollRequest(existing: HoistRequest | undefined, incoming: HoistRequest): HoistRequest {
-  if (!existing) {
-    return incoming;
+  const result = resolveMerge(existing, incoming);
+  if (existing && existing.status !== result.status) {
+    logMerge("mergeOperatorPollRequest", {
+      id: existing.id,
+      fromStatus: existing.status,
+      toStatus: result.status,
+      fromPriority: statusPriority(existing.status),
+      toPriority: statusPriority(result.status),
+      winner: result === existing ? "existing" : "incoming",
+    });
   }
-  const existingTerminal = TERMINAL_REQUEST_STATUSES.includes(existing.status);
-  const incomingTerminal = TERMINAL_REQUEST_STATUSES.includes(incoming.status);
-  if (existingTerminal && !incomingTerminal) {
-    return existing;
-  }
-  if (!existingTerminal && incomingTerminal) {
-    return incoming;
-  }
-  // Higher status priority always wins (boarded > assigned > pending)
-  const existingPriority = STATUS_PRIORITY[existing.status] ?? 0;
-  const incomingPriority = STATUS_PRIORITY[incoming.status] ?? 0;
-  if (existingPriority > incomingPriority) {
-    return existing;
-  }
-  if (incomingPriority > existingPriority) {
-    return incoming;
-  }
-  // Same priority: newer updated_at wins
-  return new Date(incoming.updated_at) >= new Date(existing.updated_at) ? incoming : existing;
+  return result;
 }
 
 /**
@@ -88,6 +72,7 @@ export type ElevatorRealtimePayload = {
 
 export function mergeRealtimeRequest(current: HoistRequest[], payload: RequestRealtimePayload) {
   if (payload.eventType === "DELETE") {
+    logSync("mergeRealtimeRequest", { event: "DELETE", id: payload.old.id });
     return current.filter((request) => request.id !== payload.old.id);
   }
 
@@ -95,12 +80,15 @@ export function mergeRealtimeRequest(current: HoistRequest[], payload: RequestRe
   const exists = current.some((request) => request.id === nextRequest.id);
 
   if (!exists) {
+    logSync("mergeRealtimeRequest", { event: "INSERT", id: nextRequest.id, status: nextRequest.status });
     return [nextRequest, ...current];
   }
 
-  return current.map((request) =>
+  const merged = current.map((request) =>
     request.id === nextRequest.id ? mergeOperatorPollRequest(request, nextRequest) : request,
   );
+  logSync("mergeRealtimeRequest", { event: "UPDATE", id: nextRequest.id, incomingStatus: nextRequest.status });
+  return merged;
 }
 
 /**

@@ -13,6 +13,8 @@
     "tests/**/*.ts",
     "services/elevatorBrain.ts",
     "lib/elevatorRouting.ts",
+    "lib/stateResolution.ts",
+    "lib/realtime.ts",
     "types/**/*.ts"
   ]
 }

@@ -5,6 +5,7 @@ import { Ban, DoorOpen, Pause, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus } from "@/lib/actions";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatDispatchRecommendationReason } from "@/lib/recommendationReason";
+import { resolveRequestState, logAction } from "@/lib/stateResolution";
 import type { DispatchRecommendation, EnrichedRequest } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
@@ -211,6 +212,17 @@ export function RecommendedNextStop({
 
   function pickup() {
     if (!actionRequest) {
+      return;
+    }
+
+    // SAFETY: boarded requests MUST NEVER show pickup button
+    const resolved = resolveRequestState(actionRequest);
+    if (resolved.action !== "pickup") {
+      console.error("[Elevio SAFETY] pickup() called on non-pickup request", {
+        requestId: actionRequest.id,
+        status: actionRequest.status,
+        resolvedAction: resolved.action,
+      });
       return;
     }
 

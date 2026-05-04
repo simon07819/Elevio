@@ -79,9 +79,13 @@ test("validation 3: dropoff echoue → onDropoffFailure restaure status boarded"
 // 4. Realtime update arrive en retard → aucun etat incoherent
 // ---------------------------------------------------------------------------
 test("validation 4: mergeOperatorPollRequest garde le statut terminal si existing est terminal et incoming ne l'est pas", () => {
-  // Cette fonction protege contre l'ecrasement d'un etat terminal (completed/cancelled)
-  // par un event realtime retard qui montre un etat anterieur (pending/assigned).
-  assert.match(REALTIME, /existingTerminal && !incomingTerminal/);
+  // La protection est dans resolveMerge() (lib/stateResolution.ts) :
+  // terminal status (completed/cancelled) wins over non-terminal.
+  // mergeOperatorPollRequest delegates to resolveMerge.
+  const STATE_RESOLUTION = readFileSync(join(root, "lib/stateResolution.ts"), "utf8");
+  assert.match(STATE_RESOLUTION, /existingTerminal && !incomingTerminal/);
+  // mergeOperatorPollRequest must delegate to resolveMerge
+  assert.match(REALTIME, /resolveMerge\(existing, incoming\)/);
   // Le realtime dans OperatorDashboard applique applyOptimisticRequest.
   assert.match(DASHBOARD, /applyOptimisticRequest\(payload\.new\)/);
 });

@@ -19,6 +19,7 @@ import {
   subscribeToTable,
   type RequestRealtimePayload,
 } from "@/lib/realtime";
+import { resolveRequestState, logState, logSync, logAction } from "@/lib/stateResolution";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatDispatchRecommendationReason } from "@/lib/recommendationReason";
 import { formatFloorLabel } from "@/lib/utils";
@@ -114,14 +115,29 @@ export function OperatorDashboard({
   }, [requests]);
 
   // Re-sync requests from SSR props on bfcache restore (browser back/forward)
+  // and on visibility change (tab switch back to operator).
   useEffect(() => {
     const onPageShow = (event: PageTransitionEvent) => {
       if (event.persisted) {
+        logSync("bfcacheRestore", { source: "pageshow" });
         setLiveRequests((current) => mergeRequestsPropIntoLive(current, requests));
       }
     };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        // Force immediate poll to re-sync from DB
+        logSync("visibilityChange", { source: "visibilitychange" });
+        setLiveRequests((current) => mergeRequestsPropIntoLive(current, requests));
+      }
+    };
+
     window.addEventListener("pageshow", onPageShow);
-    return () => window.removeEventListener("pageshow", onPageShow);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [requests]);
 
   useEffect(() => {
@@ -227,6 +243,11 @@ export function OperatorDashboard({
               pollDataLen: (data as HoistRequest[])?.length ?? 0,
               optimisticCount: optimisticRequestsRef.current.size,
               keptLen: kept.length,
+            });
+            logState("pollBoardedChange", {
+              prev: prevBoarded.map(r => ({ id: r.id.slice(0,8), status: r.status, resolved: resolveRequestState(r).action })),
+              next: nextBoarded.map(r => ({ id: r.id.slice(0,8), status: r.status, resolved: resolveRequestState(r).action })),
+              dropped: dropped.map(r => r.id.slice(0,8)),
             });
           }
         }
@@ -488,6 +509,11 @@ export function OperatorDashboard({
     if (activeQueue.length === 0 && liveActivePassengers.length === 0) {
       return;
     }
+    logAction("clearVisibleQueue", {
+      activeQueueLen: activeQueue.length,
+      boardedCount: liveActivePassengers.length,
+      spared: liveRequests.filter(r => r.elevator_id === elevator.id && r.status === "boarded").length,
+    });
     const now = new Date().toISOString();
     const clearedIds = liveRequests
       .filter(
@@ -577,8 +603,10 @@ export function OperatorDashboard({
 
   function cancelMovementRequest(request: EnrichedRequest) {
     if (request.status === "boarded" || cancelingRequestIds.has(request.id)) {
+      logAction("cancelMovementBlocked", { requestId: request.id, status: request.status, reason: request.status === "boarded" ? "boarded passengers cannot be cancelled" : "already cancelling" });
       return;
     }
+    logAction("cancelMovementRequest", { requestId: request.id, fromStatus: request.status, toStatus: "cancelled" });
 
     const now = new Date().toISOString();
     const cancelledRequest: HoistRequest = {
@@ -791,6 +819,7 @@ export function OperatorDashboard({
         operatorElevatorId={elevator.id}
         onPickupSuccess={(req) => {
           const now = new Date().toISOString();
+          logAction("pickupSuccess", { requestId: req.id, fromStatus: req.status, toStatus: "boarded" });
           rememberOptimisticRequest({
             ...req,
             status: "boarded",
@@ -820,6 +849,7 @@ export function OperatorDashboard({
           });
         }}
         onPickupFailure={(req) => {
+          logAction("pickupFailure", { requestId: req.id, rollbackTo: req.status });
           optimisticRequestsRef.current.delete(req.id);
           setLiveRequests((prev) => {
             const next = prev.map((r) =>
@@ -842,6 +872,7 @@ export function OperatorDashboard({
           });
         }}
         onPickupConfirmed={(req) => {
+          logAction("pickupConfirmed", { requestId: req.id, action: resolveRequestState(req).action });
           // Broadcast passenger pickup confirmation via pre-subscribed channel
           // for near-instant delivery (already subscribed → no subscribe wait).
           const ref = broadcastChannelRef.current;
@@ -865,6 +896,7 @@ export function OperatorDashboard({
         }}
         onDropoffSuccess={({ requestIds, dropFloorId }) => {
           const now = new Date().toISOString();
+          logAction("dropoffSuccess", { requestIds, dropFloorId, count: requestIds.length });
           setLiveRequests((prev) => {
             const next = prev.map((r) =>
               requestIds.includes(r.id)

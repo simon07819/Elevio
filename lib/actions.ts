@@ -20,6 +20,7 @@ import type {
 } from "@/types/hoist";
 
 import { elevatorHasOperatorTabletBinding, isOperatorTabletSessionStale } from "@/lib/operatorTablet";
+import { statusPriority, isTerminalStatus, logAction } from "@/lib/stateResolution";
 import {
   analyzePassengerDispatch,
   assertValidTimeZone,
@@ -387,6 +388,7 @@ async function cancelActiveProjectRequestsIfNoLiveOperators(
     // Only cancel pending/assigned/arriving requests.
     const cancellableStatuses: RequestStatus[] = ["pending", "assigned", "arriving"];
     const now = new Date().toISOString();
+    logAction("cancelActiveNoLiveOps", { projectId, cancellableStatuses, spared: ["boarded"] as RequestStatus[] });
     await supabase
       .from("requests")
       .update({
@@ -1692,6 +1694,7 @@ export async function updateRequestStatus(
     console.warn("[updateRequestStatus] REQUEST NOT FOUND", { requestId, targetStatus: status });
   }
   console.log("[updateRequestStatus]", { requestId, from: currentStatus || "(not found)", to: status, elevatorId: options?.assignElevatorId });
+  logAction("updateRequestStatus", { requestId, from: currentStatus || "(not found)", to: status, fromPriority: statusPriority(currentStatus || "pending"), toPriority: statusPriority(status) });
 
   const updates: Record<string, unknown> = {
     status,
