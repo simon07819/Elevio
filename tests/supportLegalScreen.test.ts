@@ -1,24 +1,14 @@
 /**
- * Support & legal screen — targeted tests.
+ * Support & legal screen tests.
  *
- * Bug: App Store requires visible support contact, privacy policy,
- * terms of service, and app version. None of these exist in the app.
- *
- * Fix:
- * - /support page with version, contact email, privacy link, terms link
- * - APP_VERSION single source of truth in lib/version.ts
- * - Env vars NEXT_PUBLIC_SUPPORT_EMAIL, NEXT_PUBLIC_PRIVACY_URL,
- *   NEXT_PUBLIC_TERMS_URL for configuring links
- * - Clear "not yet configured" message when env vars missing
- * - Nav link to /support in AppNavigation
- * - i18n keys for all labels (FR + EN)
- *
- * Tests:
- * 1. Support page exists at app/support/page.tsx
- * 2. Email support visible (env var or fallback message)
- * 3. Privacy policy link visible (env var or fallback message)
- * 4. Terms of service link visible (env var or fallback message)
- * 5. App version displayed from lib/version.ts
+ * Verifies:
+ * - /support has all required sections (passenger, operator, FAQ, safety, data, liability, contact, legal links)
+ * - /legal/privacy exists with structured content
+ * - /legal/terms exists with structured content
+ * - App version displayed
+ * - Support email visible
+ * - Legal links point to /legal/privacy and /legal/terms
+ * - Logo clickable + back button on all legal pages
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -26,56 +16,122 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const root = process.cwd();
+const SUPPORT_PAGE = readFileSync(join(root, "app/support/page.tsx"), "utf8");
+const PRIVACY_PAGE = readFileSync(join(root, "app/legal/privacy/page.tsx"), "utf8");
+const TERMS_PAGE = readFileSync(join(root, "app/legal/terms/page.tsx"), "utf8");
+const VERSION = readFileSync(join(root, "lib/version.ts"), "utf8");
 
-// ---------------------------------------------------------------------------
-// 1. Support page exists at app/support/page.tsx
-// ---------------------------------------------------------------------------
-test("support: page exists with required sections", () => {
-  const page = readFileSync(join(root, "app/support/page.tsx"), "utf8");
-  assert.match(page, /support\.title/, "title i18n key");
-  assert.match(page, /support\.version/, "version section");
-  assert.match(page, /support\.contact/, "contact section");
-  assert.match(page, /support\.privacy/, "privacy section");
-  assert.match(page, /support\.terms/, "terms section");
+// ═══════════════════════════════════════════════════════════════════
+// 1. Support page has all required sections
+// ═══════════════════════════════════════════════════════════════════
+
+test("support: page has passenger section", () => {
+  assert.match(SUPPORT_PAGE, /support\.passenger/, "passenger section");
 });
 
-// ---------------------------------------------------------------------------
-// 2. Email support visible (env var or fallback message)
-// ---------------------------------------------------------------------------
-test("support: email contact with env var + fallback message", () => {
-  const page = readFileSync(join(root, "app/support/page.tsx"), "utf8");
-  assert.match(page, /NEXT_PUBLIC_SUPPORT_EMAIL/, "env var for email");
-  assert.match(page, /mailto:/, "mailto link");
-  assert.match(page, /support\.notConfigured/, "fallback message when not set");
+test("support: page has operator section", () => {
+  assert.match(SUPPORT_PAGE, /support\.operator/, "operator section");
 });
 
-// ---------------------------------------------------------------------------
-// 3. Privacy policy link visible (env var or fallback message)
-// ---------------------------------------------------------------------------
-test("support: privacy policy link with env var + fallback", () => {
-  const page = readFileSync(join(root, "app/support/page.tsx"), "utf8");
-  assert.match(page, /NEXT_PUBLIC_PRIVACY_URL/, "env var for privacy URL");
-  assert.match(page, /support\.privacyLink/, "privacy link label");
-  assert.match(page, /target="_blank"/, "opens in new tab");
+test("support: page has FAQ section", () => {
+  assert.match(SUPPORT_PAGE, /support\.faqSection/, "FAQ section");
+  assert.match(SUPPORT_PAGE, /Je ne vois pas ma demande/, "specific FAQ item");
 });
 
-// ---------------------------------------------------------------------------
-// 4. Terms of service link visible (env var or fallback message)
-// ---------------------------------------------------------------------------
-test("support: terms of service link with env var + fallback", () => {
-  const page = readFileSync(join(root, "app/support/page.tsx"), "utf8");
-  assert.match(page, /NEXT_PUBLIC_TERMS_URL/, "env var for terms URL");
-  assert.match(page, /support\.termsLink/, "terms link label");
+test("support: page has safety section", () => {
+  assert.match(SUPPORT_PAGE, /support\.safetySection/, "safety section");
 });
 
-// ---------------------------------------------------------------------------
-// 5. App version displayed from lib/version.ts
-// ---------------------------------------------------------------------------
-test("support: app version from single source of truth", () => {
-  const version = readFileSync(join(root, "lib/version.ts"), "utf8");
-  assert.match(version, /APP_VERSION/, "APP_VERSION exported");
-  assert.match(version, /\d+\.\d+\.\d+/, "semver format");
+test("support: page has data collection section", () => {
+  assert.match(SUPPORT_PAGE, /support\.dataSection/, "data section");
+  assert.match(SUPPORT_PAGE, /support\.noDataSale/, "no data sale statement");
+});
 
-  const page = readFileSync(join(root, "app/support/page.tsx"), "utf8");
-  assert.match(page, /APP_VERSION/, "version imported and displayed");
+test("support: page has liability section", () => {
+  assert.match(SUPPORT_PAGE, /support\.liabilitySection/, "liability section");
+});
+
+test("support: page has contact section", () => {
+  assert.match(SUPPORT_PAGE, /support\.contactSection|support@elevio\.app/, "contact section");
+  assert.match(SUPPORT_PAGE, /mailto:/, "mailto link");
+});
+
+test("support: page has legal links", () => {
+  assert.match(SUPPORT_PAGE, /\/legal\/privacy/, "privacy link");
+  assert.match(SUPPORT_PAGE, /\/legal\/terms/, "terms link");
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 2. Support page version + logo + back
+// ═══════════════════════════════════════════════════════════════════
+
+test("support: app version displayed from version.ts", () => {
+  assert.match(VERSION, /APP_VERSION/, "APP_VERSION exported");
+  assert.match(VERSION, /\d+\.\d+\.\d+/, "semver format");
+  assert.match(SUPPORT_PAGE, /APP_VERSION/, "version imported and displayed");
+});
+
+test("support: logo clickable and back button present", () => {
+  assert.match(SUPPORT_PAGE, /BrandLogo/, "has logo");
+  assert.match(SUPPORT_PAGE, /href="\/"/, "logo links to /");
+  assert.match(SUPPORT_PAGE, /BackButton/, "has back button");
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 3. Privacy page
+// ═══════════════════════════════════════════════════════════════════
+
+test("legal: /legal/privacy page exists with content", () => {
+  assert.match(PRIVACY_PAGE, /support\.privacyTitle/, "privacy title");
+  assert.match(PRIVACY_PAGE, /Données collectées|collectées/i, "data section");
+  assert.match(PRIVACY_PAGE, /Aucune vente/, "no data sale statement");
+  assert.match(PRIVACY_PAGE, /Conservation|conservation/i, "retention section");
+  assert.match(PRIVACY_PAGE, /Sécurité|sécurité/i, "security section");
+  assert.match(PRIVACY_PAGE, /support@elevio\.app/, "contact email");
+});
+
+test("legal: privacy page has logo + back button", () => {
+  assert.match(PRIVACY_PAGE, /BrandLogo/, "has logo");
+  assert.match(PRIVACY_PAGE, /href="\/"/, "logo links to /");
+  assert.match(PRIVACY_PAGE, /BackButton/, "has back button");
+  assert.match(PRIVACY_PAGE, /fallback.*support/, "back fallback to /support");
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 4. Terms page
+// ═══════════════════════════════════════════════════════════════════
+
+test("legal: /legal/terms page exists with content", () => {
+  assert.match(TERMS_PAGE, /support\.termsTitle/, "terms title");
+  assert.match(TERMS_PAGE, /outil de coordination/, "coordination tool description");
+  assert.match(TERMS_PAGE, /Limitation|limitation/i, "limitation section");
+  assert.match(TERMS_PAGE, /Aucune garantie/, "no warranty statement");
+  assert.match(TERMS_PAGE, /support@elevio\.app/, "contact email");
+});
+
+test("legal: terms page has logo + back button", () => {
+  assert.match(TERMS_PAGE, /BrandLogo/, "has logo");
+  assert.match(TERMS_PAGE, /href="\/"/, "logo links to /");
+  assert.match(TERMS_PAGE, /BackButton/, "has back button");
+  assert.match(TERMS_PAGE, /fallback.*support/, "back fallback to /support");
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// 5. Support visibility rules
+// ═══════════════════════════════════════════════════════════════════
+
+test("support: NOT in MobileBottomNav (passenger-safe)", () => {
+  const MOBILE_NAV = readFileSync(join(root, "components/MobileBottomNav.tsx"), "utf8");
+  assert.doesNotMatch(MOBILE_NAV, /\/support/, "support NOT in mobile bottom nav");
+});
+
+test("support: visible in AppNavigation when showSupport=true", () => {
+  const NAV = readFileSync(join(root, "components/AppNavigation.tsx"), "utf8");
+  assert.match(NAV, /showSupport/, "has showSupport prop");
+  assert.match(NAV, /\/support/, "support link conditional on showSupport");
+});
+
+test("support: AppShell passes showSupport for admin context", () => {
+  const SHELL = readFileSync(join(root, "components/AppShell.tsx"), "utf8");
+  assert.match(SHELL, /showSupport/, "AppShell passes showSupport");
 });

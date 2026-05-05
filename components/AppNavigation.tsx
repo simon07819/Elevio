@@ -9,15 +9,28 @@ const navItems = [
   { href: "/operator", label: "nav.operator" },
   { href: "/admin", label: "nav.admin" },
   { href: "/admin/profile", label: "nav.profile" },
+] satisfies Array<{ href: string; label: TranslationKey }>;
+
+const adminNavItems = [
   { href: "/support", label: "nav.support" },
 ] satisfies Array<{ href: string; label: TranslationKey }>;
 
-export function AppNavigation({ compact = false, showSuperadmin = false }: { compact?: boolean; showSuperadmin?: boolean }) {
+export function AppNavigation({ compact = false, showSuperadmin = false, showSupport = false }: { compact?: boolean; showSuperadmin?: boolean; showSupport?: boolean }) {
   const { t } = useLanguage();
 
   return (
     <nav className={compact ? "flex flex-wrap gap-2" : "no-print flex flex-wrap gap-2"}>
       {navItems.map((item) => (
+        <Link
+          key={item.href}
+          href={item.href}
+          className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-black text-slate-100 transition hover:border-yellow-300/50 hover:text-yellow-200"
+          prefetch={true}
+        >
+          {t(item.label)}
+        </Link>
+      ))}
+      {showSupport && adminNavItems.map((item) => (
         <Link
           key={item.href}
           href={item.href}

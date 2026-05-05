@@ -499,7 +499,7 @@ export function OperatorWorkspace({
         }
       } catch (err) {
         const rollbackMs = Date.parse(new Date().toISOString());
-        setMessage("Impossible d'activer cette tablette. Verifiez la connexion et reessayez.");
+        setMessage(t("operator.activateFailed") || "Impossible d'activer cette tablette.");
         captureError(err, { projectId: project.id, elevatorId: elevator.id, userType: "operator", action: "activate" });
         window.localStorage.removeItem(elevatorStorageKey(project.id));
         setSelectedElevatorId(null);
@@ -615,7 +615,7 @@ export function OperatorWorkspace({
         }
       } catch (err) {
         const rollbackMs = Date.parse(new Date().toISOString());
-        setMessage("Impossible de liberer cette tablette. Verifiez la connexion et reessayez.");
+        setMessage(t("operator.releaseFailed"));
         captureError(err, { projectId: project.id, elevatorId: releasingElevator.id, userType: "operator", action: "release" });
         window.localStorage.setItem(elevatorStorageKey(project.id), releasingElevator.id);
         setSelectedElevatorId(releasingElevator.id);

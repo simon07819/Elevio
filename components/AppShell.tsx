@@ -28,7 +28,6 @@ export async function AppShell({
   userEmail?: string | null;
   userRole?: AccountRole | null;
 }) {
-  // Primary: use pre-computed role from profile (DB-backed)
   // Fallback: fetch profile + user only if role not provided
   let showSuperadmin = false;
   if (userRole) {
@@ -44,6 +43,8 @@ export async function AppShell({
       showSuperadmin = isSuperAdmin(profile, email);
     }
   }
+  // Support link: only for operator/admin/superadmin (not passengers)
+  const showSupport = userRole ? userRole !== "passenger" : showSuperadmin;
 
   return (
     <main className="relative z-10 mx-auto flex min-h-dvh w-full max-w-7xl min-w-0 flex-col overflow-x-clip px-4 py-5 pb-20 sm:pb-16 lg:px-8">
@@ -55,7 +56,7 @@ export async function AppShell({
           <BackButton />
         </div>
         <div className="hidden items-center gap-3 sm:flex">
-          <AppNavigation compact showSuperadmin={showSuperadmin} />
+          <AppNavigation compact showSuperadmin={showSuperadmin} showSupport={showSupport} />
           <LanguageSwitcher />
         </div>
       </header>

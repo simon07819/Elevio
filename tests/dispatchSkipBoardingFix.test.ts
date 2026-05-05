@@ -115,11 +115,11 @@ test("server: boarded→boarded transition is idempotent (ok, not error)", () =>
   // IDEMPOTENT guard: same status returns ok immediately
   assert.match(ACTIONS, /currentStatus === status/, "idempotent check for same status");
   assert.match(ACTIONS, /IDEMPOTENT/, "IDEMPOTENT log tag");
-  // Illegal transitions return ok:true with ignoree message (not ok:false error)
-  assert.match(ACTIONS, /ignoree/, "ignoree message for graceful handling");
-  // The return must be ok: true (not ok: false which would cause UI error)
-  const illegalBlock = ACTIONS.match(/isLegalTransition[\s\S]{0,500}ok: true/s)?.[0] ?? "";
-  assert.ok(illegalBlock.length > 0, "illegal transition block returns ok: true");
+  // Illegal transitions (different statuses) now return ok:false with error message
+  assert.match(ACTIONS, /ok: false.*non autoris/, "illegal transitions return ok:false with error");
+  // The return for idempotent (same status) must still be ok: true
+  const idempotentBlock = ACTIONS.match(/currentStatus === status[\s\S]{0,300}ok: true/s)?.[0] ?? "";
+  assert.ok(idempotentBlock.length > 0, "idempotent same-status block returns ok: true");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

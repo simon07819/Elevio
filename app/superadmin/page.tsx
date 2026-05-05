@@ -1,32 +1,35 @@
 import { requireSuperAdmin } from "@/lib/auth/superadmin";
 import { getSuperadminDashboardData } from "@/lib/superadmin";
 import { getPlatformAnalytics } from "@/lib/analytics";
-import { AppShell } from "@/components/AppShell";
 import { SuperadminAnalyticsDashboard } from "@/components/superadmin/SuperadminAnalyticsDashboard";
+import { getServerLocale, serverT } from "@/lib/i18nServer";
 import {
-  Users, Building2, CreditCard, BarChart3, AlertTriangle, HardHat,
+  Users, CreditCard, BarChart3, AlertTriangle, DollarSign,
 } from "lucide-react";
 import Link from "next/link";
-
-const QUICK_LINKS = [
-  { href: "/superadmin/users", label: "Utilisateurs", icon: Users },
-  { href: "/superadmin/accounts", label: "Compagnies", icon: Building2 },
-  { href: "/superadmin/billing", label: "Abonnements", icon: CreditCard },
-  { href: "/superadmin/metrics", label: "Métriques", icon: BarChart3 },
-  { href: "/superadmin/logs", label: "Logs", icon: AlertTriangle },
-  { href: "/superadmin/support", label: "Support", icon: HardHat },
-];
 
 export const dynamic = "force-dynamic";
 
 export default async function SuperadminDashboardPage() {
-  const { user, profile } = await requireSuperAdmin();
+  const { user } = await requireSuperAdmin();
   const data = await getSuperadminDashboardData();
   const platform = await getPlatformAnalytics(7);
+  const locale = await getServerLocale();
+  const t = (key: Parameters<typeof serverT>[1], values?: Parameters<typeof serverT>[2]) => serverT(locale, key, values);
+
+  const QUICK_LINKS = [
+    { href: "/superadmin/users", label: t("superadmin.clients"), icon: Users },
+    { href: "/superadmin/billing", label: t("superadmin.plansAndPricing"), icon: DollarSign },
+    { href: "/superadmin/metrics", label: t("superadmin.metrics"), icon: BarChart3 },
+    { href: "/superadmin/logs", label: t("superadmin.logs"), icon: AlertTriangle },
+  ];
 
   return (
-    <AppShell userEmail={user.email} userRole={profile.account_role} eyebrow="Superadmin" title="Plateforme Elevio" subtitle={`Connecté en tant que ${user.email}`}>
-      <div className="mb-6 grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+    <>
+      <h1 className="text-2xl font-black text-white mb-1">{t("superadmin.dashboardTitle")}</h1>
+      <p className="text-sm text-slate-400 mb-6">{t("superadmin.loggedInAs", { email: user.email ?? "" })}</p>
+
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {QUICK_LINKS.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
@@ -40,6 +43,6 @@ export default async function SuperadminDashboardPage() {
       </div>
 
       <SuperadminAnalyticsDashboard data={data} platform={platform} />
-    </AppShell>
+    </>
   );
 }

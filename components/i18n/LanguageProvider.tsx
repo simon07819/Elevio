@@ -11,8 +11,9 @@ type LanguageContextValue = {
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
+/** Fallback chain: locale → en → fr → key itself */
 function translate(locale: Locale, key: TranslationKey, values?: Record<string, string | number>) {
-  let text = translations[locale][key] ?? translations.fr[key] ?? key;
+  let text = translations[locale]?.[key] ?? translations.en[key] ?? translations.fr[key] ?? key;
 
   if (values) {
     for (const [name, value] of Object.entries(values)) {
@@ -31,7 +32,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     const stored = window.localStorage.getItem("elevio-locale");
     const tabletLocale = localeFromNavigatorTag(navigator.languages?.[0] ?? navigator.language ?? "");
 
-    if (stored === "fr" || stored === "en") {
+    if (stored === "fr" || stored === "en" || stored === "es") {
       startTransition(() => setLocaleState(stored));
       return;
     }

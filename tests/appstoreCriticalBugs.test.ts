@@ -87,13 +87,14 @@ test("bug13: qr-poster-grid has height:auto to prevent blank page", () => {
 // Bug 14: Support page has all required sections
 test("bug14: support page has all required legal sections", () => {
   const page = readFileSync(join(root, "app/support/page.tsx"), "utf8");
-  assert.match(page, /support\.howToUse/, "how to use section");
-  assert.match(page, /support\.faq/, "FAQ section");
-  assert.match(page, /support\.contact/, "contact section");
-  assert.match(page, /support\.privacy/, "privacy section");
-  assert.match(page, /support\.terms/, "terms section");
-  assert.match(page, /support\.safety/, "safety section");
-  assert.match(page, /support\.liability/, "liability section");
+  assert.match(page, /support\.passenger/, "passenger section");
+  assert.match(page, /support\.operator/, "operator section");
+  assert.match(page, /support\.faqSection/, "FAQ section");
+  assert.match(page, /support\.contactSection|mailto:/, "contact section");
+  assert.match(page, /\/legal\/privacy/, "privacy link");
+  assert.match(page, /\/legal\/terms/, "terms link");
+  assert.match(page, /support\.safetySection/, "safety section");
+  assert.match(page, /support\.liabilitySection/, "liability section");
 });
 
 // Bug 14: i18n keys for all legal sections exist (FR)

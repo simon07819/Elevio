@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
-  Building2,
   CreditCard,
   ScrollText,
   FileText,
@@ -14,23 +13,40 @@ import {
   BarChart3,
   Headset,
   ArrowLeft,
+  Scale,
+  DollarSign,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
+import { useLanguage } from "@/components/i18n/LanguageProvider";
+import type { TranslationKey } from "@/lib/i18n";
 
-const NAV_ITEMS = [
-  { href: "/superadmin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/superadmin/users", label: "Utilisateurs", icon: Users },
-  { href: "/superadmin/accounts", label: "Compagnies", icon: Building2 },
-  { href: "/superadmin/billing", label: "Abonnements", icon: CreditCard },
-  { href: "/superadmin/metrics", label: "Métriques", icon: BarChart3 },
-  { href: "/superadmin/logs", label: "Logs", icon: ScrollText },
-  { href: "/superadmin/support", label: "Support", icon: Headset },
-  { href: "/superadmin/content", label: "Contenu", icon: FileText },
-  { href: "/superadmin/settings", label: "Configuration", icon: Settings },
-];
+type NavSection = { section: TranslationKey };
+type NavLink = { href: string; label: TranslationKey; icon: typeof LayoutDashboard };
+type NavItem = NavSection | NavLink;
+
+function NAV_ITEMS(t: (k: TranslationKey) => string): NavItem[] {
+  return [
+    { section: "superadmin.platform" },
+    { href: "/superadmin", label: "superadmin.dashboard", icon: LayoutDashboard },
+    { href: "/superadmin/users", label: "superadmin.clients", icon: Users },
+    { href: "/superadmin/billing", label: "superadmin.plansAndPricing", icon: DollarSign },
+    { href: "/superadmin/accounts", label: "superadmin.subscriptions", icon: CreditCard },
+    { section: "superadmin.metrics" },
+    { href: "/superadmin/metrics", label: "superadmin.platformMetrics", icon: BarChart3 },
+    { href: "/superadmin/logs", label: "superadmin.logs", icon: ScrollText },
+    { section: "superadmin.supportSection" },
+    { href: "/superadmin/support/inbox", label: "superadmin.supportMessages", icon: Headset },
+    { href: "/superadmin/support", label: "superadmin.supportContent", icon: FileText },
+    { href: "/superadmin/legal", label: "superadmin.legalContent", icon: Scale },
+    { section: "superadmin.configuration" },
+    { href: "/superadmin/settings", label: "superadmin.platformSettings", icon: Settings },
+  ];
+}
 
 export function SuperadminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { t } = useLanguage();
+  const navItems = NAV_ITEMS(t);
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-white">
@@ -43,15 +59,23 @@ export function SuperadminShell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="mb-6 flex items-center gap-2">
           <Shield size={24} className="text-yellow-400" />
-          <span className="text-lg font-black text-yellow-400">SUPERADMIN</span>
+          <span className="text-lg font-black text-yellow-400">{t("superadmin.badge")}</span>
         </div>
         <nav className="flex-1 space-y-1">
-          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || (href !== "/superadmin" && pathname.startsWith(href));
+          {navItems.map((item, i) => {
+            if ("section" in item) {
+              return (
+                <p key={`s-${i}`} className="mt-4 mb-1 px-3 text-[10px] font-black uppercase tracking-[0.25em] text-slate-600">
+                  {t(item.section)}
+                </p>
+              );
+            }
+            const active = pathname === item.href || (item.href !== "/superadmin" && pathname.startsWith(item.href));
+            const Icon = item.icon;
             return (
               <Link
-                key={href}
-                href={href}
+                key={item.href}
+                href={item.href}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
                   active
                     ? "bg-yellow-400/15 text-yellow-400"
@@ -59,7 +83,7 @@ export function SuperadminShell({ children }: { children: React.ReactNode }) {
                 }`}
               >
                 <Icon size={18} />
-                {label}
+                {t(item.label)}
               </Link>
             );
           })}
@@ -70,7 +94,7 @@ export function SuperadminShell({ children }: { children: React.ReactNode }) {
             className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-400 transition hover:bg-white/5 hover:text-white"
           >
             <ArrowLeft size={18} />
-            Back to app
+            {t("superadmin.backToApp")}
           </Link>
         </div>
       </aside>

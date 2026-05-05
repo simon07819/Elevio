@@ -64,7 +64,7 @@ export default async function OperatorPage() {
           <BrandLogo size="sm" priority clickable />
         </div>
         <div className="hidden flex-wrap items-center justify-end gap-2 sm:flex">
-          <AppNavigation compact showSuperadmin={showSuperadmin} />
+          <AppNavigation compact showSuperadmin={showSuperadmin} showSupport />
           <LanguageSwitcher />
         </div>
         <div className="flex items-center gap-2 sm:hidden">

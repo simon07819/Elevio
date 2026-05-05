@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, CheckCircle2, Loader2, MessageSquare, PauseCircle, UserCheck, XCircle } from "lucide-react";
 import { advanceRequestStatus, createRequestEvent } from "@/lib/actions";
@@ -86,6 +86,7 @@ export function RequestCard({
 }) {
   const [currentStatus, setCurrentStatus] = useState<RequestStatus>(request.status);
   const [advancing, setAdvancing] = useState(false);
+  const preAdvanceStatus = useRef<RequestStatus>(request.status);
   const router = useRouter();
   const { t } = useLanguage();
   const DirectionIcon = request.direction === "up" ? ArrowUp : ArrowDown;
@@ -96,6 +97,7 @@ export function RequestCard({
   function advance(status: RequestStatus) {
     if (advancing) return; // prevent double-click
     setAdvancing(true);
+    preAdvanceStatus.current = currentStatus;
     // Optimistic: update UI immediately, fire-and-forget server call
     setCurrentStatus(status);
     void advanceRequestStatus(request.id, status)
@@ -103,13 +105,13 @@ export function RequestCard({
         if (result.ok) {
           router.refresh();
         } else {
-          // Rollback on server error
-          setCurrentStatus(request.status);
+          // Rollback on server error using ref (not stale closure)
+          setCurrentStatus(preAdvanceStatus.current);
         }
       })
       .catch(() => {
         // Rollback on exception
-        setCurrentStatus(request.status);
+        setCurrentStatus(preAdvanceStatus.current);
       })
       .finally(() => setAdvancing(false));
   }
@@ -171,10 +173,10 @@ export function RequestCard({
             </div>
           )}
 
-          {!isTerminal && (
+          {!isTerminal && currentStatus !== "boarded" && (
             <>
               <button
-                onClick={() => createRequestEvent(request.id, "partial_boarded", "Prise partielle signalee par l'operateur.")}
+                onClick={() => createRequestEvent(request.id, "partial_boarded", t("requestCard.partial"))}
                 className="rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white"
               >
                 {t("requestCard.partial")}

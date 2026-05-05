@@ -1,6 +1,13 @@
 "use client";
 
 import { useLanguage } from "@/components/i18n/LanguageProvider";
+import type { Locale } from "@/lib/i18n";
+
+const LOCALE_OPTIONS: { code: Locale; labelKey: "common.french" | "common.english" | "common.spanish" }[] = [
+  { code: "fr", labelKey: "common.french" },
+  { code: "en", labelKey: "common.english" },
+  { code: "es", labelKey: "common.spanish" },
+];
 
 export function LanguageSwitcher({ light = false }: { light?: boolean }) {
   const { locale, setLocale, t } = useLanguage();
@@ -17,14 +24,14 @@ export function LanguageSwitcher({ light = false }: { light?: boolean }) {
 
   return (
     <div className={`no-print flex items-center gap-0.5 rounded-full border p-1 ${containerClass}`} aria-label={t("common.language")}>
-      {(["fr", "en"] as const).map((option) => (
+      {LOCALE_OPTIONS.map((option) => (
         <button
-          key={option}
+          key={option.code}
           type="button"
-          onClick={() => setLocale(option)}
-          className={locale === option ? activeClass : inactiveClass}
+          onClick={() => setLocale(option.code)}
+          className={locale === option.code ? activeClass : inactiveClass}
         >
-          {option === "fr" ? t("common.french") : t("common.english")}
+          {t(option.labelKey)}
         </button>
       ))}
     </div>

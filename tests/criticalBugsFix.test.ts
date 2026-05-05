@@ -213,8 +213,7 @@ test("superadmin: /superadmin/metrics redirects to /admin/metrics", () => {
 
 test("superadmin: dashboard is platform-focused (no chantier/client language)", () => {
   const DASHBOARD = readFileSync(join(root, "app/superadmin/page.tsx"), "utf8");
-  assert.match(DASHBOARD, /Plateforme Elevio/, "title is Plateforme Elevio");
-  assert.match(DASHBOARD, /Compagnies actives|Utilisateurs/, "platform metrics, not client projects");
+  assert.match(DASHBOARD, /superadmin\.dashboardTitle/, "dashboard title is platform-focused");
   assert.doesNotMatch(DASHBOARD, /Chantiers actifs/, "no chantier language");
 });
 
@@ -223,13 +222,13 @@ test("superadmin: support page editable via site_settings", () => {
   assert.match(SUPPORT_PAGE, /requireSuperAdmin/, "requires superadmin");
   assert.match(SUPPORT_PAGE, /SuperadminSupportEditor/, "renders support editor");
   assert.match(SUPPORT_PAGE, /support_email/, "edits support_email");
-  assert.match(SUPPORT_PAGE, /faq_content/, "edits faq_content");
+  assert.match(SUPPORT_PAGE, /support_faq_json|faq_content/, "edits FAQ");
 });
 
-test("superadmin: public /support reads from site_settings", () => {
+test("superadmin: public /support is premium structured page with legal links", () => {
   const PUBLIC_SUPPORT = readFileSync(join(root, "app/support/page.tsx"), "utf8");
-  assert.match(PUBLIC_SUPPORT, /getSiteSettings/, "reads from site_settings");
-  assert.match(PUBLIC_SUPPORT, /support_email/, "uses support_email from DB");
-  assert.match(PUBLIC_SUPPORT, /faq_content/, "uses faq_content from DB");
-  assert.match(PUBLIC_SUPPORT, /support_phone/, "uses support_phone from DB");
+  assert.match(PUBLIC_SUPPORT, /support@elevio\.app/, "shows support email");
+  assert.match(PUBLIC_SUPPORT, /\/legal\/privacy/, "links to privacy page");
+  assert.match(PUBLIC_SUPPORT, /\/legal\/terms/, "links to terms page");
+  assert.match(PUBLIC_SUPPORT, /APP_VERSION/, "shows app version");
 });

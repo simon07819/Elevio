@@ -1780,10 +1780,7 @@ export async function updateRequestStatus(
   }
   if (currentStatus && !isLegalTransition(currentStatus, status)) {
     console.error("[updateRequestStatus] ILLEGAL TRANSITION", { requestId, from: currentStatus, to: status });
-    // ── GUARD: Don't surface illegal transition errors to the user ──
-    // If a double-pickup happens (boarded→boarded), treat as idempotent
-    // and return ok so the UI doesn't show an error or get stuck.
-    return { ok: true, message: `Transition ${currentStatus}→${status} ignoree (deja a jour).` };
+    return { ok: false, message: `Transition ${currentStatus}→${status} non autorisée.` };
   }
   if (!currentStatus) {
     console.warn("[updateRequestStatus] REQUEST NOT FOUND", { requestId, targetStatus: status });
