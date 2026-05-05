@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { saveSiteSetting, getSiteSettings, type SiteSetting } from "@/lib/siteSettings";
+import { saveSiteSetting, getSiteSettings } from "@/lib/siteSettings";
+import type { SiteSetting } from "@/lib/siteSettingsConfig";
 
 export function SuperadminContentEditor() {
   const [settings, setSettings] = useState<SiteSetting[]>([]);

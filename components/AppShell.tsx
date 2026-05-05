@@ -3,21 +3,46 @@ import type { ReactNode } from "react";
 import { AppNavigation } from "@/components/AppNavigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { getCurrentUser, getCurrentProfile } from "@/lib/auth";
+import { isSuperAdmin, isSuperAdminProfile } from "@/lib/auth/superadmin";
+import type { AccountRole } from "@/lib/profile";
 
-export function AppShell({
+export async function AppShell({
   children,
   eyebrow = "Elevio",
   title,
   subtitle,
-  /** Masque titre/sous-titre à l’impression (ex. page Codes QR : n’imprimer que les affiches). */
   noPrintTitleSection,
+  /** Pre-computed user email (avoids a second Supabase call if the page already fetched the user). */
+  userEmail,
+  /** Pre-computed account role from profile (primary source for superadmin check). */
+  userRole,
 }: {
   children: ReactNode;
   eyebrow?: ReactNode;
   title?: ReactNode;
   subtitle?: ReactNode;
   noPrintTitleSection?: boolean;
+  userEmail?: string | null;
+  userRole?: AccountRole | null;
 }) {
+  // Primary: use pre-computed role from profile (DB-backed)
+  // Fallback: fetch profile + user only if role not provided
+  let showSuperadmin = false;
+  if (userRole) {
+    showSuperadmin = userRole === "superadmin";
+  } else {
+    const profile = await getCurrentProfile();
+    if (isSuperAdminProfile(profile)) {
+      showSuperadmin = true;
+    } else {
+      // Bootstrap fallback: check email if DB not yet migrated
+      const resolvedUser = userEmail ? null : await getCurrentUser();
+      const email = userEmail ?? resolvedUser?.email ?? null;
+      showSuperadmin = isSuperAdmin(profile, email);
+    }
+  }
+
   return (
     <main className="relative z-10 mx-auto flex min-h-dvh w-full max-w-7xl min-w-0 flex-col overflow-x-clip px-4 py-5 pb-16 sm:px-6 lg:px-8">
       <header className="no-print mb-6 flex items-center justify-between gap-4">
@@ -25,12 +50,12 @@ export function AppShell({
           <BrandLogo size="md" priority />
         </Link>
         <div className="hidden items-center gap-3 sm:flex">
-          <AppNavigation compact />
+          <AppNavigation compact showSuperadmin={showSuperadmin} />
           <LanguageSwitcher />
         </div>
       </header>
       <div className="no-print mb-5 flex flex-wrap gap-2 sm:hidden">
-        <AppNavigation compact />
+        <AppNavigation compact showSuperadmin={showSuperadmin} />
         <LanguageSwitcher />
       </div>
 

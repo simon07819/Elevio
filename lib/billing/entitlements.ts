@@ -61,6 +61,31 @@ export function hasAdvancedAnalytics(planId: PlanId): boolean {
   return PLANS[effectivePlanId(planId)].limits.analytics === "advanced";
 }
 
+/** Check if the plan has the premium analytics dashboard */
+export function hasAnalyticsDashboard(planId: PlanId): boolean {
+  return PLANS[effectivePlanId(planId)].limits.analyticsDashboard;
+}
+
+/** Check if the plan shows the efficiency score */
+export function hasEfficiencyScore(planId: PlanId): boolean {
+  return PLANS[effectivePlanId(planId)].limits.efficiencyScore;
+}
+
+/** Check if the plan shows business insight cards */
+export function hasBusinessInsights(planId: PlanId): boolean {
+  return PLANS[effectivePlanId(planId)].limits.businessInsights;
+}
+
+/** Check if the plan shows operator performance section */
+export function hasOperatorPerformance(planId: PlanId): boolean {
+  return PLANS[effectivePlanId(planId)].limits.operatorPerformance;
+}
+
+/** Check if the plan has custom support settings */
+export function hasCustomSupport(planId: PlanId): boolean {
+  return PLANS[effectivePlanId(planId)].limits.customSupport;
+}
+
 /** Check if the plan supports multi-operator */
 export function supportsMultiOperator(planId: PlanId): boolean {
   return PLANS[effectivePlanId(planId)].limits.multiOperator;

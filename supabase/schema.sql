@@ -81,7 +81,7 @@ create table if not exists profiles (
   last_name text not null default '',
   company text not null default '',
   phone text not null default '',
-  account_role text not null default 'admin' check (account_role in ('admin', 'superadmin')),
+  account_role text not null default 'admin' check (account_role in ('passenger', 'operator', 'admin', 'superadmin')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -621,7 +621,7 @@ begin
       and r.to_floor_id = vt
       and r.wait_started_at = ws
       and r.original_passenger_count = opc
-      and r.status in ('pending', 'assigned', 'arriving')
+      and r.status in ('pending', 'assigned', 'arriving', 'boarded')
       and r.elevator_id is not null
   ) d;
 
@@ -678,7 +678,7 @@ as $$
       -- Bloque seulement les demandes qui attendent encore un ramassage.
       -- Une demande "boarded" ne doit pas empecher un nouveau scan apres que le
       -- passager a quitte l'ascenseur, meme si la sync de depose arrive en retard.
-      and r.status in ('pending', 'assigned', 'arriving')
+      and r.status in ('pending', 'assigned', 'arriving', 'boarded')
   );
 $$;
 

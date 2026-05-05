@@ -1,9 +1,10 @@
 /**
- * Server-side plan limit enforcement.
+ * Server-side plan limit enforcement + payment status checks.
  *
  * These functions fetch the user's plan from user_entitlements
  * and check against the plan limits BEFORE allowing actions.
- * They return { ok, message } to be used as guards in server actions.
+ * They also verify that the user has an active subscription
+ * (not past_due, expired, or canceled).
  *
  * Usage:
  *   const guard = await enforceProjectLimit(userId);
@@ -12,6 +13,80 @@
 
 import { PLANS, effectivePlanId, type PlanId, type PlanLimit } from "./plans";
 import { createClient } from "@/lib/supabase/server";
+
+/** Subscription statuses that block access */
+const BLOCKING_STATUSES = new Set(["past_due", "expired", "canceled", "incomplete"]);
+
+/** Check if the user has an active subscription (or no subscription needed) */
+export async function getSubscriptionStatus(userId: string): Promise<{
+  hasActiveSubscription: boolean;
+  status: string | null;
+  provider: string | null;
+  planId: PlanId;
+}> {
+  const supabase = await createClient();
+
+  if (!supabase) {
+    return { hasActiveSubscription: true, status: null, provider: null, planId: "starter" };
+  }
+
+  // Get the entitlement plan
+  const { data: entitlement } = await supabase
+    .from("user_entitlements")
+    .select("plan, activated_via")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const planId = effectivePlanId((entitlement?.plan as PlanId) ?? "starter");
+  const activatedVia = entitlement?.activated_via ?? "default";
+
+  // Admin/activation_code users don't need a subscription check
+  if (activatedVia === "admin" || activatedVia === "activation_code") {
+    return { hasActiveSubscription: true, status: "active", provider: activatedVia, planId };
+  }
+
+  // Check for any active subscription
+  const { data: subs } = await supabase
+    .from("subscriptions")
+    .select("status, provider")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (!subs || subs.length === 0) {
+    // No subscription row — could be a new user with starter default
+    // Starter without a subscription: allow (grandfathered)
+    if (planId === "starter") {
+      return { hasActiveSubscription: true, status: "default", provider: null, planId };
+    }
+    // Pro/Enterprise without subscription: block
+    return { hasActiveSubscription: false, status: null, provider: null, planId };
+  }
+
+  // Check if ANY subscription is active
+  const activeSub = subs.find((s) => s.status === "active" || s.status === "trialing");
+  const blockingSub = subs.find((s) => BLOCKING_STATUSES.has(s.status));
+
+  if (activeSub) {
+    return {
+      hasActiveSubscription: true,
+      status: activeSub.status,
+      provider: activeSub.provider,
+      planId,
+    };
+  }
+
+  if (blockingSub) {
+    return {
+      hasActiveSubscription: false,
+      status: blockingSub.status,
+      provider: blockingSub.provider,
+      planId,
+    };
+  }
+
+  // No active, no blocking — probably paused or unknown
+  return { hasActiveSubscription: false, status: subs[0]?.status ?? "unknown", provider: subs[0]?.provider ?? null, planId };
+}
 
 /** Get the plan ID for a user from user_entitlements. Defaults to "starter". */
 export async function getPlanForUser(userId: string): Promise<PlanId> {
@@ -83,6 +158,28 @@ async function countTodayRequests(projectId: string): Promise<number> {
 }
 
 type GuardResult = { ok: true; planId: PlanId } | { ok: false; message: string; planId: PlanId };
+
+/** Enforce payment status — block access if subscription is past_due/expired */
+export async function enforcePaymentStatus(userId: string): Promise<GuardResult> {
+  const { hasActiveSubscription, status, planId } = await getSubscriptionStatus(userId);
+
+  if (hasActiveSubscription) {
+    return { ok: true, planId };
+  }
+
+  const statusMessages: Record<string, string> = {
+    past_due: "Paiement en retard. Mettez à jour votre méthode de paiement pour continuer.",
+    expired: "Abonnement expiré. Renouvelez votre forfait pour continuer.",
+    canceled: "Abonnement annulé. Réactivez votre forfait pour continuer.",
+    incomplete: "Paiement incomplet. Complétez votre achat pour continuer.",
+  };
+
+  return {
+    ok: false,
+    planId,
+    message: statusMessages[status ?? ""] ?? "Aucun abonnement actif. Souscrivez à un forfait pour continuer.",
+  };
+}
 
 /** Enforce project creation limit */
 export async function enforceProjectLimit(userId: string): Promise<GuardResult> {

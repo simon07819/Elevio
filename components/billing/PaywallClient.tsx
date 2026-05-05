@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { Check, Crown, Loader2, Rocket, Sparkles, Zap } from "lucide-react";
-import { PLANS, PLAN_ORDER, IAP_PLANS, SALES_PLANS, type PlanId } from "@/lib/billing/plans";
+import { PLANS, IAP_PLANS, type PlanId } from "@/lib/billing/plans";
 import { activateEnterpriseCode, type ActivationResult } from "@/lib/billing/activation";
 import { purchaseProduct } from "@/lib/billing/revenuecat";
-import { useLanguage } from "@/components/i18n/LanguageProvider";
+import { createStripeCheckout } from "@/lib/billing/checkout";
+import { isIOS } from "@/lib/platform";
 
-function PlanCard({ planId, onSubscribe }: { planId: PlanId; onSubscribe: (planId: PlanId) => void }) {
+function PlanCard({ planId, onSubscribe, isIOSPlatform }: { planId: PlanId; onSubscribe: (planId: PlanId) => void; isIOSPlatform: boolean }) {
   const plan = PLANS[planId];
-  const { t } = useLanguage();
 
   return (
     <div className={`relative flex flex-col rounded-3xl border p-6 ${plan.popular ? "border-sky-400/50 bg-sky-950/30 ring-2 ring-sky-400/30" : "border-white/10 bg-white/5"}`}>
@@ -40,8 +40,12 @@ function PlanCard({ planId, onSubscribe }: { planId: PlanId; onSubscribe: (planI
         <Feature text={`${plan.limits.maxProjects ?? "∞"} chantier${(plan.limits.maxProjects ?? 2) > 1 ? "s" : ""}`} />
         <Feature text={`${plan.limits.maxOperators ?? "∞"} opérateur${(plan.limits.maxOperators ?? 2) > 1 ? "s" : ""}`} />
         {plan.limits.analytics !== "none" && <Feature text={`Analytics ${plan.limits.analytics === "advanced" ? "avancés" : "simples"}`} />}
+        {plan.limits.efficiencyScore && <Feature text="Efficiency score" />}
+        {plan.limits.businessInsights && <Feature text="Business insights" />}
+        {plan.limits.operatorPerformance && <Feature text="Operator performance" />}
         {plan.limits.multiOperator && <Feature text="Multi-opérateur" />}
         {plan.limits.prioritySupport && <Feature text="Support prioritaire" />}
+        {!plan.limits.efficiencyScore && plan.limits.analytics !== "none" && <Feature text="See where time is lost" />}
       </ul>
 
       {plan.iapAvailable ? (
@@ -66,7 +70,7 @@ function Feature({ text }: { text: string }) {
   );
 }
 
-function EnterpriseContactCard() {
+function EnterpriseContactCard({ isIOSPlatform }: { isIOSPlatform: boolean }) {
   return (
     <div className="rounded-3xl border border-amber-400/25 bg-amber-950/20 p-6">
       <div className="flex items-center gap-2 mb-3">
@@ -84,16 +88,19 @@ function EnterpriseContactCard() {
         <Feature text="Activation par code" />
       </ul>
       <div className="grid gap-3 sm:grid-cols-2">
-        <a
-          href="mailto:simon@dsdconstruction.ca?subject=Demande%20devis%20Elevio%20Business"
-          className="touch-target flex items-center justify-center gap-2 rounded-2xl bg-amber-400/15 border border-amber-400/25 px-4 py-3 text-sm font-black text-amber-100 transition hover:bg-amber-400/25 active:scale-[0.98]"
-        >
-          <Sparkles size={16} />
-          Obtenir un devis
-        </a>
+        {/* On iOS: only activation code (no external email link — App Store rule) */}
+        {!isIOSPlatform && (
+          <a
+            href="mailto:simon@dsdconstruction.ca?subject=Demande%20devis%20Elevio%20Business"
+            className="touch-target flex items-center justify-center gap-2 rounded-2xl bg-amber-400/15 border border-amber-400/25 px-4 py-3 text-sm font-black text-amber-100 transition hover:bg-amber-400/25 active:scale-[0.98]"
+          >
+            <Sparkles size={16} />
+            Obtenir un devis
+          </a>
+        )}
         <a
           href="#activation"
-          className="touch-target flex items-center justify-center gap-2 rounded-2xl bg-white/5 border border-white/10 px-4 py-3 text-sm font-black text-slate-300 transition hover:bg-white/10 active:scale-[0.98]"
+          className={`touch-target flex items-center justify-center gap-2 rounded-2xl bg-white/5 border border-white/10 px-4 py-3 text-sm font-black text-slate-300 transition hover:bg-white/10 active:scale-[0.98] ${isIOSPlatform ? "sm:col-span-2" : ""}`}
         >
           Activer avec un code
         </a>
@@ -154,15 +161,47 @@ function ActivationCodeBox() {
   );
 }
 
-export function PaywallClient() {
+export function PaywallClient({ userId, email }: { userId: string; email: string }) {
   const [iapMessage, setIapMessage] = useState<string | null>(null);
+  const iosPlatform = isIOS();
 
   async function handleSubscribe(planId: PlanId) {
-    // Attempt purchase — currently returns "not available" on web
-    const { purchaseProduct } = await import("@/lib/billing/revenuecat");
-    const result = await purchaseProduct(planId === "starter" ? "com.elevio.starter.monthly" : "com.elevio.pro.monthly");
-    if (!result.ok) {
-      setIapMessage(result.error ?? "Abonnements Apple bientôt disponibles.");
+    if (iosPlatform) {
+      // iOS: RevenueCat IAP ONLY — never Stripe
+      const result = await purchaseProduct(planId === "starter" ? "com.elevio.starter.monthly" : "com.elevio.pro.monthly");
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+      setIapMessage(result.error ?? "Erreur d'achat.");
+      setTimeout(() => setIapMessage(null), 5000);
+      return;
+    }
+
+    // Web: try RevenueCat first (in case running native via other means), then Stripe
+    try {
+      const result = await purchaseProduct(planId === "starter" ? "com.elevio.starter.monthly" : "com.elevio.pro.monthly");
+      if (result.ok) {
+        window.location.reload();
+        return;
+      }
+    } catch {
+      // RevenueCat not available on web
+    }
+
+    // Stripe Checkout (web only — blocked on iOS by isIOS guard above)
+    const result = await createStripeCheckout({
+      planId,
+      period: "monthly",
+      userId,
+      email,
+      isIOS: false, // Already blocked above, but pass explicit flag for server-side guard
+    });
+
+    if (result.url) {
+      window.location.href = result.url;
+    } else {
+      setIapMessage(result.error ?? "Paiement non disponible pour le moment.");
       setTimeout(() => setIapMessage(null), 5000);
     }
   }
@@ -185,22 +224,24 @@ export function PaywallClient() {
       {/* IAP plans: Starter + Pro */}
       <div className="grid gap-6 mb-8 sm:grid-cols-2">
         {IAP_PLANS.map((planId) => (
-          <PlanCard key={planId} planId={planId} onSubscribe={handleSubscribe} />
+          <PlanCard key={planId} planId={planId} onSubscribe={handleSubscribe} isIOSPlatform={iosPlatform} />
         ))}
       </div>
 
       {/* Business + Enterprise */}
       <div className="mb-8">
-        <EnterpriseContactCard />
+        <EnterpriseContactCard isIOSPlatform={iosPlatform} />
       </div>
 
       {/* Activation code */}
       <ActivationCodeBox />
 
-      {/* Free plan note */}
-      <p className="mt-6 text-center text-xs font-bold text-slate-500">
-        Le plan Free (1 chantier, 1 opérateur) est actif par défaut. Aucune carte requise.
-      </p>
+      {/* No "pay on website" text on iOS — App Store rule 3.1.1 */}
+      {!iosPlatform && (
+        <p className="mt-6 text-center text-xs font-bold text-slate-500">
+          Le plan Starter (1 chantier, 2 opérateurs) est actif par défaut. Aucune carte requise.
+        </p>
+      )}
     </div>
   );
 }

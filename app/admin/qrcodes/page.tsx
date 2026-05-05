@@ -10,7 +10,7 @@ export default async function AdminQRCodesPage({
 }: {
   searchParams: Promise<{ projectId?: string }>;
 }) {
-  await requireAdmin();
+  const { user, profile } = await requireAdmin();
   const { projectId } = await searchParams;
   const { projects } = await getProjects();
   const selectedProject = projects.find((project) => project.id === projectId) ?? projects.find((project) => project.active) ?? projects[0];
@@ -18,6 +18,8 @@ export default async function AdminQRCodesPage({
 
   return (
     <AppShell
+      userEmail={user.email}
+      userRole={profile.account_role}
       eyebrow={<T k="admin.eyebrow" />}
       title={<T k="qr.title" />}
       subtitle={<T k="qr.pageSubtitle" />}

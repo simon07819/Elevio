@@ -14,6 +14,8 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Elevio uses the camera to scan QR codes on construction floors to request elevator service.</string>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>

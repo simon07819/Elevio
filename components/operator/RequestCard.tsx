@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, CheckCircle2, Loader2, MessageSquare, PauseCircle, UserCheck, XCircle } from "lucide-react";
 import { advanceRequestStatus, createRequestEvent } from "@/lib/actions";
@@ -85,7 +85,7 @@ export function RequestCard({
   recommended?: boolean;
 }) {
   const [currentStatus, setCurrentStatus] = useState<RequestStatus>(request.status);
-  const [isPending, startTransition] = useTransition();
+  const [advancing, setAdvancing] = useState(false);
   const router = useRouter();
   const { t } = useLanguage();
   const DirectionIcon = request.direction === "up" ? ArrowUp : ArrowDown;
@@ -94,13 +94,24 @@ export function RequestCard({
   const isTerminal = currentStatus === "completed" || currentStatus === "cancelled";
 
   function advance(status: RequestStatus) {
-    startTransition(async () => {
-      const result = await advanceRequestStatus(request.id, status);
-      if (result.ok) {
-        setCurrentStatus(status);
-        router.refresh();
-      }
-    });
+    if (advancing) return; // prevent double-click
+    setAdvancing(true);
+    // Optimistic: update UI immediately, fire-and-forget server call
+    setCurrentStatus(status);
+    void advanceRequestStatus(request.id, status)
+      .then((result) => {
+        if (result.ok) {
+          router.refresh();
+        } else {
+          // Rollback on server error
+          setCurrentStatus(request.status);
+        }
+      })
+      .catch(() => {
+        // Rollback on exception
+        setCurrentStatus(request.status);
+      })
+      .finally(() => setAdvancing(false));
   }
 
   return (
@@ -147,12 +158,12 @@ export function RequestCard({
         <div className="grid grid-cols-3 gap-2 lg:w-[420px]">
           {meta.nextStatus ? (
             <button
-              disabled={isPending}
+              disabled={advancing}
               onClick={() => advance(meta.nextStatus as RequestStatus)}
-              className="touch-target col-span-3 flex items-center justify-center gap-2 rounded-xl bg-yellow-300 px-3 py-3 text-sm font-black text-slate-950 transition disabled:opacity-60 disabled:cursor-wait"
+              className="touch-target col-span-3 flex items-center justify-center gap-2 rounded-xl bg-yellow-300 px-3 py-3 text-sm font-black text-slate-950 transition active:scale-[0.98] disabled:opacity-60 disabled:cursor-wait"
             >
-              {isPending ? <Loader2 size={16} className="anim-spinner" /> : <UserCheck className="mx-auto mb-1" size={16} />}
-              {isPending ? "…" : (meta.nextLabel ? t(meta.nextLabel) : null)}
+              {advancing ? <Loader2 size={16} className="anim-spinner" /> : <UserCheck className="mx-auto mb-1" size={16} />}
+              {advancing ? "…" : (meta.nextLabel ? t(meta.nextLabel) : null)}
             </button>
           ) : (
             <div className="col-span-3 rounded-xl bg-white/10 px-3 py-3 text-center text-sm font-black text-slate-300">

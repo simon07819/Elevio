@@ -51,7 +51,24 @@ interface ElevioErrorContext {
   requestId?: string;
   userType?: UserType;
   action?: string;
+  userId?: string;
+  path?: string;
+  statusCode?: number;
   [key: string]: unknown;
+}
+
+function mapActionToCategory(action?: string): string {
+  if (!action) return "general";
+  const a = action.toLowerCase();
+  if (a.includes("dispatch")) return "dispatch";
+  if (a.includes("auth") || a.includes("login") || a.includes("signin")) return "auth";
+  if (a.includes("billing") || a.includes("plan") || a.includes("subscription")) return "billing";
+  if (a.includes("sync") || a.includes("realtime") || a.includes("poll")) return "sync";
+  if (a.includes("api") || a.includes("webhook")) return "api";
+  if (a.includes("operator") || a.includes("activate") || a.includes("release")) return "operator";
+  if (a.includes("passenger") || a.includes("request")) return "passenger";
+  if (a.includes("ui") || a.includes("render")) return "ui";
+  return "general";
 }
 
 export function captureError(error: unknown, context: ElevioErrorContext = {}) {
@@ -60,6 +77,27 @@ export function captureError(error: unknown, context: ElevioErrorContext = {}) {
     message: error instanceof Error ? error.message : String(error),
     ...context,
   });
+
+  // Client-side: POST to /api/errors to persist in app_errors table
+  if (typeof window !== "undefined") {
+    fetch("/api/errors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.stack ?? error.message : String(error),
+        category: mapActionToCategory(context.action),
+        level: "error",
+        projectId: context.projectId,
+        path: context.path,
+        statusCode: context.statusCode,
+        metadata: context,
+      }),
+    }).catch(() => {
+      // Fire-and-forget, failure is non-critical
+    });
+  }
+
   if (initialized && SentryLib) {
     try {
       SentryLib.withScope((scope: typeof SentryLib.Scope) => {

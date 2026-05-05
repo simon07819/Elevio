@@ -21,7 +21,8 @@ const LOGS_PAGE = fs.readFileSync(path.join(ROOT, "app/superadmin/logs/page.tsx"
 const CONTENT_PAGE = fs.readFileSync(path.join(ROOT, "app/superadmin/content/page.tsx"), "utf-8");
 const SETTINGS_PAGE = fs.readFileSync(path.join(ROOT, "app/superadmin/settings/page.tsx"), "utf-8");
 const SUPERADMIN_ACTIONS = fs.readFileSync(path.join(ROOT, "lib/superadminActions.ts"), "utf-8");
-const SITE_SETTINGS = fs.readFileSync(path.join(ROOT, "lib/siteSettings.ts"), "utf-8");
+const SITE_SETTINGS = fs.readFileSync(path.join(ROOT, "lib/siteSettingsConfig.ts"), "utf-8");
+const SITE_SETTINGS_ACTIONS = fs.readFileSync(path.join(ROOT, "lib/siteSettings.ts"), "utf-8");
 
 // ═══════════════════════════════════════════════════════════════════
 // 1. Free plan removed
@@ -88,9 +89,10 @@ describe("Superadmin auth", () => {
     assert.match(SUPERADMIN_AUTH, /redirect.*admin\/login/, "redirects to /admin/login");
   });
 
-  test("canAccessSuperAdmin checks email", () => {
+  test("canAccessSuperAdmin checks profile role + email fallback", () => {
     assert.match(SUPERADMIN_AUTH, /canAccessSuperAdmin/, "canAccessSuperAdmin exists");
-    assert.match(SUPERADMIN_AUTH, /isSuperAdminEmail/, "uses isSuperAdminEmail");
+    assert.match(SUPERADMIN_AUTH, /isSuperAdmin/, "uses isSuperAdmin (profile + email)");
+    assert.match(SUPERADMIN_AUTH, /isSuperAdminProfile/, "checks profile.role as primary");
   });
 
   test("no UI to create superadmin", () => {
@@ -114,8 +116,9 @@ describe("Superadmin routes", () => {
 
   test("dashboard page exists with cards", () => {
     assert.match(DASHBOARD, /getSuperadminDashboardData/, "dashboard fetches data");
-    assert.match(DASHBOARD, /Nouveaux comptes|activeAccounts/, "has account card");
-    assert.match(DASHBOARD, /Chantiers|activeProjects/, "has projects card");
+    const DASH_COMPONENT = fs.readFileSync(path.join(ROOT, "components/superadmin/SuperadminAnalyticsDashboard.tsx"), "utf-8");
+    assert.match(DASH_COMPONENT, /total_users|Nouveaux comptes/, "has account/user card");
+    assert.match(DASH_COMPONENT, /active_projects|Compagnies/, "has companies/projects card");
   });
 
   test("/superadmin/users page exists", () => {
@@ -178,8 +181,8 @@ describe("Site settings", () => {
   });
 
   test("saveSiteSetting server action exists", () => {
-    assert.match(SITE_SETTINGS, /saveSiteSetting/, "saveSiteSetting exists");
-    assert.match(SITE_SETTINGS, /"use server"/, "is a server action");
+    assert.match(SITE_SETTINGS_ACTIONS, /saveSiteSetting/, "saveSiteSetting exists");
+    assert.match(SITE_SETTINGS_ACTIONS, /"use server"/, "is a server action");
   });
 });
 

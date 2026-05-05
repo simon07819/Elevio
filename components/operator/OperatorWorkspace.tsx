@@ -10,7 +10,7 @@ import {
   heartbeatOperatorElevator,
   releaseOperatorElevator,
 } from "@/lib/actions";
-import { trackOperatorActivated, trackOperatorReleased } from "@/lib/analytics";
+import { trackOperatorActivated, trackOperatorReleased } from "@/lib/analyticsEvents";
 import { captureError } from "@/lib/errorTracking";
 import { startReleaseToActivateTimer } from "@/lib/performanceMonitor";
 import { structuredLog } from "@/lib/structuredLogger";

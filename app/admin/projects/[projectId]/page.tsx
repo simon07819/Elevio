@@ -10,12 +10,14 @@ export default async function AdminProjectDetailPage({
 }: {
   params: Promise<{ projectId: string }>;
 }) {
-  await requireAdmin();
+  const { user, profile } = await requireAdmin();
   const { projectId } = await params;
   const data = await getAdminProjectData(projectId);
 
   return (
     <AppShell
+      userEmail={user.email}
+      userRole={profile.account_role}
       eyebrow={<T k="admin.projectEyebrow" />}
       title={<T k="admin.configureProject" values={{ name: data.project.name }} />}
       subtitle={<T k="admin.projectSubtitle" />}

@@ -24,6 +24,7 @@
     "@capacitor/cli": "^8.3.1",
     "@capacitor/core": "^8.3.1",
     "@capacitor/ios": "^8.3.1",
+    "@revenuecat/purchases-capacitor": "^13.0.1",
     "@sentry/nextjs": "^10.51.0",
     "@supabase/ssr": "latest",
     "@supabase/supabase-js": "latest",
@@ -34,7 +35,8 @@
     "posthog-js": "^1.372.8",
     "qrcode": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "stripe": "^22.1.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

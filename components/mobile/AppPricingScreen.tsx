@@ -3,42 +3,49 @@
 import { BrandLogo } from "@/components/BrandLogo";
 import { Check, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { isIOS } from "@/lib/platform";
+import { purchaseProduct } from "@/lib/billing/revenuecat";
+import { useState } from "react";
 
 const PLANS = [
   {
     id: "starter",
     name: "Starter",
-    price: "29 $",
+    price: "199 $",
     period: "/mois",
-    desc: "Petite équipe — 1 chantier actif",
+    desc: "Reduce wait times — 1 chantier actif",
     features: [
       "1 chantier actif",
       "2 opérateurs",
       "QR par étage",
       "Terminal opérateur",
-      "Logs simples",
+      "See where time is lost",
+      "Heures de pointe & étages",
       "Support courriel",
     ],
     cta: "S'abonner",
     ctaHref: "/onboarding?plan=starter",
+    productId: "com.elevio.starter.monthly" as const,
   },
   {
     id: "pro",
     name: "Pro",
-    price: "79 $",
+    price: "499 $",
     period: "/mois",
-    desc: "Multi-chantiers — dispatch intelligent",
+    desc: "Optimize operator performance — dispatch intelligent",
     features: [
-      "Jusqu'à 5 chantiers",
-      "Opérateurs illimités",
+      "Jusqu'à 3 chantiers",
+      "10 opérateurs",
       "Dispatch intelligent",
-      "Mode Plein",
-      "Sauter un passage",
-      "Métriques avancées",
-      "Support prioritaire",
+      "Mode Plein & sauter passage",
+      "Efficiency score & insights",
+      "Operator performance metrics",
+      "Identify peak congestion",
+      "Prove productivity gains",
     ],
     cta: "S'abonner",
     ctaHref: "/onboarding?plan=pro",
+    productId: "com.elevio.pro.monthly" as const,
     popular: true,
   },
   {
@@ -46,14 +53,16 @@ const PLANS = [
     name: "Enterprise",
     price: "Sur mesure",
     period: "",
-    desc: "Grands chantiers — multi-sites",
+    desc: "Prove productivity gains — multi-sites, SLA",
     features: [
       "Chantiers illimités",
-      "Multi-sites",
-      "Support priorité",
-      "Rapports avancés",
+      "Opérateurs illimités",
+      "Rapports avancés multi-sites",
+      "Company-wide reporting",
+      "Custom support & onboarding",
       "Intégrations personnalisées",
       "Code d'activation",
+      "SLA garanti",
     ],
     cta: "Contacter",
     ctaHref: "/contact-enterprise",
@@ -61,6 +70,28 @@ const PLANS = [
 ];
 
 export function AppPricingScreen() {
+  const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState<string | null>(null);
+  const iosPlatform = isIOS();
+
+  async function handleIAPPurchase(planId: string, productId: string) {
+    setLoading(planId);
+    setMessage(null);
+    try {
+      const result = await purchaseProduct(productId as "com.elevio.starter.monthly" | "com.elevio.pro.monthly");
+      if (result.ok) {
+        window.location.reload();
+      } else {
+        setMessage(result.error ?? "Erreur d'achat.");
+        setTimeout(() => setMessage(null), 5000);
+      }
+    } catch {
+      setMessage("Erreur d'achat. Réessayez.");
+      setTimeout(() => setMessage(null), 5000);
+    } finally {
+      setLoading(null);
+    }
+  }
   return (
     <main className="min-h-dvh bg-slate-950 px-5 py-6 text-white">
       {/* Header */}
@@ -111,26 +142,62 @@ export function AppPricingScreen() {
                 </li>
               ))}
             </ul>
-            <Link
-              href={plan.ctaHref}
-              className={`touch-target mt-4 block rounded-2xl px-4 py-3 text-center text-xs font-black uppercase tracking-wide transition active:scale-[0.98] ${
-                plan.popular
-                  ? "bg-yellow-400 text-slate-950 hover:bg-yellow-300"
-                  : "border border-white/15 bg-white/5 text-white hover:bg-white/10"
-              }`}
-            >
-              {plan.cta}
-            </Link>
+            {plan.id === "enterprise" ? (
+              <Link
+                href={plan.ctaHref}
+                className={`touch-target mt-4 block rounded-2xl px-4 py-3 text-center text-xs font-black uppercase tracking-wide transition active:scale-[0.98] ${
+                  plan.popular
+                    ? "bg-yellow-400 text-slate-950 hover:bg-yellow-300"
+                    : "border border-white/15 bg-white/5 text-white hover:bg-white/10"
+                }`}
+              >
+                {plan.cta}
+              </Link>
+            ) : iosPlatform ? (
+              <button
+                type="button"
+                onClick={() => plan.productId && handleIAPPurchase(plan.id, plan.productId)}
+                disabled={loading === plan.id}
+                className={`touch-target mt-4 block w-full rounded-2xl px-4 py-3 text-center text-xs font-black uppercase tracking-wide transition active:scale-[0.98] disabled:opacity-50 ${
+                  plan.popular
+                    ? "bg-yellow-400 text-slate-950 hover:bg-yellow-300"
+                    : "border border-white/15 bg-white/5 text-white hover:bg-white/10"
+                }`}
+              >
+                {loading === plan.id ? "…" : plan.cta}
+              </button>
+            ) : (
+              <Link
+                href={plan.ctaHref}
+                className={`touch-target mt-4 block rounded-2xl px-4 py-3 text-center text-xs font-black uppercase tracking-wide transition active:scale-[0.98] ${
+                  plan.popular
+                    ? "bg-yellow-400 text-slate-950 hover:bg-yellow-300"
+                    : "border border-white/15 bg-white/5 text-white hover:bg-white/10"
+                }`}
+              >
+                {plan.cta}
+              </Link>
+            )}
           </div>
         ))}
       </div>
 
       {/* Bottom link back to welcome */}
       <div className="mt-8 pb-6 text-center">
-        <Link href="/welcome" className="text-sm font-bold text-slate-500 hover:text-slate-300">
-          Retour à l'accueil
-        </Link>
+        {/* No "pay on website" link on iOS — App Store rule */}
+        {!iosPlatform && (
+          <Link href="/welcome" className="text-sm font-bold text-slate-500 hover:text-slate-300">
+            Retour à l'accueil
+          </Link>
+        )}
       </div>
+
+      {/* IAP error message */}
+      {message && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-2xl border border-sky-400/30 bg-sky-500/10 px-6 py-3 text-sm font-bold text-sky-100">
+          {message}
+        </div>
+      )}
     </main>
   );
 }

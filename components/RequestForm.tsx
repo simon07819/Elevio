@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Clock, Loader2, Navigation, Send, ShieldAlert, UserCheck, Users, XCircle } from "lucide-react";
 import { createPassengerRequest, resumePassengerRequest, updateRequestStatus } from "@/lib/actions";
-import { trackRequestCreated, trackRequestCancelled, trackPassengerQRScanned } from "@/lib/analytics";
+import { trackRequestCreated, trackRequestCancelled, trackPassengerQRScanned } from "@/lib/analyticsEvents";
 import { captureError } from "@/lib/errorTracking";
 import { createClient } from "@/lib/supabase/client";
 import { cancelPassengerRequestClient } from "@/lib/passengerCancelClient";
@@ -790,7 +790,7 @@ export function RequestForm({
               console.log("[PASSENGER-REQUEST-RESULT]", { ok: result.ok, requestId: result.requestId?.slice(0, 8), message: result.message?.slice(0, 80) });
               setMessage(result.message);
               if (result.ok && result.requestId) {
-                trackRequestCreated(result.requestId, project.id, undefined);
+                trackRequestCreated(result.requestId, project.id);
                 savePassengerPendingRequest(project.id, {
                   requestId: result.requestId,
                   waitStartedAt: result.waitStartedAt ?? new Date().toISOString(),

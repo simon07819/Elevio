@@ -156,7 +156,7 @@ test("UX6: Release button shows 'En cours' with spinner when releasing", () => {
 test("UX6: RequestCard advance button has spinner when pending", () => {
   assert.match(REQUEST_CARD, /Loader2/, "Loader2 imported");
   assert.match(REQUEST_CARD, /anim-spinner/, "spinner class used");
-  assert.match(REQUEST_CARD, /disabled=\{isPending\}/, "disabled when pending");
+  assert.match(REQUEST_CARD, /disabled=\{advancing\}/, "disabled when advancing (optimistic UI guard)");
 });
 
 // ── 7. Micro-feedback ────────────────────────────────────────────────────

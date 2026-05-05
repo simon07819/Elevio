@@ -434,8 +434,11 @@ async function cancelActiveProjectRequestsIfNoLiveOperators(
   }
 }
 
-/** Statuts orphelins : demandes actives incluant boarded — un autre opérateur peut déposer les passagers embarqués. */
-const ORPHAN_REASSIGN_STATUSES: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"];
+/** Statuts orphelins : demandes actives SANS boarded — les passagers embarqués ne peuvent pas
+ *  être réassignés à un autre ascenseur car ils sont physiquement dans l'ascenseur libéré.
+ *  Les demandes boarded sont annulées par cancelActiveProjectRequestsIfNoLiveOperators si aucun
+ *  opérateur ne reste, ou restent sur l'ascenseur libéré (sans opérateur) s'il y en a un autre. */
+const ORPHAN_REASSIGN_STATUSES: RequestStatus[] = ["pending", "assigned", "arriving"];
 
 /**
  * Réassigne les demandes orphelines (assignées à l'ascenseur libéré, non boarded)
@@ -522,7 +525,10 @@ async function reassignOrphanedRequestsToActiveOperator(
         note: "Annulée automatiquement : aucun opérateur éligible disponible.",
       })
       .in("id", unassignedIds);
+    logAction("reassignOrphanedRequests_cancelled", { projectId, releasedElevatorId, unassignedCount: unassignedIds.length });
   }
+
+  logAction("reassignOrphanedRequests", { projectId, releasedElevatorId, orphanCount: orphans.length, reassignedCount: orphans.length - unassignedIds.length });
 
   // Retourner false si au moins une demande n'a pas pu être réassignée
   // → le client doit envoyer queue_cleared pour ces passagers
@@ -1044,6 +1050,7 @@ export async function activateOperatorElevator(
   }
 
   revalidateAdminProject(projectId);
+  logAction("activateOperator", { projectId, elevatorId, sessionId, capacity, operatorDisplayName });
   return { ok: true, message: "Tablette operateur activee.", elevatorId };
 }
 
@@ -1075,6 +1082,7 @@ export async function setElevatorManualFull(projectId: string, elevatorId: strin
   }
 
   revalidateAdminProject(projectId);
+  logAction("toggleFull", { projectId, elevatorId, manualFull });
   return { ok: true, message: manualFull ? "Cabine marquee pleine." : "Cabine remise disponible." };
 }
 
@@ -1171,6 +1179,24 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
   }
 
   const hasOtherOperator = await reassignOrphanedRequestsToActiveOperator(supabase, projectId, elevatorId);
+  // Cancel boarded requests on the released elevator — passengers inside cannot be dropped off
+  // since this elevator has no operator. They must make a new request.
+  const now = new Date().toISOString();
+  const { error: boardedCancelError } = await supabase
+    .from("requests")
+    .update({
+      status: "cancelled",
+      completed_at: now,
+      updated_at: now,
+      note: "Annulé automatiquement : opérateur libéré, passager non déposé.",
+    })
+    .eq("project_id", projectId)
+    .eq("elevator_id", elevatorId)
+    .eq("status", "boarded");
+  if (boardedCancelError) {
+    logAction("releaseOperator_boardedCancel_ERROR", { projectId, elevatorId, error: boardedCancelError.message });
+  }
+  logAction("releaseOperator_boardedCancel", { projectId, elevatorId });
   // Reset elevator state on release — ghost load/direction causes PAUSE on next session.
   const stateReset: Record<string, unknown> = { current_load: 0, direction: "idle" };
   // Try including manual_full; if the column doesn't exist yet, the update still succeeds for the other fields.
@@ -1182,6 +1208,7 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
   }
   await cancelActiveProjectRequestsIfNoLiveOperators(supabase, projectId);
   revalidateAdminProject(projectId);
+  logAction("releaseOperator", { projectId, elevatorId, sessionId, hasOtherOperator });
   return { ok: true as const, message: "Tablette operateur liberee.", hasOtherOperator };
 }
 
@@ -1232,8 +1259,22 @@ export async function adminDeactivateOperatorTablet(projectId: string, elevatorI
     return { ok: false, message: error.message };
   }
 
-  // Reassign orphaned requests (including boarded) before canceling
+  // Reassign orphaned requests (excluding boarded) before canceling
   await reassignOrphanedRequestsToActiveOperator(supabase, projectId, elevatorId);
+  // Cancel boarded requests on the deactivated elevator — passenger physically inside cannot be served
+  const adminNow = new Date().toISOString();
+  await supabase
+    .from("requests")
+    .update({
+      status: "cancelled",
+      completed_at: adminNow,
+      updated_at: adminNow,
+      note: "Annulé automatiquement : opérateur libéré (admin), passager non déposé.",
+    })
+    .eq("project_id", projectId)
+    .eq("elevator_id", elevatorId)
+    .eq("status", "boarded");
+  logAction("adminDeactivate_boardedCancel", { projectId, elevatorId });
   // Reset elevator state — ghost load/direction/manual_full causes PAUSE on next session.
   const stateReset: Record<string, unknown> = { current_load: 0, direction: "idle" };
   const fullReset = { ...stateReset, manual_full: false };
@@ -1251,6 +1292,7 @@ export async function createPassengerRequest(formData: FormData) {
   const fromFloorId = String(formData.get("fromFloorId") ?? "");
   const toFloorId = String(formData.get("toFloorId") ?? "");
   console.error("[createPassengerRequest]", { projectId: projectId.slice(0, 8), fromFloorId: fromFloorId.slice(0, 8), toFloorId: toFloorId.slice(0, 8) });
+  logAction("createPassengerRequest", { projectId, fromFloorId, toFloorId });
   const supabase = await createClient();
   const passengerCountRaw = Number(formData.get("passengerCount") ?? 1);
   const priorityRequested = formData.get("priority") === "on";
@@ -1513,6 +1555,7 @@ export async function createPassengerRequest(formData: FormData) {
 
   revalidatePath("/operator");
   console.error("[createPassengerRequest] SUCCESS", { requestId: firstRow.id, status: firstRow.status, elevatorId: firstRow.elevator_id?.slice(0, 8) });
+  logAction("createPassengerRequest_success", { requestId: firstRow.id, status: firstRow.status, elevatorId: firstRow.elevator_id, passengerCount });
   return {
     ok: true,
     message: "Demande envoyee.",
@@ -1780,10 +1823,15 @@ export async function updateRequestStatus(
 
   if (status === "completed") {
     updates.completed_at = new Date().toISOString();
+    // Clear passenger_device_key so the RPC passenger_has_open_request
+    // no longer finds this request for the device — passenger can create a new one immediately.
+    updates.passenger_device_key = null;
   }
 
   if (status === "cancelled") {
     updates.completed_at = new Date().toISOString();
+    // Same: clear device key so passenger is unblocked immediately.
+    updates.passenger_device_key = null;
   }
 
   const { data: updatedRequest, error } = await supabase
@@ -1917,6 +1965,7 @@ export async function assignRequestElevator(requestId: string, elevatorId: strin
 
   revalidatePath("/operator");
   revalidatePath("/admin");
+  logAction("assignRequestElevator", { requestId, elevatorId, prevElevatorId: before?.elevator_id });
   return { ok: true, message: elevatorId ? "Demande reassignee." : "Demande remise non assignee." };
 }
 
@@ -1957,6 +2006,7 @@ export async function clearElevatorActiveRequests(projectId: string, elevatorId:
 
   revalidatePath("/operator");
   revalidatePath("/admin");
+  logAction("clearElevatorActiveRequests", { projectId, elevatorId });
   return { ok: true, message: "File de demandes videe." };
 }
 
@@ -1974,6 +2024,7 @@ export async function advanceRequestStatus(
     cancelled: "Annule par l'operateur.",
   };
 
+  logAction("advanceRequestStatus", { requestId, toStatus: status, assignElevatorId: options?.assignElevatorId });
   return updateRequestStatus(requestId, status, messages[status], options);
 }
 

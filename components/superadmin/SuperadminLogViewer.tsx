@@ -2,18 +2,28 @@
 
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/superadmin/Badge";
+import { resolveAppError } from "@/lib/superadminActions";
 
-type LogLevel = "info" | "warning" | "error";
-type LogEntry = { time: string; tag: string; message: string; level: LogLevel; data?: unknown };
+type LogLevel = "info" | "warning" | "error" | "critical";
+type LogEntry = {
+  time: string;
+  tag: string;
+  message: string;
+  level: LogLevel;
+  data?: unknown;
+  errorId?: string;
+  resolved?: boolean;
+};
 
-const LEVELS: LogLevel[] = ["info", "warning", "error"];
-const TAGS = ["Analytics", "Error", "Performance", "Sync", "Dispatch", "Auth", "Billing"];
+const LEVELS: LogLevel[] = ["info", "warning", "error", "critical"];
+const TAGS = ["general", "dispatch", "auth", "billing", "sync", "api", "ui", "operator", "passenger", "Analytics", "Error", "Performance", "Sync"];
 
 export function SuperadminLogViewer() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filterLevel, setFilterLevel] = useState<LogLevel | "all">("all");
   const [filterTag, setFilterTag] = useState<string>("all");
   const [loading, setLoading] = useState(true);
+  const [resolving, setResolving] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchLogs() {
@@ -24,14 +34,25 @@ export function SuperadminLogViewer() {
           setLogs(data.logs ?? []);
         }
       } catch {
-        // API not available yet
+        // API not available
       }
       setLoading(false);
     }
     fetchLogs();
-    const interval = setInterval(fetchLogs, 10000);
+    const interval = setInterval(fetchLogs, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  async function handleResolve(errorId: string) {
+    setResolving(errorId);
+    const result = await resolveAppError(errorId);
+    if (result.ok) {
+      setLogs((prev) =>
+        prev.map((l) => l.errorId === errorId ? { ...l, resolved: true } : l)
+      );
+    }
+    setResolving(null);
+  }
 
   const filtered = logs.filter((l) => {
     if (filterLevel !== "all" && l.level !== filterLevel) return false;
@@ -59,7 +80,7 @@ export function SuperadminLogViewer() {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-black uppercase text-slate-400">Tag</label>
+          <label className="mb-1 block text-xs font-black uppercase text-slate-400">Catégorie</label>
           <select
             className="rounded-lg border border-white/10 bg-slate-800 px-3 py-1.5 text-sm font-bold text-white"
             value={filterTag}
@@ -80,7 +101,9 @@ export function SuperadminLogViewer() {
           <div
             key={i}
             className={`rounded-lg border p-3 text-xs font-mono ${
-              l.level === "error"
+              l.resolved
+                ? "border-white/5 bg-white/3 opacity-50"
+                : l.level === "error" || l.level === "critical"
                 ? "border-red-400/20 bg-red-400/5"
                 : l.level === "warning"
                 ? "border-yellow-400/20 bg-yellow-400/5"
@@ -89,10 +112,20 @@ export function SuperadminLogViewer() {
           >
             <div className="flex items-center gap-2 mb-1">
               <span className="text-slate-500">{l.time}</span>
-              <Badge variant={l.level === "error" ? "red" : l.level === "warning" ? "yellow" : "default"}>
+              <Badge variant={l.level === "error" || l.level === "critical" ? "red" : l.level === "warning" ? "yellow" : "default"}>
                 {l.level}
               </Badge>
               <Badge variant="default">{l.tag}</Badge>
+              {l.resolved && <Badge variant="green">Résolu</Badge>}
+              {l.errorId && !l.resolved && (
+                <button
+                  className="ml-auto rounded bg-emerald-400/15 px-2 py-0.5 text-xs font-bold text-emerald-400 hover:bg-emerald-400/25 disabled:opacity-50"
+                  disabled={resolving === l.errorId}
+                  onClick={() => handleResolve(l.errorId!)}
+                >
+                  {resolving === l.errorId ? "…" : "Résoudre"}
+                </button>
+              )}
             </div>
             <p className="text-slate-300">{l.message}</p>
             {l.data != null && (

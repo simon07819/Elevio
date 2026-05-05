@@ -1,20 +1,15 @@
+import { requireSuperAdmin } from "@/lib/auth/superadmin";
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 import { MetricsClient } from "./MetricsClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function MetricsPage() {
+  await requireSuperAdmin();
+
   const supabase = await createClient();
   if (!supabase) {
-    redirect("/admin/login");
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    redirect("/admin/login");
+    return <p className="p-5 text-red-400">Erreur de connexion.</p>;
   }
 
   // Fetch today's requests for metrics

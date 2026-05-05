@@ -3,10 +3,11 @@ import { AppNavigation } from "@/components/AppNavigation";
 import { T } from "@/components/i18n/LanguageProvider";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { OperatorWorkspace } from "@/components/operator/OperatorWorkspace";
-import { getCurrentProfile, requireOperator } from "@/lib/auth";
+import { requireOperator } from "@/lib/auth";
 import { getAdminProjectData } from "@/lib/adminProject";
 import { getProjects } from "@/lib/projects";
 import { isProjectConfigured } from "@/lib/projectConfig";
+import { isSuperAdmin } from "@/lib/auth/superadmin";
 import { ShieldAlert } from "lucide-react";
 import type { Project } from "@/types/hoist";
 
@@ -23,6 +24,7 @@ function pickOperatorProject(projects: Project[]): Project | undefined {
 
 export default async function OperatorPage() {
   const { user, profile } = await requireOperator();
+  const showSuperadmin = isSuperAdmin(profile, user.email);
   const operatorDisplayName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() || profile?.email || user.email || "";
 
@@ -61,7 +63,7 @@ export default async function OperatorPage() {
           <BrandLogo size="sm" priority clickable />
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <AppNavigation compact />
+          <AppNavigation compact showSuperadmin={showSuperadmin} />
           <LanguageSwitcher />
         </div>
       </footer>

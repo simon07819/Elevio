@@ -1,6 +1,6 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
-export type AccountRole = "operator" | "admin" | "superadmin";
+export type AccountRole = "passenger" | "operator" | "admin" | "superadmin";
 
 export type Profile = {
   id: string;
@@ -14,13 +14,21 @@ export type Profile = {
   updated_at: string;
   company_logo_url?: string | null;
   project_logo_url?: string | null;
+  suspended?: boolean | null;
+  suspended_reason?: string | null;
+  suspended_at?: string | null;
 };
 
 export function superadminEmails() {
-  return (process.env.SUPERADMIN_EMAILS ?? "")
+  const fromList = (process.env.SUPERADMIN_EMAILS ?? "")
     .split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
+  const single = (process.env.SUPERADMIN_EMAIL ?? "simon@dsdconstruction.ca").trim().toLowerCase();
+  if (single && !fromList.includes(single)) {
+    fromList.push(single);
+  }
+  return fromList;
 }
 
 export function roleForEmail(email?: string | null): AccountRole {
@@ -34,7 +42,7 @@ function metadataValue(metadata: User["user_metadata"], snakeKey: string, camelK
 export async function ensureProfileForUser(supabase: SupabaseClient, user: User) {
   const metadata = user.user_metadata ?? {};
   const email = user.email?.toLowerCase() ?? "";
-  const accountRole = roleForEmail(email);
+  const emailRole = roleForEmail(email);
   const metadataProfile = {
     first_name: metadataValue(metadata, "first_name", "firstName"),
     last_name: metadataValue(metadata, "last_name", "lastName"),
@@ -49,6 +57,15 @@ export async function ensureProfileForUser(supabase: SupabaseClient, user: User)
     .maybeSingle();
 
   if (existingProfile) {
+    // NEVER downgrade a role — DB is source of truth for account_role.
+    // Only promote: email-based role can upgrade (e.g. new superadmin email),
+    // but an existing superadmin/admin must never be demoted by email logic.
+    const currentRole = existingProfile.account_role as AccountRole;
+    const rolePriority: AccountRole[] = ["passenger", "operator", "admin", "superadmin"];
+    const currentIdx = rolePriority.indexOf(currentRole);
+    const emailIdx = rolePriority.indexOf(emailRole);
+    const accountRole = emailIdx > currentIdx ? emailRole : currentRole;
+
     const profileUpdate = {
       email,
       account_role: accountRole,
@@ -72,7 +89,7 @@ export async function ensureProfileForUser(supabase: SupabaseClient, user: User)
     id: user.id,
     email,
     ...metadataProfile,
-    account_role: accountRole,
+    account_role: emailRole,
   };
 
   await supabase.from("profiles").insert(payload);

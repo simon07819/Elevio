@@ -85,18 +85,32 @@ test("reassign: elevator_id updated via assignRequestToBestElevator scoring", ()
 });
 
 // ---------------------------------------------------------------------------
-// 4. Boarded requests ARE reassigned — another operator CAN drop off boarded passengers
+// 4. Boarded requests NOT reassigned — passenger is physically in the released elevator
 // ---------------------------------------------------------------------------
-test("reassign: ORPHAN_REASSIGN_STATUSES includes boarded (another operator can drop off)", () => {
+test("reassign: ORPHAN_REASSIGN_STATUSES excludes boarded (passenger physically in released elevator)", () => {
   const actions = readFileSync(join(root, "lib/actions.ts"), "utf8");
   const match = actions.match(/ORPHAN_REASSIGN_STATUSES[^;]+;/);
   assert.ok(match, "ORPHAN_REASSIGN_STATUSES defined");
   assert.ok(match![0].includes("pending"), "includes pending");
   assert.ok(match![0].includes("assigned"), "includes assigned");
   assert.ok(match![0].includes("arriving"), "includes arriving");
-  assert.ok(match![0].includes("boarded"), "includes boarded — another operator CAN drop off");
+  assert.ok(!match![0].includes("boarded"), "excludes boarded — passenger physically in released elevator");
   assert.ok(!match![0].includes("completed"), "excludes completed");
   assert.ok(!match![0].includes("cancelled"), "excludes cancelled");
+});
+
+// ---------------------------------------------------------------------------
+// 4b. Boarded requests on released elevator are cancelled explicitly
+// ---------------------------------------------------------------------------
+test("reassign: boarded requests on released elevator are cancelled on release", () => {
+  const actions = readFileSync(join(root, "lib/actions.ts"), "utf8");
+  const releaseIdx = actions.indexOf("export async function releaseOperatorElevator");
+  assert.ok(releaseIdx > 0, "releaseOperatorElevator found");
+  const releaseBody = actions.slice(releaseIdx, releaseIdx + 5000);
+  // Boarded requests cancelled after reassign but before zero-operator check
+  assert.match(releaseBody, /releaseOperator_boardedCancel/, "logs boarded cancel action");
+  assert.match(releaseBody, /\.eq\("status", "boarded"\)/, "targets boarded status specifically");
+  assert.match(releaseBody, /Annulé automatiquement.*opérateur libéré/, "cancellation note for released operator");
 });
 
 // ---------------------------------------------------------------------------

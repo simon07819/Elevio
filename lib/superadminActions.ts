@@ -21,11 +21,39 @@ export async function setUserSuspended(userId: string, suspended: boolean) {
   const supabase = await createClient();
   if (!supabase) return { ok: false, message: "Service indisponible." };
 
+  const updates: Record<string, unknown> = { suspended };
+  if (suspended) {
+    updates.suspended_at = new Date().toISOString();
+  } else {
+    updates.suspended_reason = null;
+    updates.suspended_at = null;
+  }
+
   const { error } = await supabase
     .from("profiles")
-    .update({ suspended })
+    .update(updates)
     .eq("id", userId);
 
   if (error) return { ok: false, message: error.message };
   return { ok: true, message: suspended ? "Compte suspendu." : "Compte réactivé." };
+}
+
+/** Resolve an app error */
+export async function resolveAppError(errorId: string) {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, message: "Service indisponible." };
+
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { error } = await supabase
+    .from("app_errors")
+    .update({
+      resolved: true,
+      resolved_by: user?.id ?? null,
+      resolved_at: new Date().toISOString(),
+    })
+    .eq("id", errorId);
+
+  if (error) return { ok: false, message: error.message };
+  return { ok: true, message: "Erreur marquée résolue." };
 }

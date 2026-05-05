@@ -21,8 +21,15 @@ export interface PlanLimit {
   maxOperators: number | null;
   maxRequestsPerDay: number | null;
   analytics: "none" | "simple" | "advanced";
+  analyticsDashboard: boolean;
+  efficiencyScore: boolean;
+  businessInsights: boolean;
+  peakHours: boolean;
+  floorUsage: boolean;
+  operatorPerformance: boolean;
   multiOperator: boolean;
   prioritySupport: boolean;
+  customSupport: boolean;
   customContract: boolean;
   activationCode: boolean;
 }
@@ -52,8 +59,15 @@ export const PLANS: Record<PlanId, Plan> = {
       maxOperators: 2,
       maxRequestsPerDay: null,
       analytics: "simple",
+      analyticsDashboard: true,
+      efficiencyScore: false,
+      businessInsights: false,
+      peakHours: true,
+      floorUsage: true,
+      operatorPerformance: false,
       multiOperator: false,
       prioritySupport: false,
+      customSupport: false,
       customContract: false,
       activationCode: false,
     },
@@ -63,16 +77,23 @@ export const PLANS: Record<PlanId, Plan> = {
   starter: {
     id: "starter",
     label: "Starter",
-    description: "Petite équipe — 1 chantier, 2 opérateurs, analytics simples",
-    priceMonthly: 29,
-    priceAnnual: 290,
+    description: "Reduce wait times — 1 chantier, analytics simples",
+    priceMonthly: 199,
+    priceAnnual: 1990,
     limits: {
       maxProjects: 1,
       maxOperators: 2,
       maxRequestsPerDay: null,
       analytics: "simple",
+      analyticsDashboard: true,
+      efficiencyScore: false,
+      businessInsights: false,
+      peakHours: true,
+      floorUsage: true,
+      operatorPerformance: false,
       multiOperator: false,
       prioritySupport: false,
+      customSupport: false,
       customContract: false,
       activationCode: false,
     },
@@ -82,16 +103,23 @@ export const PLANS: Record<PlanId, Plan> = {
   pro: {
     id: "pro",
     label: "Pro",
-    description: "Équipe multi-chantiers — 3 chantiers, 10 opérateurs, analytics avancés",
-    priceMonthly: 79,
-    priceAnnual: 790,
+    description: "See where time is lost — smart dispatch, analytics avancés",
+    priceMonthly: 499,
+    priceAnnual: 4990,
     limits: {
       maxProjects: 3,
       maxOperators: 10,
       maxRequestsPerDay: null,
       analytics: "advanced",
+      analyticsDashboard: true,
+      efficiencyScore: true,
+      businessInsights: true,
+      peakHours: true,
+      floorUsage: true,
+      operatorPerformance: true,
       multiOperator: true,
       prioritySupport: false,
+      customSupport: false,
       customContract: false,
       activationCode: false,
     },
@@ -102,7 +130,7 @@ export const PLANS: Record<PlanId, Plan> = {
   business: {
     id: "business",
     label: "Business",
-    description: "Chantiers et opérateurs personnalisés — support prioritaire",
+    description: "Optimize operator performance — support prioritaire, contrat annuel",
     priceMonthly: null,
     priceAnnual: null,
     limits: {
@@ -110,8 +138,15 @@ export const PLANS: Record<PlanId, Plan> = {
       maxOperators: null,
       maxRequestsPerDay: null,
       analytics: "advanced",
+      analyticsDashboard: true,
+      efficiencyScore: true,
+      businessInsights: true,
+      peakHours: true,
+      floorUsage: true,
+      operatorPerformance: true,
       multiOperator: true,
       prioritySupport: true,
+      customSupport: true,
       customContract: true,
       activationCode: false,
     },
@@ -121,7 +156,7 @@ export const PLANS: Record<PlanId, Plan> = {
   enterprise: {
     id: "enterprise",
     label: "Enterprise",
-    description: "Illimité — fonctionnalités avancées, contrat annuel",
+    description: "Prove productivity gains — illimité, intégrations, SLA",
     priceMonthly: null,
     priceAnnual: null,
     limits: {
@@ -129,8 +164,15 @@ export const PLANS: Record<PlanId, Plan> = {
       maxOperators: null,
       maxRequestsPerDay: null,
       analytics: "advanced",
+      analyticsDashboard: true,
+      efficiencyScore: true,
+      businessInsights: true,
+      peakHours: true,
+      floorUsage: true,
+      operatorPerformance: true,
       multiOperator: true,
       prioritySupport: true,
+      customSupport: true,
       customContract: true,
       activationCode: true,
     },

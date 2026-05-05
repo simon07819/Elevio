@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/profile";
 import type { Project } from "@/types/hoist";
 import { effectivePlanId, type PlanId } from "@/lib/billing/plans";
+import { isStripeConfigured, getStripeSubscriptions, getStripePayments, type StripeSubscription, type StripePayment } from "@/lib/billing/stripe";
 
 export type SuperadminData = {
   profiles: Profile[];
@@ -97,11 +98,11 @@ export async function getSuperadminDashboardData(): Promise<DashboardData> {
     .map(([plan, count]) => ({ plan, count }))
     .sort((a, b) => b.count - a.count);
 
-  // Estimated monthly revenue (Starter: $29, Pro: $79)
+  // Estimated monthly revenue (Starter: $199, Pro: $499, Enterprise: $999)
   const starterCount = planCounts["starter"] ?? 0;
   const proCount = planCounts["pro"] ?? 0;
   const enterpriseCount = planCounts["enterprise"] ?? 0;
-  const estimatedMonthlyRevenue = starterCount * 29 + proCount * 79 + enterpriseCount * 199;
+  const estimatedMonthlyRevenue = starterCount * 199 + proCount * 499 + enterpriseCount * 999;
 
   // Plans sold string
   const plansParts: string[] = [];
@@ -161,26 +162,78 @@ export async function getSuperadminProjects() {
   return data ?? [];
 }
 
-/** Get billing records (mock-ready structure) */
+/** Get billing records — real Stripe data when configured, DB subscriptions otherwise */
 export async function getSuperadminBilling() {
   const supabase = await createClient();
-  if (!supabase) return { subscriptions: [], payments: [] };
+  if (!supabase) return { subscriptions: [], payments: [], source: "entitlements" as const };
 
+  // Always fetch from subscriptions table (authoritative source)
+  const { data: dbSubs } = await supabase
+    .from("subscriptions")
+    .select("user_id,provider,provider_subscription_id,plan_id,billing_period,status,current_period_start,current_period_end,cancel_at_period_end,price_id,created_at,updated_at")
+    .order("created_at", { ascending: false });
+
+  // Get profile emails for each user
+  const userIds = [...new Set((dbSubs ?? []).map((s) => s.user_id))];
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id,email")
+    .in("id", userIds.length > 0 ? userIds : ["00000000-0000-0000-0000-000000000000"]);
+
+  const emailMap = new Map((profiles ?? []).map((p) => [p.id, p.email]));
+
+  const subscriptions = (dbSubs ?? []).map((s) => ({
+    userId: s.user_id,
+    email: emailMap.get(s.user_id) ?? "",
+    plan: s.plan_id,
+    activatedVia: s.provider,
+    startDate: s.current_period_start ?? s.created_at,
+    expiresAt: s.current_period_end ?? null,
+    status: s.status,
+    provider: s.provider === "stripe" ? "Stripe" : s.provider === "revenuecat" ? "Apple" : s.provider === "activation_code" ? "Code" : s.provider,
+    cancelAtPeriodEnd: s.cancel_at_period_end,
+    priceId: s.price_id,
+    billingPeriod: s.billing_period,
+  }));
+
+  // If Stripe is configured, also fetch recent payments
+  if (isStripeConfigured()) {
+    const stripePayments = await getStripePayments();
+    const payments = stripePayments.map((p: StripePayment) => ({
+      date: p.created,
+      amount: `${p.amount.toFixed(2)} ${p.currency}`,
+      plan: p.plan,
+      status: p.status === "paid" ? "paid" : String(p.status),
+    }));
+    return { subscriptions, payments, source: "stripe" as const };
+  }
+
+  // Fallback: also include entitlement-only users (no subscription row)
   const { data: entitlements } = await supabase
     .from("user_entitlements")
     .select("user_id,plan,activated_via,created_at,expires_at")
     .order("created_at", { ascending: false });
 
-  // Structure ready for Stripe/RevenueCat integration
-  const subscriptions = (entitlements ?? []).map((e) => ({
-    userId: e.user_id,
-    plan: e.plan,
-    activatedVia: e.activated_via,
-    startDate: e.created_at,
-    expiresAt: e.expires_at,
-    status: e.expires_at && new Date(e.expires_at) < new Date() ? "expired" : "active",
-    provider: e.activated_via === "iap" ? "Apple" : e.activated_via === "activation_code" ? "Code" : "—",
-  }));
+  const subUserIds = new Set((dbSubs ?? []).map((s) => s.user_id));
+  const entitlementOnlySubs = (entitlements ?? [])
+    .filter((e) => !subUserIds.has(e.user_id))
+    .map((e) => ({
+      userId: e.user_id,
+      email: emailMap.get(e.user_id) ?? "",
+      plan: e.plan,
+      activatedVia: e.activated_via,
+      startDate: e.created_at,
+      expiresAt: e.expires_at ?? null,
+      status: "active" as string,
+      provider: e.activated_via === "iap" ? "Apple" as string : e.activated_via === "activation_code" ? "Code" as string : "—" as string,
+      cancelAtPeriodEnd: false,
+      priceId: null as string | null,
+      billingPeriod: "monthly" as string,
+    }));
 
-  return { subscriptions, payments: [] as Array<Record<string, unknown>> };
+  return {
+    subscriptions: [...subscriptions, ...entitlementOnlySubs],
+    payments: [] as Array<Record<string, unknown>>,
+    source: "entitlements" as const,
+  };
 }

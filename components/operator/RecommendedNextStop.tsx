@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Ban, DoorOpen, Loader2, Pause, TriangleAlert, UserCheck } from "lucide-react";
 import { advanceRequestStatus, skipRequestForCurrentPassage } from "@/lib/actions";
-import { trackRequestPickedUp, trackRequestDroppedOff } from "@/lib/analytics";
+import { trackRequestPickedUp, trackRequestDroppedOff } from "@/lib/analyticsEvents";
 import { captureError } from "@/lib/errorTracking";
-import { startPickupToDbTimer } from "@/lib/performanceMonitor";
+import { startPickupToDbTimer } from "@/lib/analyticsEvents";
 import { structuredLog } from "@/lib/structuredLogger";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatDispatchRecommendationReason } from "@/lib/recommendationReason";

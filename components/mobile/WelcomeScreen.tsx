@@ -2,20 +2,11 @@
 
 import { BrandLogo } from "@/components/BrandLogo";
 import { signInWithApple, signInMobile } from "@/lib/mobileAuth";
+import { isCapacitorNative } from "@/lib/platform";
 import { Apple, ChevronRight, Mail } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-
-/**
- * Detect if running inside Capacitor native shell.
- * The plugin is only available in the native iOS/Android context.
- */
-function isCapacitorNative(): boolean {
-  if (typeof window === "undefined") return false;
-  return typeof (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform === "function"
-    && (window as unknown as { Capacitor: { isNativePlatform: () => boolean } }).Capacitor.isNativePlatform();
-}
 
 export function WelcomeScreen() {
   const router = useRouter();

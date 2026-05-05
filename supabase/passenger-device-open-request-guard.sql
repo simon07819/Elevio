@@ -1,5 +1,10 @@
 -- Evite plusieurs demandes ouvertes depuis le meme telephone (cle localStorage envoyee avec le formulaire).
 -- Les lignes fractionnees partagent la meme passenger_device_key.
+--
+-- ACTIVE_STATUSES: bloque la creation si une demande est en cours de traitement.
+-- TERMINAL_STATUSES: completed/cancelled ne bloquent jamais.
+-- boarded: le passager est dans l'ascenseur — on ne bloque PAS car il pourrait
+-- vouloir re-demander apres avoir ete depose (le statut completed arrive ensuite).
 
 alter table requests add column if not exists passenger_device_key uuid;
 
@@ -18,10 +23,7 @@ as $$
     from requests r
     where r.project_id = p_project_id
       and r.passenger_device_key = p_device_key
-      -- Bloque seulement les demandes qui attendent encore un ramassage.
-      -- Une demande "boarded" ne doit pas empecher un nouveau scan apres que le
-      -- passager a quitte l'ascenseur, meme si la sync de depose arrive en retard.
-      and r.status in ('pending', 'assigned', 'arriving')
+      and r.status in ('pending', 'assigned', 'arriving', 'boarded')
   );
 $$;
 

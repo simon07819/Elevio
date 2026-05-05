@@ -4,13 +4,18 @@ import { AdminLoginForm } from "@/components/admin/AdminLoginForm";
 import { BrandLogo } from "@/components/BrandLogo";
 import { T } from "@/components/i18n/LanguageProvider";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getCurrentProfile } from "@/lib/auth";
 
 export default async function AdminLoginPage() {
   const user = await getCurrentUser();
 
   if (user) {
-    redirect("/admin/projects");
+    const profile = await getCurrentProfile();
+    // Redirect to the right workspace based on role
+    if (profile?.account_role === "operator") {
+      redirect("/operator");
+    }
+    redirect("/admin");
   }
 
   return (

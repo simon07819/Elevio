@@ -74,13 +74,8 @@ export async function getCurrentProfile(): Promise<Profile | null> {
   return (data as Profile | null) ?? null;
 }
 
+/** Legacy alias — prefer requireSuperAdmin() from lib/auth/superadmin */
 export async function requireSuperadmin() {
-  const user = await requireUser();
-  const profile = await getCurrentProfile();
-
-  if (profile?.account_role !== "superadmin") {
-    return { user, profile: null };
-  }
-
-  return { user, profile };
+  const { requireSuperAdmin } = await import("@/lib/auth/superadmin");
+  return requireSuperAdmin();
 }

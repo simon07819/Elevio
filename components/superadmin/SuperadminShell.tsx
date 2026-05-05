@@ -11,16 +11,20 @@ import {
   FileText,
   Settings,
   Shield,
+  BarChart3,
+  Headset,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/superadmin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/superadmin/users", label: "Comptes", icon: Users },
-  { href: "/superadmin/projects", label: "Chantiers", icon: Building2 },
-  { href: "/superadmin/billing", label: "Facturation", icon: CreditCard },
+  { href: "/superadmin/users", label: "Utilisateurs", icon: Users },
+  { href: "/superadmin/accounts", label: "Compagnies", icon: Building2 },
+  { href: "/superadmin/billing", label: "Abonnements", icon: CreditCard },
+  { href: "/superadmin/metrics", label: "Métriques", icon: BarChart3 },
   { href: "/superadmin/logs", label: "Logs", icon: ScrollText },
+  { href: "/superadmin/support", label: "Support", icon: Headset },
   { href: "/superadmin/content", label: "Contenu", icon: FileText },
-  { href: "/superadmin/settings", label: "Paramètres", icon: Settings },
+  { href: "/superadmin/settings", label: "Configuration", icon: Settings },
 ];
 
 export function SuperadminShell({ children }: { children: React.ReactNode }) {

@@ -5,15 +5,14 @@ import { useLanguage } from "@/components/i18n/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 
 const navItems = [
-  { href: "/", label: "nav.home" },
+  { href: "/scan", label: "nav.scan" },
   { href: "/operator", label: "nav.operator" },
   { href: "/admin", label: "nav.admin" },
-  { href: "/admin/metrics", label: "nav.metrics" },
   { href: "/admin/profile", label: "nav.profile" },
   { href: "/support", label: "nav.support" },
 ] satisfies Array<{ href: string; label: TranslationKey }>;
 
-export function AppNavigation({ compact = false }: { compact?: boolean }) {
+export function AppNavigation({ compact = false, showSuperadmin = false }: { compact?: boolean; showSuperadmin?: boolean }) {
   const { t } = useLanguage();
 
   return (
@@ -28,6 +27,15 @@ export function AppNavigation({ compact = false }: { compact?: boolean }) {
           {t(item.label)}
         </Link>
       ))}
+      {showSuperadmin && (
+        <Link
+          href="/superadmin"
+          className="rounded-full border border-yellow-400/40 bg-yellow-400/10 px-3 py-2 text-xs font-black text-yellow-300 transition hover:border-yellow-300/60 hover:text-yellow-200"
+          prefetch={true}
+        >
+          Superadmin
+        </Link>
+      )}
     </nav>
   );
 }

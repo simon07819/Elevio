@@ -6,7 +6,8 @@
  * - Onboarding flow at /onboarding
  * - In-app pricing at /app-pricing
  * - Mobile auth abstraction exists (signInWithApple mock)
- * - Web vitrine remains intact (/, /pricing)
+ * - / redirects to /scan (QR scan page)
+ * - /pricing unchanged
  * - /operator unchanged
  */
 import { readFileSync } from "node:fs";
@@ -47,7 +48,9 @@ test("mobile: welcome uses Capacitor Sign-In with Apple plugin", () => {
 
 test("mobile: welcome detects Capacitor native vs web", () => {
   assert.match(WELCOME_SCREEN, /isCapacitorNative/, "has native detection function");
-  assert.match(WELCOME_SCREEN, /Capacitor\.isNativePlatform/, "checks Capacitor.isNativePlatform()");
+  // The function is imported from @/lib/platform which contains Capacitor.isNativePlatform
+  const PLATFORM = readFileSync(join(root, "lib/platform.ts"), "utf-8");
+  assert.match(PLATFORM, /Capacitor\.isNativePlatform/, "platform module checks Capacitor.isNativePlatform()");
 });
 
 test("mobile: welcome sends identityToken to signInWithApple server action", () => {
@@ -186,13 +189,16 @@ test("mobile: signUpMobile creates account with onboarding data", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 5. Web vitrine NOT broken
+// 5. / redirects to /scan — no landing page
 // ═══════════════════════════════════════════════════════════════════════════
-test("mobile: web landing page / is NOT the welcome screen", () => {
-  assert.doesNotMatch(HOME, /WelcomeScreen/, "home page is NOT WelcomeScreen");
-  assert.match(HOME, /HomeContent/, "home page renders HomeContent");
-  assert.match(HOME_CONTENT, /PublicNav/, "HomeContent uses PublicNav (web nav)");
-  assert.match(HOME_CONTENT, /useCapacitorRedirect/, "HomeContent uses Capacitor redirect hook");
+test("mobile: / renders ScanHome directly (no marketing landing page)", () => {
+  assert.match(HOME, /ScanHome/, "/ renders ScanHome directly");
+  assert.doesNotMatch(HOME, /HomeContent/, "/ does NOT render HomeContent");
+  assert.doesNotMatch(HOME, /from "next\/navigation"/, "/ does NOT import redirect");
+  // ScanHome redirects Capacitor users to /welcome
+  const SCAN_HOME = readFileSync(join(root, "components/ScanHome.tsx"), "utf8");
+  assert.match(SCAN_HOME, /isCapacitorNative/, "ScanHome detects Capacitor native");
+  assert.match(SCAN_HOME, /\/welcome/, "ScanHome redirects native users to /welcome");
 });
 
 test("mobile: web /pricing is NOT the app-pricing screen", () => {

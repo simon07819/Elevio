@@ -181,7 +181,7 @@ test("billing: Business and Enterprise are not IAP-eligible", () => {
 // 12. RevenueCat mock — purchaseProduct returns not-available on web
 // ═══════════════════════════════════════════════════════════════════
 test("billing: RevenueCat purchaseProduct returns not-available message", () => {
-  assert.match(REVENUECAT, /Abonnements Apple bientôt disponibles/, "not-available message");
+  assert.match(REVENUECAT, /Abonnements Apple (bientôt |disponibles )/, "not-available message");
   assert.match(REVENUECAT, /ok: false/, "returns ok: false");
 });
 

@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ROOT = resolve(__dirname, "..", "..");
-const ANALYTICS = readFileSync(resolve(ROOT, "lib", "analytics.ts"), "utf-8");
+const ANALYTICS = readFileSync(resolve(ROOT, "lib", "analyticsEvents.ts"), "utf-8");
 const ERROR_TRACKING = readFileSync(resolve(ROOT, "lib", "errorTracking.ts"), "utf-8");
 const PERFORMANCE = readFileSync(resolve(ROOT, "lib", "performanceMonitor.ts"), "utf-8");
 const LOGGER = readFileSync(resolve(ROOT, "lib", "structuredLogger.ts"), "utf-8");
@@ -20,6 +20,7 @@ const METRICS_PAGE = readFileSync(resolve(ROOT, "app", "admin", "metrics", "page
 const METRICS_CLIENT = readFileSync(resolve(ROOT, "app", "admin", "metrics", "MetricsClient.tsx"), "utf-8");
 const I18N = readFileSync(resolve(ROOT, "lib", "i18n.ts"), "utf-8");
 const NAV = readFileSync(resolve(ROOT, "components", "AppNavigation.tsx"), "utf-8");
+const SUPERADMIN_DASHBOARD = readFileSync(resolve(ROOT, "app", "superadmin", "page.tsx"), "utf-8");
 const CSS = readFileSync(resolve(ROOT, "app", "globals.css"), "utf-8");
 
 // ── 1. Analytics (PostHog) ───────────────────────────────────────────────
@@ -218,9 +219,10 @@ test("PRO4: getPerformanceLogs and getErrorLogs filtered exports", () => {
 
 // ── 5. Admin Metrics Dashboard ────────────────────────────────────────────
 
-test("PRO5: /admin/metrics page exists", () => {
+test("PRO5: /admin/metrics page exists and requires superadmin", () => {
   assert.match(METRICS_PAGE, /MetricsClient/, "renders MetricsClient");
   assert.match(METRICS_PAGE, /force-dynamic/, "dynamic rendering");
+  assert.match(METRICS_PAGE, /requireSuperAdmin/, "requires superadmin guard");
 });
 
 test("PRO5: metrics page shows requests today, avg pickup, avg dropoff, errors", () => {
@@ -235,8 +237,10 @@ test("PRO5: metrics page shows performance logs from structured logger", () => {
   assert.match(METRICS_CLIENT, /getLogHistory/, "log history fetched");
 });
 
-test("PRO5: metrics page accessible from navigation", () => {
-  assert.match(NAV, /\/admin\/metrics/, "metrics in navigation");
+test("PRO5: metrics page accessible from superadmin sidebar/dashboard", () => {
+  assert.match(SUPERADMIN_DASHBOARD, /\/superadmin\/metrics|\/admin\/metrics/, "metrics linked from superadmin");
+  const SHELL = readFileSync(resolve(ROOT, "components", "superadmin", "SuperadminShell.tsx"), "utf-8");
+  assert.match(SHELL, /\/superadmin\/metrics/, "metrics in superadmin sidebar");
   assert.match(I18N, /nav\.metrics/, "metrics i18n key");
 });
 

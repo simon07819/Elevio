@@ -1,12 +1,15 @@
-import { HomeContent } from "@/components/public/HomeContent";
-import type { Metadata } from "next";
+import { ScanHome } from "@/components/ScanHome";
 
-export const metadata: Metadata = {
-  title: "Elevio — Dispatch temps réel pour ascenseurs de chantier",
-  description:
-    "Gérez vos élévateurs et ascenseurs de chantier en temps réel. Dispatch intelligent, QR passager, terminal opérateur.",
+export const metadata = {
+  title: "Elevio — Scanner QR passager",
+  description: "Scannez le QR code de votre étage pour demander l'ascenseur de chantier.",
 };
 
+/**
+ * Root page — renders the QR/scan page directly.
+ * This IS the home page. No marketing landing page is ever served from `/`.
+ * Capacitor native redirect is handled client-side inside ScanHome.
+ */
 export default function HomePage() {
-  return <HomeContent />;
+  return <ScanHome />;
 }

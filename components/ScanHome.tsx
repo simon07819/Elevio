@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
+import { isCapacitorNative } from "@/lib/platform";
 
 type BarcodeDetectorShape = {
   detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>>;
@@ -48,8 +49,15 @@ async function getCameraStream(): Promise<MediaStream> {
 }
 
 export function ScanHome() {
-  const { t } = useLanguage();
   const router = useRouter();
+
+  // Capacitor native (iOS) users should go to /welcome for onboarding
+  useEffect(() => {
+    if (isCapacitorNative()) {
+      router.replace("/welcome");
+    }
+  }, [router]);
+  const { t } = useLanguage();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [accessCode, setAccessCode] = useState("");
@@ -267,8 +275,9 @@ export function ScanHome() {
           {message && <p className="mt-3 rounded-2xl bg-white/10 p-3 text-sm font-bold text-slate-200">{message}</p>}
         </div>
 
-        <Link href="/admin/login" className="text-center text-sm font-black text-yellow-200">
-          {t("scan.adminLogin")}
+        <Link href="/admin/login" className="touch-target flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/8 px-5 py-3 text-sm font-black text-yellow-200 transition active:scale-[0.98]">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+          {t("scan.admin")}
         </Link>
       </section>
     </main>

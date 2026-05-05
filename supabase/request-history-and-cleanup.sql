@@ -205,4 +205,108 @@ $$;
 
 grant execute on function public.compute_daily_project_stats(uuid, date) to authenticated;
 
+-- ── Additional indexes for hot queries ─────────────────────────────────
+
+-- app_errors: dashboard superadmin filters by created_at (last 24h)
+create index if not exists app_errors_created_at_idx
+  on app_errors(created_at desc);
+
+-- subscriptions: billing page looks up by user_id
+create index if not exists subscriptions_user_id_idx
+  on subscriptions(user_id);
+
+-- user_entitlements: plan guards check by user_id
+create index if not exists user_entitlements_user_id_idx
+  on user_entitlements(user_id);
+
+-- ── app_errors cleanup (added to existing cron RPC) ────────────────────
+-- Delete resolved errors older than 30 days, unresolved older than 90 days.
+-- This keeps the table from growing unbounded while preserving recent errors
+-- for investigation.
+
+create or replace function public.cleanup_terminal_requests(
+  p_completed_age_hours int default 24,
+  p_cancelled_age_hours int default 6
+)
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  deleted_requests int;
+  deleted_events int;
+  expired_sessions int;
+  deleted_messages int;
+  deleted_errors int;
+  cutoff_completed timestamptz;
+  cutoff_cancelled timestamptz;
+  heartbeat_cutoff timestamptz;
+begin
+  cutoff_completed := now() - (p_completed_age_hours || ' hours')::interval;
+  cutoff_cancelled := now() - (p_cancelled_age_hours || ' hours')::interval;
+  heartbeat_cutoff := now() - interval '10 minutes';
+
+  -- 1. Delete request_events for terminal requests past retention
+  delete from request_events
+  where request_id in (
+    select id from requests
+    where status in ('completed', 'cancelled')
+      and (
+        (status = 'completed' and updated_at < cutoff_completed)
+        or (status = 'cancelled' and updated_at < cutoff_cancelled)
+      )
+  );
+  get diagnostics deleted_events = row_count;
+
+  -- 2. Delete terminal requests past retention
+  delete from requests
+  where status in ('completed', 'cancelled')
+    and (
+      (status = 'completed' and updated_at < cutoff_completed)
+      or (status = 'cancelled' and updated_at < cutoff_cancelled)
+    );
+  get diagnostics deleted_requests = row_count;
+
+  -- 3. Release stale operator sessions (no heartbeat for 10 min)
+  update elevators
+  set
+    operator_session_id = null,
+    operator_session_started_at = null,
+    operator_session_heartbeat_at = null,
+    operator_user_id = null,
+    operator_tablet_label = null,
+    operator_display_name = null,
+    current_load = 0,
+    direction = 'idle'::elevator_direction,
+    manual_full = false
+  where operator_session_id is not null
+    and operator_session_heartbeat_at < heartbeat_cutoff;
+  get diagnostics expired_sessions = row_count;
+
+  -- 4. Delete old operator messages (>7 days)
+  delete from operator_messages
+  where created_at < now() - interval '7 days';
+  get diagnostics deleted_messages = row_count;
+
+  -- 5. Clean up app_errors: resolved > 30 days, unresolved > 90 days
+  delete from app_errors
+  where (resolved = true and resolved_at < now() - interval '30 days')
+     or (resolved = false and created_at < now() - interval '90 days');
+  get diagnostics deleted_errors = row_count;
+
+  return json_build_object(
+    'ok', true,
+    'deleted_requests', deleted_requests,
+    'deleted_events', deleted_events,
+    'expired_sessions', expired_sessions,
+    'deleted_messages', deleted_messages,
+    'deleted_errors', deleted_errors
+  );
+end;
+$$;
+
+grant execute on function public.cleanup_terminal_requests(int, int) to authenticated;
+grant execute on function public.cleanup_terminal_requests(int, int) to anon;
+
 notify pgrst, 'reload schema';

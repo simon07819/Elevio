@@ -10,8 +10,8 @@ import { useState } from "react";
 type Step = "account" | "company" | "role" | "plan" | "done";
 
 const PLANS = [
-  { id: "starter", name: "Starter", price: "29 $/mois", desc: "1 chantier, 2 opérateurs, QR" },
-  { id: "pro", name: "Pro", price: "79 $/mois", desc: "5 chantiers, opérateurs illimités", popular: true },
+  { id: "starter", name: "Starter", price: "199 $/mois", desc: "1 chantier, 2 opérateurs, QR" },
+  { id: "pro", name: "Pro", price: "499 $/mois", desc: "5 chantiers, opérateurs illimités", popular: true },
   { id: "enterprise", name: "Enterprise", price: "Sur mesure", desc: "Illimité, multi-sites, intégrations" },
 ];
 

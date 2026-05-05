@@ -4,17 +4,25 @@ import { Badge } from "@/components/superadmin/Badge";
 
 export default async function SuperadminBillingPage() {
   await requireSuperAdmin();
-  const { subscriptions, payments } = await getSuperadminBilling();
+  const { subscriptions, payments, source } = await getSuperadminBilling();
 
   return (
     <div>
       <h1 className="mb-6 text-3xl font-black text-white">Facturation</h1>
 
-      <div className="mb-6 rounded-xl border border-yellow-400/20 bg-yellow-400/5 p-4">
-        <p className="text-sm font-bold text-yellow-300">
-          Mode démo — Stripe / RevenueCat non branchés. Les données ci-dessous reflètent les plans assignés, pas les paiements réels.
-        </p>
-      </div>
+      {source === "entitlements" ? (
+        <div className="mb-6 rounded-xl border border-yellow-400/20 bg-yellow-400/5 p-4">
+          <p className="text-sm font-bold text-yellow-300">
+            Mode démo — Stripe non configuré. Les données ci-dessous reflètent les plans assignés, pas les paiements réels. Configurez STRIPE_SECRET_KEY pour les données réelles.
+          </p>
+        </div>
+      ) : (
+        <div className="mb-6 rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-4">
+          <p className="text-sm font-bold text-emerald-300">
+            Données Stripe en temps réel — abonnements et paiements synchronisés.
+          </p>
+        </div>
+      )}
 
       <h2 className="mb-3 text-xl font-black text-white">Abonnements</h2>
       <div className="overflow-x-auto">
@@ -31,7 +39,7 @@ export default async function SuperadminBillingPage() {
           </thead>
           <tbody className="divide-y divide-white/5">
             {subscriptions.map((s, i) => (
-              <tr key={i}>
+              <tr key={i} className={s.status === "past_due" ? "bg-red-400/5" : s.status === "expired" || s.status === "canceled" ? "opacity-50" : ""}>
                 <td className="py-3 pr-4 font-mono text-xs text-slate-300">{s.userId.slice(0,8)}</td>
                 <td className="py-3 pr-4 font-bold text-white">{s.plan}</td>
                 <td className="py-3 pr-4 text-slate-400">{s.provider}</td>
@@ -42,8 +50,8 @@ export default async function SuperadminBillingPage() {
                   {s.expiresAt ? new Date(s.expiresAt).toLocaleDateString("fr-CA") : "—"}
                 </td>
                 <td className="py-3">
-                  <Badge variant={s.status === "active" ? "green" : "red"}>
-                    {s.status === "active" ? "Actif" : "Expiré"}
+                  <Badge variant={s.status === "active" || s.status === "trialing" ? "green" : s.status === "past_due" ? "yellow" : "red"}>
+                    {s.status === "active" ? "Actif" : s.status === "trialing" ? "Essai" : s.status === "past_due" ? "En retard" : s.status === "canceled" ? "Annulé" : s.status === "expired" ? "Expiré" : s.status}
                   </Badge>
                 </td>
               </tr>
