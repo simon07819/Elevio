@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { AppNavigation } from "@/components/AppNavigation";
 import { BrandLogo } from "@/components/BrandLogo";
+import { BackButton } from "@/components/BackButton";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { getCurrentUser, getCurrentProfile } from "@/lib/auth";
 import { isSuperAdmin, isSuperAdminProfile } from "@/lib/auth/superadmin";
@@ -44,18 +46,20 @@ export async function AppShell({
   }
 
   return (
-    <main className="relative z-10 mx-auto flex min-h-dvh w-full max-w-7xl min-w-0 flex-col overflow-x-clip px-4 py-5 pb-16 sm:px-6 lg:px-8">
+    <main className="relative z-10 mx-auto flex min-h-dvh w-full max-w-7xl min-w-0 flex-col overflow-x-clip px-4 py-5 pb-20 sm:pb-16 lg:px-8">
       <header className="no-print mb-6 flex items-center justify-between gap-4">
-        <Link href="/" className="flex items-center gap-3">
-          <BrandLogo size="md" priority />
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center">
+            <BrandLogo size="md" priority />
+          </Link>
+          <BackButton />
+        </div>
         <div className="hidden items-center gap-3 sm:flex">
           <AppNavigation compact showSuperadmin={showSuperadmin} />
           <LanguageSwitcher />
         </div>
       </header>
       <div className="no-print mb-5 flex flex-wrap gap-2 sm:hidden">
-        <AppNavigation compact showSuperadmin={showSuperadmin} />
         <LanguageSwitcher />
       </div>
 
@@ -68,6 +72,8 @@ export async function AppShell({
       )}
 
       {children}
+
+      <MobileBottomNav />
     </main>
   );
 }

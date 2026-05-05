@@ -1,7 +1,9 @@
 import { T } from "@/components/i18n/LanguageProvider";
 import { BrandLogo } from "@/components/BrandLogo";
+import { BackButton } from "@/components/BackButton";
 import { APP_VERSION } from "@/lib/version";
 import { getSiteSettings } from "@/lib/siteSettings";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +21,11 @@ export default async function SupportPage() {
     <main className="flex min-h-dvh flex-col items-center bg-slate-50 px-4 py-8 text-slate-950">
       <div className="w-full max-w-lg space-y-5">
         <div className="flex items-center gap-3">
-          <BrandLogo size="sm" priority />
+          <Link href="/" className="flex items-center">
+            <BrandLogo size="sm" priority tone="dark" />
+          </Link>
           <h1 className="text-2xl font-black"><T k="support.title" /></h1>
+          <BackButton />
         </div>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5">

@@ -21,7 +21,9 @@ export default async function AdminLoginPage() {
   return (
     <main className="relative z-10 mx-auto flex min-h-dvh w-full max-w-lg flex-col px-4 py-6 pb-10">
       <header className="mb-6 flex shrink-0 items-center justify-between gap-4">
-        <BrandLogo size="sm" priority />
+        <Link href="/" className="flex items-center">
+          <BrandLogo size="sm" priority />
+        </Link>
         <LanguageSwitcher />
       </header>
       <div className="flex flex-1 flex-col justify-center">

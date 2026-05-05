@@ -1,5 +1,6 @@
 import { BrandLogo } from "@/components/BrandLogo";
 import { AppNavigation } from "@/components/AppNavigation";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { T } from "@/components/i18n/LanguageProvider";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { OperatorWorkspace } from "@/components/operator/OperatorWorkspace";
@@ -62,11 +63,15 @@ export default async function OperatorPage() {
         <div>
           <BrandLogo size="sm" priority clickable />
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="hidden flex-wrap items-center justify-end gap-2 sm:flex">
           <AppNavigation compact showSuperadmin={showSuperadmin} />
           <LanguageSwitcher />
         </div>
+        <div className="flex items-center gap-2 sm:hidden">
+          <LanguageSwitcher />
+        </div>
       </footer>
+      <MobileBottomNav />
     </main>
   );
 }

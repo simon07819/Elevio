@@ -132,7 +132,7 @@ export function WelcomeScreen() {
       {/* Brand */}
       <div className="text-center">
         <div className="flex justify-center">
-          <BrandLogo size="lg" priority tone="light" />
+          <BrandLogo size="lg" priority tone="light" clickable />
         </div>
         <p className="mt-4 text-lg font-bold text-slate-400">
           Dispatch temps réel pour ascenseurs de chantier

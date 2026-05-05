@@ -13,7 +13,9 @@ import {
   Shield,
   BarChart3,
   Headset,
+  ArrowLeft,
 } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const NAV_ITEMS = [
   { href: "/superadmin", label: "Dashboard", icon: LayoutDashboard },
@@ -33,12 +35,17 @@ export function SuperadminShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-slate-950 text-white">
       {/* Sidebar */}
-      <aside className="w-56 shrink-0 border-r border-white/10 bg-slate-950 p-4">
+      <aside className="w-56 shrink-0 border-r border-white/10 bg-slate-950 p-4 flex flex-col">
+        <div className="mb-4">
+          <Link href="/" className="inline-flex">
+            <BrandLogo size="sm" priority />
+          </Link>
+        </div>
         <div className="mb-6 flex items-center gap-2">
           <Shield size={24} className="text-yellow-400" />
           <span className="text-lg font-black text-yellow-400">SUPERADMIN</span>
         </div>
-        <nav className="space-y-1">
+        <nav className="flex-1 space-y-1">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== "/superadmin" && pathname.startsWith(href));
             return (
@@ -57,6 +64,15 @@ export function SuperadminShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+        <div className="mt-4 border-t border-white/10 pt-4">
+          <Link
+            href="/"
+            className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-400 transition hover:bg-white/5 hover:text-white"
+          >
+            <ArrowLeft size={18} />
+            Back to app
+          </Link>
+        </div>
       </aside>
 
       {/* Main content */}

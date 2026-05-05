@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Crown, Loader2, Rocket, Sparkles, Zap } from "lucide-react";
+import { Check, Crown, Loader2, Rocket, Sparkles, Zap, ArrowLeft } from "lucide-react";
 import { PLANS, IAP_PLANS, type PlanId } from "@/lib/billing/plans";
 import { activateEnterpriseCode, type ActivationResult } from "@/lib/billing/activation";
 import { purchaseProduct } from "@/lib/billing/revenuecat";
 import { createStripeCheckout } from "@/lib/billing/checkout";
 import { isIOS } from "@/lib/platform";
+import Link from "next/link";
 
 function PlanCard({ planId, onSubscribe, isIOSPlatform }: { planId: PlanId; onSubscribe: (planId: PlanId) => void; isIOSPlatform: boolean }) {
   const plan = PLANS[planId];
@@ -208,6 +209,12 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
+      <div className="mb-6">
+        <Link href="/" className="touch-target inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:border-white/20 hover:bg-white/10 hover:text-white">
+          <ArrowLeft size={14} />
+          Back
+        </Link>
+      </div>
       <div className="text-center mb-8">
         <h1 className="text-4xl font-black text-white mb-2">Choisissez votre plan</h1>
         <p className="text-lg font-bold text-slate-400">

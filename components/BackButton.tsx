@@ -1,0 +1,36 @@
+"use client";
+
+import { useRouter, usePathname } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+
+/**
+ * Back navigation button.
+ * - Uses router.back() if there's browser history
+ * - Falls back to "/" (QR home) if on root entry
+ */
+export function BackButton({ fallback = "/" }: { fallback?: string } = {}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const isRoot = pathname === "/" || pathname === "/scan";
+
+  if (isRoot) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        // If we can go back in history, do it; otherwise go to fallback
+        if (typeof window !== "undefined" && window.history.length > 1) {
+          router.back();
+        } else {
+          router.push(fallback);
+        }
+      }}
+      className="touch-target flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:border-white/20 hover:bg-white/10 hover:text-white active:scale-[0.97]"
+      aria-label="Back"
+    >
+      <ArrowLeft size={14} />
+      <span className="hidden sm:inline">Back</span>
+    </button>
+  );
+}
