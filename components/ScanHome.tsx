@@ -1,15 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import jsQR from "jsqr";
 import { Camera, KeyRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
-import { isCapacitorNative } from "@/lib/platform";
-import { WelcomeScreen } from "@/components/mobile/WelcomeScreen";
 
 type BarcodeDetectorShape = {
   detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>>;
@@ -51,20 +49,16 @@ async function getCameraStream(): Promise<MediaStream> {
 
 export function ScanHome() {
   const router = useRouter();
-
-  // Capacitor native (iOS) users see the WelcomeScreen directly — no redirect needed.
-  // Redirecting to /welcome causes an infinite loop because /welcome has no static HTML
-  // in the Capacitor webDir (out/). Instead, we render WelcomeScreen inline.
-  const [isNative, setIsNative] = useState(false);
-  useEffect(() => {
-    setIsNative(isCapacitorNative());
-  }, []);
-
-  if (isNative) {
-    return <WelcomeScreen />;
-  }
-
   const { t } = useLanguage();
+
+  // Visible fallback during hydration — prevents black screen on Capacitor iOS.
+  // useSyncExternalStore returns false on server (fallback visible) and true on client (scan UI).
+  // React handles the transition gracefully — no hooks order mismatch, no setState-in-effect.
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [accessCode, setAccessCode] = useState("");
@@ -203,6 +197,15 @@ export function ScanHome() {
       streamRef.current = null;
     };
   }, [router, scanning, t]);
+
+  // Visible fallback while React hydrates — prevents black screen on Capacitor iOS
+  if (!mounted) {
+    return (
+      <main className="relative z-10 flex min-h-dvh items-center justify-center px-4 text-white">
+        <p className="text-lg font-black text-yellow-300">Elevio démarre…</p>
+      </main>
+    );
+  }
 
   async function openManual() {
     const code = normalizeAccessCode(accessCode);

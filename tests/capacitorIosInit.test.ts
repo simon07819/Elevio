@@ -38,13 +38,13 @@ test("capacitor: iOS platform added with Xcode project", () => {
 // ---------------------------------------------------------------------------
 // 3. Server URL via env var + WelcomeScreen inline fallback
 // ---------------------------------------------------------------------------
-test("capacitor: server.url from CAPACITOR_SERVER_URL env + WelcomeScreen inline fallback", () => {
+test("capacitor: server.url from CAPACITOR_SERVER_URL env + ScanHome mounted fallback (no redirect)", () => {
   const config = readFileSync(join(root, "capacitor.config.ts"), "utf8");
   assert.match(config, /CAPACITOR_SERVER_URL/, "server.url reads from CAPACITOR_SERVER_URL env var");
   assert.match(config, /server/, "server config section exists");
-  // Fallback: ScanHome renders WelcomeScreen inline for native (no /welcome redirect)
+  // ScanHome renders passenger QR directly with a mounted fallback — no /welcome redirect
   const scanHome = readFileSync(join(root, "components/ScanHome.tsx"), "utf8");
-  assert.match(scanHome, /WelcomeScreen/, "ScanHome renders WelcomeScreen inline for native");
+  assert.match(scanHome, /mounted/, "ScanHome has mounted state for hydration safety");
   assert.doesNotMatch(scanHome, /router\.replace\("\/welcome"\)/, "no router.replace to /welcome (would loop)");
 });
 

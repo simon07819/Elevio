@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
  *
  * IMPORTANT: Do NOT redirect to /welcome — it has no static HTML file
  * in the Capacitor webDir and causes an infinite reload loop.
- * Instead, render the WelcomeScreen inline at /.
+ * Instead, the passenger QR scan page renders directly at / via ScanHome.
  *
  * Returns: { ready: boolean } — caller should render nothing until ready.
  */

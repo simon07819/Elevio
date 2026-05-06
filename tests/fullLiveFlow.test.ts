@@ -45,12 +45,13 @@ test("flow: /welcome exists as a standalone page", () => {
   assert.match(WELCOME, /signInMobile/, "has email login");
 });
 
-test("flow: / renders ScanHome with inline WelcomeScreen for Capacitor native", () => {
+test("flow: / renders ScanHome directly with mounted fallback (passenger QR on both web and native)", () => {
   const HOME_PAGE = readFileSync(join(root, "app/page.tsx"), "utf8");
   assert.match(HOME_PAGE, /ScanHome/, "/ renders ScanHome directly (no landing page)");
   const SCAN_HOME = readFileSync(join(root, "components/ScanHome.tsx"), "utf8");
-  assert.match(SCAN_HOME, /isCapacitorNative/, "ScanHome detects Capacitor native");
-  assert.match(SCAN_HOME, /WelcomeScreen/, "ScanHome renders WelcomeScreen inline for native (no redirect to /welcome)");
+  assert.match(SCAN_HOME, /mounted/, "ScanHome has mounted state for hydration safety");
+  assert.doesNotMatch(SCAN_HOME, /WelcomeScreen/, "no WelcomeScreen inline — passenger sees QR scan directly");
+  assert.doesNotMatch(SCAN_HOME, /router\.replace\("\/welcome"\)/, "no redirect to /welcome (would loop)");
 });
 
 test("flow: onboarding uses default starter plan", () => {

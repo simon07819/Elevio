@@ -3,7 +3,7 @@
 # This script ensures `out/` exists for `npx cap sync`.
 # IMPORTANT: No redirect to /welcome — it has no static HTML in webDir
 # and would cause an infinite reload loop. Capacitor native users see
-# WelcomeScreen rendered inline at / via ScanHome.
+# the passenger QR scan page directly at / via ScanHome (no WelcomeScreen inline).
 set -euo pipefail
 mkdir -p out
 if [ ! -f out/index.html ]; then

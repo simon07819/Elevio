@@ -192,15 +192,16 @@ test("mobile: signUpMobile creates account with onboarding data", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // 5. / redirects to /scan — no landing page
 // ═══════════════════════════════════════════════════════════════════════════
-test("mobile: / renders ScanHome directly; Capacitor native gets WelcomeScreen inline (no redirect)", () => {
+test("mobile: / renders ScanHome directly with hydration-safe mounted fallback (no redirect)", () => {
   assert.match(HOME, /ScanHome/, "/ renders ScanHome directly");
   assert.doesNotMatch(HOME, /HomeContent/, "/ does NOT render HomeContent");
   assert.doesNotMatch(HOME, /from "next\/navigation"/, "/ does NOT import redirect");
-  // ScanHome renders WelcomeScreen inline for Capacitor native users — no URL redirect
+  // ScanHome renders the passenger QR experience on both web and native.
+  // A "mounted" state fallback prevents black screen on Capacitor iOS during hydration.
   const SCAN_HOME = readFileSync(join(root, "components/ScanHome.tsx"), "utf8");
-  assert.match(SCAN_HOME, /isCapacitorNative/, "ScanHome detects Capacitor native");
-  assert.match(SCAN_HOME, /WelcomeScreen/, "ScanHome renders WelcomeScreen inline for native");
+  assert.match(SCAN_HOME, /mounted/, "ScanHome has mounted state for hydration safety");
   assert.doesNotMatch(SCAN_HOME, /router\.replace\("\/welcome"\)/, "ScanHome does NOT redirect to /welcome (would loop)");
+  assert.doesNotMatch(SCAN_HOME, /WelcomeScreen/, "ScanHome does NOT render WelcomeScreen inline (passenger sees QR scan directly)");
 });
 
 test("mobile: web /pricing is NOT the app-pricing screen", () => {

@@ -103,9 +103,9 @@ test("appstore: / renders ScanHome directly (no redirect, no landing)", () => {
   assert.doesNotMatch(HOME_PAGE, /from "next\/navigation"/, "no next/navigation import (no server redirect)");
 });
 
-test("appstore: ScanHome renders WelcomeScreen inline for native (no redirect)", () => {
-  assert.match(SCAN_HOME, /isCapacitorNative/, "detects Capacitor native");
-  assert.match(SCAN_HOME, /WelcomeScreen/, "renders WelcomeScreen inline for native");
+test("appstore: ScanHome renders passenger QR directly with mounted fallback (no redirect, no paywall)", () => {
+  assert.match(SCAN_HOME, /mounted/, "has mounted state for hydration safety");
+  assert.doesNotMatch(SCAN_HOME, /WelcomeScreen/, "no WelcomeScreen inline — passenger sees QR scan directly");
   assert.doesNotMatch(SCAN_HOME, /router\.replace\("\/welcome"\)/, "does NOT redirect to /welcome (would loop)");
   assert.doesNotMatch(SCAN_HOME, /\/paywall/, "does NOT redirect to paywall");
 });
