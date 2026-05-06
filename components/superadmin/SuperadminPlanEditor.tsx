@@ -123,7 +123,7 @@ export function SuperadminPlanEditor() {
                 <ToggleField label="Operator Performance" checked={draft.operator_performance ?? false} onChange={(v) => updateDraft(plan.id, "operator_performance", v)} />
                 <ToggleField label="Multi-Operator" checked={draft.multi_operator ?? false} onChange={(v) => updateDraft(plan.id, "multi_operator", v)} />
                 <ToggleField label="Support prioritaire" checked={draft.priority_support ?? false} onChange={(v) => updateDraft(plan.id, "priority_support", v)} />
-                <ToggleField label="IAP disponible" checked={draft.iap_available ?? false} onChange={(v) => updateDraft(plan.id, "iap_available", v)} />
+                <ToggleField label="IAP disponible" checked={draft.iap_available ?? false} onChange={(v) => updateDraft(plan.id, "iap_available", v)} immutable />
                 <ToggleField label="Contact ventes" checked={draft.contact_sales ?? false} onChange={(v) => updateDraft(plan.id, "contact_sales", v)} />
                 <ToggleField label="Populaire" checked={draft.popular ?? false} onChange={(v) => updateDraft(plan.id, "popular", v)} />
                 <ToggleField label="Actif" checked={draft.active ?? true} onChange={(v) => updateDraft(plan.id, "active", v)} />
@@ -139,6 +139,8 @@ export function SuperadminPlanEditor() {
                 <BoolReadonly label="Efficiency Score" checked={plan.efficiency_score} />
                 <BoolReadonly label="Multi-Operator" checked={plan.multi_operator} />
                 <BoolReadonly label="IAP" checked={plan.iap_available} />
+                <Readonly label="RevenueCat Product ID" value={plan.id === "starter" ? "com.elevio.starter.monthly / .annual" : plan.id === "pro" ? "com.elevio.pro.monthly / .annual" : "—"} />
+                <Readonly label="Stripe Price ID" value={plan.iap_available ? "stripe_price_" + plan.id : "—"} />
               </div>
             )}
           </div>
@@ -177,16 +179,16 @@ function SelectField({ label, value, options, onChange }: { label: string; value
   );
 }
 
-function ToggleField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+function ToggleField({ label, checked, onChange, immutable }: { label: string; checked: boolean; onChange: (v: boolean) => void; immutable?: boolean }) {
   return (
     <div className="flex items-center justify-between">
-      <label className="text-xs font-black uppercase tracking-widest text-slate-500">{label}</label>
+      <label className="text-xs font-black uppercase tracking-widest text-slate-500">{label}{immutable && <span className="ml-1 text-[10px] text-amber-400">(verrouillé)</span>}</label>
       <button
         type="button"
-        onClick={() => onChange(!checked)}
-        className={`rounded-full p-1 ${checked ? "bg-emerald-400" : "bg-slate-700"}`}
+        onClick={() => !immutable && onChange(!checked)}
+        className={`rounded-full p-1 ${immutable ? "cursor-not-allowed bg-slate-600" : checked ? "bg-emerald-400" : "bg-slate-700"}`}
       >
-        <Check size={14} className={checked ? "text-slate-950" : "text-slate-500"} />
+        <Check size={14} className={checked ? (immutable ? "text-slate-400" : "text-slate-950") : "text-slate-500"} />
       </button>
     </div>
   );

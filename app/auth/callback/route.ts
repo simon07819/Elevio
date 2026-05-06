@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
-  const next = requestUrl.searchParams.get("next") ?? "/admin/profile?onboarding=1";
+  const next = requestUrl.searchParams.get("next") ?? "/paywall";
 
   if (!code) {
     return NextResponse.redirect(new URL("/admin/login?error=missing_code", requestUrl.origin));

@@ -26,6 +26,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ensureProfileForUser } from "@/lib/profile";
+import { getSubscriptionStatus } from "@/lib/billing/planGuards";
 
 async function appOrigin() {
   const headerStore = await headers();
@@ -86,8 +87,14 @@ export async function signInWithApple(identityToken: string, fullName?: { firstN
     redirect("/onboarding");
   }
 
-  // Route based on role
+  // Route based on role — check subscription first for non-superadmins
   const role = profile?.account_role;
+  if (role !== "superadmin") {
+    const { hasActiveSubscription } = await getSubscriptionStatus(data.user?.id ?? "");
+    if (!hasActiveSubscription) {
+      redirect("/paywall");
+    }
+  }
   if (role === "operator") {
     redirect("/operator");
   }
@@ -128,6 +135,18 @@ export async function signInMobile(formData: FormData) {
     .maybeSingle();
 
   const role = profile?.account_role;
+
+  // Superadmins always get direct access
+  if (role === "superadmin") {
+    redirect("/superadmin");
+  }
+
+  // Other roles: check subscription before routing to protected pages
+  const { hasActiveSubscription } = await getSubscriptionStatus(data.user?.id ?? "");
+  if (!hasActiveSubscription) {
+    redirect("/paywall");
+  }
+
   if (role === "operator") {
     redirect("/operator");
   }
@@ -183,11 +202,9 @@ export async function signUpMobile(formData: FormData) {
 
   if (data.session && data.user) {
     await ensureProfileForUser(supabase, data.user);
-    // Auto-confirmed — go to role-based destination
-    if (role === "operator") {
-      redirect("/operator");
-    }
-    redirect("/admin/projects?onboarding=1");
+    // New users need a subscription before accessing operator/admin.
+    // Redirect to paywall so they can subscribe first.
+    redirect("/paywall");
   }
 
   return {

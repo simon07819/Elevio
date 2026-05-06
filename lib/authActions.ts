@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { ensureProfileForUser } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
+import { getSubscriptionStatus } from "@/lib/billing/planGuards";
 
 function credentials(formData: FormData) {
   return {
@@ -50,6 +51,22 @@ export async function signInAdmin(formData: FormData) {
     await ensureProfileForUser(supabase, data.user);
   }
 
+  // Check subscription before routing to protected pages
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("account_role")
+    .eq("id", data.user?.id ?? "")
+    .maybeSingle();
+
+  if (profile?.account_role === "superadmin") {
+    redirect("/superadmin");
+  }
+
+  const { hasActiveSubscription } = await getSubscriptionStatus(data.user?.id ?? "");
+  if (!hasActiveSubscription) {
+    redirect("/paywall");
+  }
+
   redirect("/admin/projects");
 }
 
@@ -87,7 +104,8 @@ export async function signUpAdmin(formData: FormData) {
 
   if (data.session && data.user) {
     await ensureProfileForUser(supabase, data.user);
-    redirect("/admin/profile?onboarding=1");
+    // New user needs subscription before accessing admin pages
+    redirect("/paywall");
   }
 
   return {

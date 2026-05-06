@@ -5,12 +5,21 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { T } from "@/components/i18n/LanguageProvider";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { getCurrentUser, getCurrentProfile } from "@/lib/auth";
+import { getSubscriptionStatus } from "@/lib/billing/planGuards";
 
 export default async function AdminLoginPage() {
   const user = await getCurrentUser();
 
   if (user) {
     const profile = await getCurrentProfile();
+    // If user has no active subscription, send to paywall (not to admin/operator which would loop).
+    // Superadmins always pass through.
+    if (profile && profile.account_role !== "superadmin") {
+      const { hasActiveSubscription } = await getSubscriptionStatus(user.id);
+      if (!hasActiveSubscription) {
+        redirect("/paywall");
+      }
+    }
     // Redirect to the right workspace based on role
     if (profile?.account_role === "operator") {
       redirect("/operator");
