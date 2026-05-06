@@ -941,6 +941,27 @@ export async function activateOperatorElevator(
     return { ok: false, message: "Connexion operateur requise." };
   }
 
+  // ── PROJECT MEMBERSHIP: verify user belongs to this project ──
+  const { data: membership } = await supabase
+    .from("project_members")
+    .select("role")
+    .eq("project_id", projectId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!membership) {
+    // Also allow project owner
+    const { data: project } = await supabase
+      .from("projects")
+      .select("owner_id")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (!project || project.owner_id !== user.id) {
+      return { ok: false, message: "Vous n'avez pas accès à ce chantier." };
+    }
+  }
+
   // ── PLAN GUARD: Check operator limit before activation ──
   const opGuard = await enforceOperatorLimit(projectId);
   if (!opGuard.ok) {
@@ -1139,6 +1160,30 @@ export async function releaseOperatorElevator(projectId: string, elevatorId: str
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { ok: false, message: "Connexion operateur requise." };
+  }
+
+  // ── PROJECT MEMBERSHIP: verify user belongs to this project ──
+  const { data: releaseMembership } = await supabase
+    .from("project_members")
+    .select("role")
+    .eq("project_id", projectId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!releaseMembership) {
+    const { data: releaseProject } = await supabase
+      .from("projects")
+      .select("owner_id")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (!releaseProject || releaseProject.owner_id !== user.id) {
+      return { ok: false, message: "Vous n'avez pas accès à ce chantier." };
+    }
+  }
 
   if (!user) {
     return { ok: false, message: "Connexion operateur requise." };
@@ -1759,6 +1804,14 @@ export async function updateRequestStatus(
     return { ok: true, message: "Mode demo: action simulee." };
   }
 
+  // ── AUTH CHECK: require authenticated user for any status change ──
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) {
+    return { ok: false, message: "Connexion requise pour modifier une demande." };
+  }
+
   if (!isUuid(requestId)) {
     return staleIdsAction();
   }
@@ -1933,6 +1986,14 @@ export async function assignRequestElevator(requestId: string, elevatorId: strin
     return staleIdsAction();
   }
 
+  // ── AUTH CHECK: require authenticated user ──
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) {
+    return { ok: false, message: "Connexion requise." };
+  }
+
   const { data: before } = await supabase
     .from("requests")
     .select("elevator_id, project_id")
@@ -1982,6 +2043,14 @@ export async function clearElevatorActiveRequests(projectId: string, elevatorId:
 
   if (!isUuid(projectId) || !isUuid(elevatorId)) {
     return staleIdsAction();
+  }
+
+  // ── AUTH CHECK: require authenticated user ──
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) {
+    return { ok: false, message: "Connexion requise." };
   }
 
   const now = new Date().toISOString();
@@ -2045,6 +2114,14 @@ export async function skipRequestForCurrentPassage(requestId: string, elevatorId
 
   if (!isUuid(requestId) || !isUuid(elevatorId)) {
     return staleIdsAction();
+  }
+
+  // ── AUTH CHECK: require authenticated operator ──
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) {
+    return { ok: false, message: "Connexion operateur requise." };
   }
 
   // Verify request is in a skippable status
@@ -2132,6 +2209,12 @@ export async function createRequestEvent(requestId: string, eventType: RequestEv
     return staleIdsAction();
   }
 
+  // ── AUTH CHECK ──
+  const { data: { user: eventAuthUser } } = await supabase.auth.getUser();
+  if (!eventAuthUser) {
+    return { ok: false, message: "Connexion requise." };
+  }
+
   const { error } = await supabase.from("request_events").insert({
     request_id: requestId,
     event_type: eventType,
@@ -2153,6 +2236,14 @@ export async function adjustElevatorLoad(elevatorId: string, currentLoad: number
     return { ok: true, message: "Mode demo: charge ajustee." };
   }
 
+  // ── AUTH CHECK: require authenticated user ──
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) {
+    return { ok: false, message: "Connexion requise." };
+  }
+
   if (!isUuid(elevatorId)) {
     return staleIdsAction();
   }
@@ -2170,6 +2261,12 @@ export async function sendOperatorMessage(projectId: string, elevatorId: string 
 
   if (!isUuid(projectId) || (elevatorId != null && elevatorId !== "" && !isUuid(elevatorId))) {
     return staleIdsAction();
+  }
+
+  // ── AUTH CHECK ──
+  const { data: { user: msgAuthUser } } = await supabase.auth.getUser();
+  if (!msgAuthUser) {
+    return { ok: false, message: "Connexion requise." };
   }
 
   const { error } = await supabase.from("operator_messages").insert({

@@ -168,7 +168,7 @@ test("legal-transitions: isLegalTransition validator called in updateRequestStat
 test("release-reset: releaseOperatorElevator resets elevator state", () => {
   const actions = readFileSync(join(root, "lib/actions.ts"), "utf8");
   const releaseIdx = actions.indexOf("export async function releaseOperatorElevator");
-  const releaseBody = actions.slice(releaseIdx, releaseIdx + 3000);
+  const releaseBody = actions.slice(releaseIdx, releaseIdx + 4000);
   assert.match(releaseBody, /current_load: 0/, "resets current_load to 0");
   assert.match(releaseBody, /direction: .idle./, "resets direction to idle");
   assert.match(releaseBody, /manual_full: false/, "resets manual_full to false");

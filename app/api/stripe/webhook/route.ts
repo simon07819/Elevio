@@ -99,16 +99,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Stripe not configured" }, { status: 501 });
   }
 
+  // ── SECURITY: Reject if webhook secret not configured ──
+  if (!STRIPE_WEBHOOK_SECRET) {
+    void logAppError({ message: "Stripe webhook called without webhook secret configured", category: "billing", level: "critical" });
+    return NextResponse.json({ error: "Webhook auth not configured" }, { status: 500 });
+  }
+
   const body = await req.text();
   const sig = req.headers.get("stripe-signature");
 
+  if (!sig) {
+    void logAppError({ message: "Stripe webhook missing stripe-signature header", category: "billing", level: "warning" });
+    return NextResponse.json({ error: "Missing signature" }, { status: 400 });
+  }
+
   let event: Stripe.Event;
   try {
-    if (!sig || !STRIPE_WEBHOOK_SECRET) {
-      event = JSON.parse(body) as Stripe.Event;
-    } else {
-      event = stripe.webhooks.constructEvent(body, sig, STRIPE_WEBHOOK_SECRET);
-    }
+    event = stripe.webhooks.constructEvent(body, sig, STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     void logAppError({ message: "Stripe webhook invalid signature", error: String(err), category: "billing", level: "warning" });
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });

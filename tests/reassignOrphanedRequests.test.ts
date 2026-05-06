@@ -64,7 +64,7 @@ test("reassign: reassignOrphanedRequestsToActiveOperator exists and called befor
   // Called BEFORE cancelActiveProjectRequestsIfNoLiveOperators in releaseOperatorElevator
   const releaseIdx = actions.indexOf("export async function releaseOperatorElevator");
   assert.ok(releaseIdx > 0, "releaseOperatorElevator found");
-  const releaseBody = actions.slice(releaseIdx, releaseIdx + 3000);
+  const releaseBody = actions.slice(releaseIdx, releaseIdx + 4000);
   const reassignPos = releaseBody.indexOf("reassignOrphanedRequestsToActiveOperator");
   const cancelPos = releaseBody.indexOf("cancelActiveProjectRequestsIfNoLiveOperators");
   assert.ok(reassignPos > 0, "reassign called");

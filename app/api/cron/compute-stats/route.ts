@@ -3,9 +3,14 @@ import { NextResponse } from "next/server";
 const CRON_SECRET = process.env.CRON_SECRET;
 
 export async function POST(request: Request) {
+  // Auth check — REJECT if secret not configured (production safety)
+  if (!CRON_SECRET) {
+    console.error("[cron/compute-stats] CRON_SECRET not configured — rejecting");
+    return NextResponse.json({ error: "Cron auth not configured" }, { status: 500 });
+  }
   const authHeader = request.headers.get("authorization");
   const bearerToken = authHeader?.replace("Bearer ", "");
-  if (CRON_SECRET && bearerToken !== CRON_SECRET) {
+  if (bearerToken !== CRON_SECRET) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

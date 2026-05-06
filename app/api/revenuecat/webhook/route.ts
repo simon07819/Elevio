@@ -33,13 +33,15 @@ interface RCWebhookEvent {
 }
 
 export async function POST(req: NextRequest) {
-  // Auth check
-  if (REVENUECAT_AUTH_TOKEN) {
-    const authHeader = req.headers.get("authorization");
-    if (authHeader !== `Bearer ${REVENUECAT_AUTH_TOKEN}`) {
-      void logAppError({ message: "RevenueCat webhook unauthorized", category: "billing", level: "warning" });
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  // Auth check — REJECT if token not configured (production safety)
+  if (!REVENUECAT_AUTH_TOKEN) {
+    void logAppError({ message: "RevenueCat webhook called without auth token configured", category: "billing", level: "critical" });
+    return NextResponse.json({ error: "Webhook auth not configured" }, { status: 500 });
+  }
+  const authHeader = req.headers.get("authorization");
+  if (authHeader !== `Bearer ${REVENUECAT_AUTH_TOKEN}`) {
+    void logAppError({ message: "RevenueCat webhook unauthorized", category: "billing", level: "warning" });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   let body: RCWebhookEvent;
