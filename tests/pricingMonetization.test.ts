@@ -171,10 +171,12 @@ test("pricing: UpgradeCTA is only in admin components, not in passenger componen
 // 7. iOS uses RevenueCat only, web uses Stripe only
 // ═══════════════════════════════════════════════════════════════════
 
-test("pricing: PaywallClient uses RevenueCat on iOS, Stripe on web", () => {
+test("pricing: PaywallClient uses RevenueCat on iOS, Stripe via server action on web", () => {
   assert.match(PAYWALL_CLIENT, /isIOS/, "checks iOS platform");
   assert.match(PAYWALL_CLIENT, /purchaseProduct/, "RevenueCat IAP");
-  assert.match(PAYWALL_CLIENT, /createStripeCheckout/, "Stripe checkout");
+  assert.match(PAYWALL_CLIENT, /startStripeCheckout/, "Stripe checkout via server action (no direct import)");
+  assert.doesNotMatch(PAYWALL_CLIENT, /from.*checkout/, "no direct import of checkout.ts");
+  assert.doesNotMatch(PAYWALL_CLIENT, /from.*\"@\/lib\/billing\/stripe\"/, "no direct import of stripe.ts");
 });
 
 test("pricing: AppPricingScreen uses IAP on iOS", () => {

@@ -5,7 +5,7 @@ import { Check, Crown, Loader2, Rocket, Sparkles, Zap, ArrowLeft } from "lucide-
 import { PLANS, IAP_PLANS, type PlanId } from "@/lib/billing/plans";
 import { activateEnterpriseCode, type ActivationResult } from "@/lib/billing/activation";
 import { purchaseProduct } from "@/lib/billing/revenuecat";
-import { createStripeCheckout } from "@/lib/billing/checkout";
+import { startStripeCheckout } from "@/lib/billing/stripeCheckoutAction";
 import { isIOS } from "@/lib/platform";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -190,24 +190,12 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
       return;
     }
 
-    // Web: try RevenueCat first (in case running native via other means), then Stripe
-    try {
-      const result = await purchaseProduct(planId === "starter" ? "com.elevio.starter.monthly" : "com.elevio.pro.monthly");
-      if (result.ok) {
-        router.push("/admin/projects");
-        return;
-      }
-    } catch {
-      // RevenueCat not available on web
-    }
-
-    // Stripe Checkout (web only — blocked on iOS by isIOS guard above)
-    const result = await createStripeCheckout({
+    // Web: Stripe Checkout via server action (iOS already handled above)
+    const result = await startStripeCheckout({
       planId,
       period: "monthly",
       userId,
       email,
-      isIOS: false, // Already blocked above, but pass explicit flag for server-side guard
     });
 
     if (result.url) {
