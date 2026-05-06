@@ -7,6 +7,7 @@ import { activateEnterpriseCode, type ActivationResult } from "@/lib/billing/act
 import { purchaseProduct } from "@/lib/billing/revenuecat";
 import { createStripeCheckout } from "@/lib/billing/checkout";
 import { isIOS } from "@/lib/platform";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 function PlanCard({ planId, onSubscribe, isIOSPlatform }: { planId: PlanId; onSubscribe: (planId: PlanId) => void; isIOSPlatform: boolean }) {
@@ -163,6 +164,7 @@ function ActivationCodeBox() {
 }
 
 export function PaywallClient({ userId, email }: { userId: string; email: string }) {
+  const router = useRouter();
   const [iapMessage, setIapMessage] = useState<string | null>(null);
   const iosPlatform = isIOS();
 
@@ -171,7 +173,9 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
       // iOS: RevenueCat IAP ONLY — never Stripe
       const result = await purchaseProduct(planId === "starter" ? "com.elevio.starter.monthly" : "com.elevio.pro.monthly");
       if (result.ok) {
-        window.location.reload();
+        // Use router.push instead of window.location.reload to avoid infinite reload loops on Capacitor.
+        // The SubscriptionSyncProvider will sync RevenueCat → Supabase on the next render.
+        router.push("/operator");
         return;
       }
       setIapMessage(result.error ?? "Erreur d'achat.");
@@ -183,7 +187,7 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
     try {
       const result = await purchaseProduct(planId === "starter" ? "com.elevio.starter.monthly" : "com.elevio.pro.monthly");
       if (result.ok) {
-        window.location.reload();
+        router.push("/admin/projects");
         return;
       }
     } catch {
@@ -248,6 +252,28 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
         <p className="mt-6 text-center text-xs font-bold text-slate-500">
           Le plan Starter (1 chantier, 2 opérateurs) est actif par défaut. Aucune carte requise.
         </p>
+      )}
+
+      {/* Restore Purchases — required by App Store for IAP apps */}
+      {iosPlatform && (
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={async () => {
+              const { restorePurchases } = await import("@/lib/billing/revenuecat");
+              const entitlement = await restorePurchases();
+              if (entitlement?.isActive) {
+                router.push("/operator");
+              } else {
+                setIapMessage("Aucun achat antérieur trouvé.");
+                setTimeout(() => setIapMessage(null), 5000);
+              }
+            }}
+            className="text-xs font-bold text-slate-500 hover:text-slate-300 underline"
+          >
+            Restaurer les achats
+          </button>
+        </div>
       )}
     </div>
   );

@@ -105,15 +105,40 @@ export async function POST(req: NextRequest) {
       activated_via: "iap",
       expires_at: event.expiration_at ?? null,
     }, { onConflict: "user_id" });
-  } else if (status === "expired" || status === "canceled") {
-    // Downgrade to starter when subscription ends
+  } else if (status === "expired") {
+    // Subscription expired — downgrade to starter
     await supabase.from("user_entitlements").upsert({
       user_id: userId,
       plan: "starter",
       activated_via: "default",
     }, { onConflict: "user_id" });
+  } else if (status === "canceled") {
+    // Cancellation but still within billing period (grace period) — keep entitlement
+    // Apple/RevenueCat keeps access until expiration_at. Only downgrade when EXPIRATION fires.
+    // Update subscription status to canceled but keep the entitlement active until expiration.
+    if (event.expiration_at) {
+      const expiresAt = new Date(event.expiration_at);
+      const now = new Date();
+      if (expiresAt > now) {
+        // Still in billing period — keep entitlement, mark subscription as canceled
+        await supabase.from("user_entitlements").upsert({
+          user_id: userId,
+          plan: planId,
+          activated_via: "iap",
+          expires_at: event.expiration_at,
+        }, { onConflict: "user_id" });
+      } else {
+        // Already past expiration — downgrade
+        await supabase.from("user_entitlements").upsert({
+          user_id: userId,
+          plan: "starter",
+          activated_via: "default",
+        }, { onConflict: "user_id" });
+      }
+    }
   }
   // past_due: keep current plan but mark subscription as past_due
+  // BILLING_RETRY: keep current entitlement — user may still have access during retry period
 
   return NextResponse.json({ received: true });
 }

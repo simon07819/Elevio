@@ -5,6 +5,7 @@ import { Check, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { isIOS } from "@/lib/platform";
 import { purchaseProduct } from "@/lib/billing/revenuecat";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 const PLANS = [
@@ -70,6 +71,7 @@ const PLANS = [
 ];
 
 export function AppPricingScreen() {
+  const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const iosPlatform = isIOS();
@@ -80,7 +82,8 @@ export function AppPricingScreen() {
     try {
       const result = await purchaseProduct(productId as "com.elevio.starter.monthly" | "com.elevio.pro.monthly");
       if (result.ok) {
-        window.location.reload();
+        // Use router.push instead of window.location.reload to avoid infinite reload loops
+        router.push("/operator");
       } else {
         setMessage(result.error ?? "Erreur d'achat.");
         setTimeout(() => setMessage(null), 5000);
@@ -187,7 +190,7 @@ export function AppPricingScreen() {
         {/* No "pay on website" link on iOS — App Store rule */}
         {!iosPlatform && (
           <Link href="/welcome" className="text-sm font-bold text-slate-500 hover:text-slate-300">
-            Retour à l'accueil
+            Retour à l&apos;accueil
           </Link>
         )}
       </div>

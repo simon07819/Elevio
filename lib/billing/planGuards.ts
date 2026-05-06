@@ -30,10 +30,10 @@ export async function getSubscriptionStatus(userId: string): Promise<{
     return { hasActiveSubscription: true, status: null, provider: null, planId: "starter" };
   }
 
-  // Get the entitlement plan
+  // Get the entitlement plan + expiration
   const { data: entitlement } = await supabase
     .from("user_entitlements")
-    .select("plan, activated_via")
+    .select("plan, activated_via, expires_at")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -43,6 +43,15 @@ export async function getSubscriptionStatus(userId: string): Promise<{
   // Admin/activation_code users don't need a subscription check
   if (activatedVia === "admin" || activatedVia === "activation_code") {
     return { hasActiveSubscription: true, status: "active", provider: activatedVia, planId };
+  }
+
+  // Check if entitlement has expired (server-side expiration guard)
+  if (entitlement?.expires_at) {
+    const expiresAt = new Date(entitlement.expires_at);
+    if (expiresAt < new Date() && activatedVia === "iap") {
+      // IAP entitlement expired — treat as no subscription
+      return { hasActiveSubscription: false, status: "expired", provider: "revenuecat", planId: "starter" };
+    }
   }
 
   // Check for any active subscription
