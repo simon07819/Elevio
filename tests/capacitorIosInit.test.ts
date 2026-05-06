@@ -36,12 +36,16 @@ test("capacitor: iOS platform added with Xcode project", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Server URL config supports live-server mode
+// 3. Server URL via env var + WelcomeScreen inline fallback
 // ---------------------------------------------------------------------------
-test("capacitor: server.url config for live-server mode", () => {
+test("capacitor: server.url from CAPACITOR_SERVER_URL env + WelcomeScreen inline fallback", () => {
   const config = readFileSync(join(root, "capacitor.config.ts"), "utf8");
-  assert.match(config, /CAPACITOR_SERVER_URL/, "server.url uses env var");
+  assert.match(config, /CAPACITOR_SERVER_URL/, "server.url reads from CAPACITOR_SERVER_URL env var");
   assert.match(config, /server/, "server config section exists");
+  // Fallback: ScanHome renders WelcomeScreen inline for native (no /welcome redirect)
+  const scanHome = readFileSync(join(root, "components/ScanHome.tsx"), "utf8");
+  assert.match(scanHome, /WelcomeScreen/, "ScanHome renders WelcomeScreen inline for native");
+  assert.doesNotMatch(scanHome, /router\.replace\("\/welcome"\)/, "no router.replace to /welcome (would loop)");
 });
 
 // ---------------------------------------------------------------------------

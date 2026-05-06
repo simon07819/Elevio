@@ -103,9 +103,10 @@ test("appstore: / renders ScanHome directly (no redirect, no landing)", () => {
   assert.doesNotMatch(HOME_PAGE, /from "next\/navigation"/, "no next/navigation import (no server redirect)");
 });
 
-test("appstore: ScanHome redirects native to /welcome (not paywall)", () => {
+test("appstore: ScanHome renders WelcomeScreen inline for native (no redirect)", () => {
   assert.match(SCAN_HOME, /isCapacitorNative/, "detects Capacitor native");
-  assert.match(SCAN_HOME, /\/welcome/, "redirects to welcome on native");
+  assert.match(SCAN_HOME, /WelcomeScreen/, "renders WelcomeScreen inline for native");
+  assert.doesNotMatch(SCAN_HOME, /router\.replace\("\/welcome"\)/, "does NOT redirect to /welcome (would loop)");
   assert.doesNotMatch(SCAN_HOME, /\/paywall/, "does NOT redirect to paywall");
 });
 
@@ -178,8 +179,11 @@ test("appstore: Capacitor app name is Elevio", () => {
   assert.match(CAPACITOR_CONFIG, /Elevio/, "correct app name");
 });
 
-test("appstore: Capacitor uses https scheme (not http)", () => {
-  assert.match(CAPACITOR_CONFIG, /androidScheme.*https/, "uses https scheme");
+test("appstore: Capacitor uses https scheme (default in Capacitor 8)", () => {
+  // Capacitor 8 defaults to https scheme — no explicit config needed
+  const CAPACITOR_CONFIG = readFileSync(join(root, "capacitor.config.ts"), "utf8");
+  assert.ok(!CAPACITOR_CONFIG.includes("androidScheme: 'http'"), "does NOT use http scheme");
+  // Default is https per Capacitor 8 docs
 });
 
 // ═══════════════════════════════════════════════════════════════════

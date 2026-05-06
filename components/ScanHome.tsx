@@ -9,6 +9,7 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import { isCapacitorNative } from "@/lib/platform";
+import { WelcomeScreen } from "@/components/mobile/WelcomeScreen";
 
 type BarcodeDetectorShape = {
   detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>>;
@@ -51,12 +52,18 @@ async function getCameraStream(): Promise<MediaStream> {
 export function ScanHome() {
   const router = useRouter();
 
-  // Capacitor native (iOS) users should go to /welcome for onboarding
+  // Capacitor native (iOS) users see the WelcomeScreen directly — no redirect needed.
+  // Redirecting to /welcome causes an infinite loop because /welcome has no static HTML
+  // in the Capacitor webDir (out/). Instead, we render WelcomeScreen inline.
+  const [isNative, setIsNative] = useState(false);
   useEffect(() => {
-    if (isCapacitorNative()) {
-      router.replace("/welcome");
-    }
-  }, [router]);
+    setIsNative(isCapacitorNative());
+  }, []);
+
+  if (isNative) {
+    return <WelcomeScreen />;
+  }
+
   const { t } = useLanguage();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);

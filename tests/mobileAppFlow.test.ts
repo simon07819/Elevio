@@ -40,10 +40,12 @@ test("mobile: welcome has Apple sign-in button", () => {
   assert.match(WELCOME_SCREEN, /Apple/, "Apple icon");
 });
 
-test("mobile: welcome uses Capacitor Sign-In with Apple plugin", () => {
-  assert.match(WELCOME_SCREEN, /@capacitor-community\/apple-sign-in/, "imports Capacitor plugin");
-  assert.match(WELCOME_SCREEN, /SignInWithApple\.authorize/, "calls authorize()");
-  assert.match(WELCOME_SCREEN, /identityToken/, "extracts identityToken from response");
+test("mobile: welcome uses Capawesome Apple Sign-In plugin (Capacitor 8)", () => {
+  assert.match(WELCOME_SCREEN, /@capawesome\/capacitor-apple-sign-in/, "imports Capawesome plugin");
+  assert.match(WELCOME_SCREEN, /AppleSignIn\.signIn/, "calls AppleSignIn.signIn()");
+  assert.match(WELCOME_SCREEN, /SignInScope/, "uses SignInScope enum");
+  assert.match(WELCOME_SCREEN, /idToken/, "extracts idToken from result");
+  assert.doesNotMatch(WELCOME_SCREEN, /@capacitor-community\/apple-sign-in/, "no longer uses old Capacitor 7 plugin");
 });
 
 test("mobile: welcome detects Capacitor native vs web", () => {
@@ -53,14 +55,13 @@ test("mobile: welcome detects Capacitor native vs web", () => {
   assert.match(PLATFORM, /Capacitor\.isNativePlatform/, "platform module checks Capacitor.isNativePlatform()");
 });
 
-test("mobile: welcome sends identityToken to signInWithApple server action", () => {
-  assert.match(WELCOME_SCREEN, /signInWithApple\(identityToken/, "passes identityToken to server action");
+test("mobile: welcome sends idToken to signInWithApple server action", () => {
+  assert.match(WELCOME_SCREEN, /signInWithApple\(idToken/, "passes idToken to server action");
   assert.match(WELCOME_SCREEN, /givenName|familyName/, "passes name from Apple response");
 });
 
 test("mobile: welcome handles Apple cancellation gracefully", () => {
-  assert.match(WELCOME_SCREEN, /cancel|CANCELED/, "handles user cancellation");
-  assert.match(WELCOME_SCREEN, /1001/, "handles Apple error code 1001 (cancelled)");
+  assert.match(WELCOME_SCREEN, /cancel|CANCELED|SIGN_IN_CANCELED/, "handles user cancellation");
 });
 
 test("mobile: welcome has email sign-in", () => {
@@ -191,14 +192,15 @@ test("mobile: signUpMobile creates account with onboarding data", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // 5. / redirects to /scan — no landing page
 // ═══════════════════════════════════════════════════════════════════════════
-test("mobile: / renders ScanHome directly (no marketing landing page)", () => {
+test("mobile: / renders ScanHome directly; Capacitor native gets WelcomeScreen inline (no redirect)", () => {
   assert.match(HOME, /ScanHome/, "/ renders ScanHome directly");
   assert.doesNotMatch(HOME, /HomeContent/, "/ does NOT render HomeContent");
   assert.doesNotMatch(HOME, /from "next\/navigation"/, "/ does NOT import redirect");
-  // ScanHome redirects Capacitor users to /welcome
+  // ScanHome renders WelcomeScreen inline for Capacitor native users — no URL redirect
   const SCAN_HOME = readFileSync(join(root, "components/ScanHome.tsx"), "utf8");
   assert.match(SCAN_HOME, /isCapacitorNative/, "ScanHome detects Capacitor native");
-  assert.match(SCAN_HOME, /\/welcome/, "ScanHome redirects native users to /welcome");
+  assert.match(SCAN_HOME, /WelcomeScreen/, "ScanHome renders WelcomeScreen inline for native");
+  assert.doesNotMatch(SCAN_HOME, /router\.replace\("\/welcome"\)/, "ScanHome does NOT redirect to /welcome (would loop)");
 });
 
 test("mobile: web /pricing is NOT the app-pricing screen", () => {
@@ -224,15 +226,14 @@ const CAP_REDIRECT_HOOK = readFileSync(join(root, "hooks/useCapacitorRedirect.ts
 const OUT_INDEX = readFileSync(join(root, "out/index.html"), "utf8");
 const IOS_PUBLIC_INDEX = readFileSync(join(root, "ios/App/App/public/index.html"), "utf8");
 
-test("capacitor: config uses server.url from env (production Vercel URL)", () => {
-  assert.match(CAPACITOR_CONFIG, /CAPACITOR_SERVER_URL/, "dev server URL from env");
-  assert.match(CAPACITOR_CONFIG, /NEXT_PUBLIC_SITE_URL/, "production URL from env");
+test("capacitor: config uses webDir out for static serving", () => {
+  assert.match(CAPACITOR_CONFIG, /webDir/, "webDir configured");
 });
 
-test("capacitor: useCapacitorRedirect hook exists", () => {
+test("capacitor: useCapacitorRedirect hook detects native but does NOT redirect", () => {
   assert.match(CAP_REDIRECT_HOOK, /isNativePlatform/, "checks Capacitor.isNativePlatform");
-  assert.match(CAP_REDIRECT_HOOK, /\/welcome/, "redirects to /welcome");
-  assert.match(CAP_REDIRECT_HOOK, /router\.replace/, "uses router.replace (no history)");
+  assert.doesNotMatch(CAP_REDIRECT_HOOK, /window\.location\.replace/, "no window.location.replace");
+  assert.doesNotMatch(CAP_REDIRECT_HOOK, /router\.replace/, "no router.replace to /welcome (would cause loop)");
 });
 
 test("capacitor: HomeContent uses Capacitor redirect", () => {
@@ -240,19 +241,18 @@ test("capacitor: HomeContent uses Capacitor redirect", () => {
   assert.match(HOME_CONTENT, /ready/, "checks ready state before rendering");
 });
 
-test("capacitor: AppDelegate navigates to /welcome on iOS launch", () => {
-  assert.match(APP_DELEGATE, /\/welcome/, "navigates to /welcome");
-  assert.match(APP_DELEGATE, /CAPBridgeViewController/, "accesses Capacitor bridge");
-  assert.match(APP_DELEGATE, /evaluateJavaScript/, "uses JS evaluation for navigation");
+test("capacitor: AppDelegate does NOT navigate to /welcome (removed to fix loop)", () => {
+  assert.doesNotMatch(APP_DELEGATE, /window\.location\.replace/, "no window.location.replace to /welcome");
+  assert.doesNotMatch(APP_DELEGATE, /evaluateJavaScript/, "no JS evaluation for navigation");
+  assert.doesNotMatch(APP_DELEGATE, /CAPBridgeViewController/, "no bridge access for navigation");
 });
 
-test("capacitor: out/index.html fallback redirects Capacitor to /welcome", () => {
-  assert.match(OUT_INDEX, /Capacitor/, "checks for Capacitor global");
-  assert.match(OUT_INDEX, /\/welcome/, "redirects to /welcome");
-  assert.match(OUT_INDEX, /isNativePlatform/, "checks isNativePlatform");
+test("capacitor: out/index.html has debug boot log, no redirect to /welcome", () => {
+  assert.doesNotMatch(OUT_INDEX, /window\.location\.replace/, "no redirect to /welcome (would cause loop)");
+  assert.match(OUT_INDEX, /iOS Boot/, "has debug boot log");
 });
 
-test("capacitor: ios/App/App/public/index.html fallback also redirects", () => {
-  assert.match(IOS_PUBLIC_INDEX, /Capacitor/, "checks for Capacitor global");
-  assert.match(IOS_PUBLIC_INDEX, /\/welcome/, "redirects to /welcome");
+test("capacitor: ios/App/App/public/index.html has debug boot log, no redirect", () => {
+  assert.doesNotMatch(IOS_PUBLIC_INDEX, /window\.location\.replace/, "no redirect to /welcome (would cause loop)");
+  assert.match(IOS_PUBLIC_INDEX, /iOS Boot/, "has debug boot log");
 });

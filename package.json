@@ -20,10 +20,10 @@
     "cleanup:requests": "curl -s -X POST \"$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/cleanup_terminal_requests\" -H \"apikey: $SUPABASE_SERVICE_ROLE_KEY\" -H \"Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY\" -H \"Content-Type: application/json\" -d '{}' | jq ."
   },
   "dependencies": {
-    "@capacitor-community/apple-sign-in": "^7.1.0",
     "@capacitor/cli": "^8.3.1",
     "@capacitor/core": "^8.3.1",
     "@capacitor/ios": "^8.3.1",
+    "@capawesome/capacitor-apple-sign-in": "^0.1.0",
     "@revenuecat/purchases-capacitor": "^13.0.1",
     "@sentry/nextjs": "^10.51.0",
     "@supabase/ssr": "latest",

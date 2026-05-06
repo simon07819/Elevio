@@ -1,6 +1,7 @@
 "use client";
 
 import { BrandLogo } from "@/components/BrandLogo";
+import { AppleSignIn, SignInScope } from "@capawesome/capacitor-apple-sign-in";
 import { signInWithApple, signInMobile } from "@/lib/mobileAuth";
 import { isCapacitorNative } from "@/lib/platform";
 import { Apple, ChevronRight, Mail } from "lucide-react";
@@ -22,28 +23,21 @@ export function WelcomeScreen() {
 
     try {
       if (isCapacitorNative()) {
-        // ── NATIVE iOS: Use Capacitor Sign-In with Apple plugin ──
-        const { SignInWithApple } = await import("@capacitor-community/apple-sign-in");
-
-        const APPLE_CLIENT_ID = process.env.NEXT_PUBLIC_APPLE_CLIENT_ID ?? "com.elevio.app";
-        const origin = window.location.origin;
-
-        const result = await SignInWithApple.authorize({
-          clientId: APPLE_CLIENT_ID,
-          redirectURI: `${origin}/welcome`,
-          scopes: "email name",
+        // ── NATIVE iOS: Use Capawesome Apple Sign-In plugin (Capacitor 8) ──
+        const result = await AppleSignIn.signIn({
+          scopes: [SignInScope.Email, SignInScope.FullName],
         });
 
-        const { identityToken, givenName, familyName } = result.response;
+        const { idToken, givenName, familyName } = result;
 
-        if (!identityToken) {
+        if (!idToken) {
           setMessage("Erreur Apple : jeton manquant. Réessayez.");
           setLoading(false);
           return;
         }
 
         // Send the identityToken to the server action for Supabase verification
-        const serverResult = await signInWithApple(identityToken, {
+        const serverResult = await signInWithApple(idToken, {
           firstName: givenName,
           familyName: familyName,
         });
@@ -53,30 +47,27 @@ export function WelcomeScreen() {
         }
         // If ok, the server action redirects (throws) — that's expected
       } else {
-        // ── WEB BROWSER: Apple JS SDK via the Capacitor web plugin ──
-        // The web implementation loads Apple's JS SDK and uses a popup.
-        // Requires a configured Service ID in Apple Developer Portal.
+        // ── WEB BROWSER: Initialize then sign in ──
         try {
-          const { SignInWithApple } = await import("@capacitor-community/apple-sign-in");
-
           const APPLE_CLIENT_ID = process.env.NEXT_PUBLIC_APPLE_WEB_CLIENT_ID ?? process.env.NEXT_PUBLIC_APPLE_CLIENT_ID ?? "com.elevio.app.web";
           const origin = window.location.origin;
 
-          const result = await SignInWithApple.authorize({
-            clientId: APPLE_CLIENT_ID,
-            redirectURI: `${origin}/welcome`,
-            scopes: "email name",
+          await AppleSignIn.initialize({ clientId: APPLE_CLIENT_ID });
+
+          const result = await AppleSignIn.signIn({
+            redirectUrl: `${origin}/welcome`,
+            scopes: [SignInScope.Email, SignInScope.FullName],
           });
 
-          const { identityToken, givenName, familyName } = result.response;
+          const { idToken, givenName, familyName } = result;
 
-          if (!identityToken) {
+          if (!idToken) {
             setMessage("Erreur Apple : jeton manquant. Réessayez.");
             setLoading(false);
             return;
           }
 
-          const serverResult = await signInWithApple(identityToken, {
+          const serverResult = await signInWithApple(idToken, {
             firstName: givenName,
             familyName: familyName,
           });
@@ -92,12 +83,11 @@ export function WelcomeScreen() {
     } catch (err) {
       // redirect() throws — that's the normal success path
       if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) {
-        // Server action redirected — this is success
         return;
       }
       // User cancelled or real error
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("cancel") || msg.includes("CANCELED") || msg.includes("1001")) {
+      if (msg.includes("cancel") || msg.includes("CANCELED") || msg.includes("SIGN_IN_CANCELED") || msg.includes("1001")) {
         setMessage(""); // User cancelled — no error message
       } else {
         setMessage(`Apple : ${msg.slice(0, 100)}`);

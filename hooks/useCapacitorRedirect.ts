@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 
 /**
  * When running inside the Capacitor native shell (iOS/Android),
- * redirect from the web landing page to the mobile welcome screen.
+ * detect native platform so the component can render mobile UI inline.
  *
- * Detection: window.Capacitor.isNativePlatform() returns true
- * when the JS is running inside Capacitor's WebView.
+ * IMPORTANT: Do NOT redirect to /welcome — it has no static HTML file
+ * in the Capacitor webDir and causes an infinite reload loop.
+ * Instead, render the WelcomeScreen inline at /.
  *
  * Returns: { ready: boolean } — caller should render nothing until ready.
  */
 export function useCapacitorRedirect() {
-  const router = useRouter();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -22,14 +21,10 @@ export function useCapacitorRedirect() {
       typeof (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform === "function" &&
       (window as unknown as { Capacitor: { isNativePlatform: () => boolean } }).Capacitor.isNativePlatform();
 
-    if (isNative) {
-      router.replace("/welcome");
-      // Don't set ready — keep showing nothing while redirect happens
-      return;
-    }
-
+    // For native Capacitor, just mark as ready — no redirect.
+    // The calling component (HomeContent) will handle native detection itself.
     setReady(true);
-  }, [router]);
+  }, []);
 
   return { ready };
 }

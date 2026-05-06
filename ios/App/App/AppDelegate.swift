@@ -7,21 +7,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Navigate to /welcome after the Capacitor WebView loads.
-        // This ensures the iOS app always opens on the mobile welcome screen,
-        // not the web landing page. The client-side useCapacitorRedirect hook
-        // also handles this as a fallback.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            if let nav = self?.window?.rootViewController as? UINavigationController,
-               let bridgeVC = nav.viewControllers.first as? CAPBridgeViewController,
-               let webView = bridgeVC.webView {
-                // Evaluate JS to check if already on /welcome; if not, navigate
-                webView.evaluateJavaScript("if(window.location.pathname !== '/welcome'){window.location.replace('/welcome')}", completionHandler: nil)
-            } else if let bridgeVC = self?.window?.rootViewController as? CAPBridgeViewController,
-                      let webView = bridgeVC.webView {
-                webView.evaluateJavaScript("if(window.location.pathname !== '/welcome'){window.location.replace('/welcome')}", completionHandler: nil)
-            }
-        }
+        // No redirect needed: Capacitor native renders WelcomeScreen inline at /.
+        // Previously, navigating to /welcome caused an infinite reload loop
+        // because /welcome had no static HTML file in the Capacitor webDir.
         return true
     }
 

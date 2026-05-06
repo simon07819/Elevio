@@ -4,7 +4,7 @@
  * Mobile auth — real Apple Sign-In + email login.
  *
  * Apple Sign-In flow:
- * 1. Client calls Capacitor @capacitor-community/apple-sign-in
+ * 1. Client calls @capawesome/capacitor-apple-sign-in (Capacitor 8)
  *    → native Apple auth sheet on iOS, Apple JS SDK on web
  * 2. Gets identityToken (JWT) + optional fullName
  * 3. Posts to signInWithApple(identityToken, fullName) server action

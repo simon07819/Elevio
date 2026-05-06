@@ -38,19 +38,19 @@ const SUPERADMIN_LAYOUT = readFileSync(join(root, "app/superadmin/layout.tsx"), 
 // PHASE 1: New account + onboarding + plan guard
 // ═══════════════════════════════════════════════════════════════════════════
 
-test("flow: /welcome exists and uses Capacitor redirect", () => {
+test("flow: /welcome exists as a standalone page", () => {
   assert.ok(WELCOME.length > 0, "/welcome page component exists");
   assert.match(WELCOME, /isCapacitorNative/, "detects native platform");
   assert.match(WELCOME, /signInWithApple/, "has Apple Sign-In");
   assert.match(WELCOME, /signInMobile/, "has email login");
 });
 
-test("flow: / redirects to /scan on web, /welcome on Capacitor iOS", () => {
+test("flow: / renders ScanHome with inline WelcomeScreen for Capacitor native", () => {
   const HOME_PAGE = readFileSync(join(root, "app/page.tsx"), "utf8");
   assert.match(HOME_PAGE, /ScanHome/, "/ renders ScanHome directly (no landing page)");
   const SCAN_HOME = readFileSync(join(root, "components/ScanHome.tsx"), "utf8");
   assert.match(SCAN_HOME, /isCapacitorNative/, "ScanHome detects Capacitor native");
-  assert.match(SCAN_HOME, /\/welcome/, "ScanHome redirects native users to /welcome");
+  assert.match(SCAN_HOME, /WelcomeScreen/, "ScanHome renders WelcomeScreen inline for native (no redirect to /welcome)");
 });
 
 test("flow: onboarding uses default starter plan", () => {
