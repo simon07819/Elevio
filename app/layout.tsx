@@ -44,6 +44,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `
+          window.onerror = function(m,s,l,c,e) {
+            console.error("[EARLY BOOT ERROR] onerror:", m, s + ":" + l + ":" + c, e && e.stack);
+          };
+          window.onunhandledrejection = function(ev) {
+            var r = ev.reason;
+            console.error("[EARLY BOOT ERROR] unhandled rejection:", r && r.message, r && r.stack);
+          };
+        ` }} />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} industrial-bg antialiased`}>
         <LanguageProvider>
           <BootErrorLogger />

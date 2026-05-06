@@ -1,7 +1,6 @@
 "use client";
 
 import { BrandLogo } from "@/components/BrandLogo";
-import { AppleSignIn, SignInScope } from "@capawesome/capacitor-apple-sign-in";
 import { signInWithApple, signInMobile } from "@/lib/mobileAuth";
 import { isCapacitorNative } from "@/lib/platform";
 import { Apple, ChevronRight, Mail } from "lucide-react";
@@ -22,6 +21,9 @@ export function WelcomeScreen() {
     setMessage(null);
 
     try {
+      // Dynamic import — prevents plugin JS from evaluating at boot
+      const { AppleSignIn, SignInScope } = await import("@capawesome/capacitor-apple-sign-in");
+
       if (isCapacitorNative()) {
         // ── NATIVE iOS: Use Capawesome Apple Sign-In plugin (Capacitor 8) ──
         const result = await AppleSignIn.signIn({
