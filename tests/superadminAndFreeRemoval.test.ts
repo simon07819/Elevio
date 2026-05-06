@@ -77,8 +77,8 @@ describe("Free plan removal", () => {
 // 2. Superadmin auth
 // ═══════════════════════════════════════════════════════════════════
 describe("Superadmin auth", () => {
-  test("SUPERADMIN_EMAIL defaults to simon@dsdconstruction.ca", () => {
-    assert.match(SUPERADMIN_AUTH, /simon@dsdconstruction\.ca/, "default email is simon@dsdconstruction.ca");
+  test("SUPERADMIN_EMAIL has no hardcoded fallback", () => {
+    assert.match(SUPERADMIN_AUTH, /SUPERADMIN_EMAIL.*\?\? ?""/, "no hardcoded email — must be set via env var");
   });
 
   test("isSuperAdminEmail uses lowercase comparison", () => {

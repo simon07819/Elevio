@@ -60,9 +60,10 @@ export async function createStripeCheckout(params: {
     return { url: null, error: "Plan non disponible en ligne. Contactez-nous pour un devis." };
   }
 
-  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-
-  const result = await createCheckoutSession({
+  const origin = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!origin) {
+    return { url: null, error: "Configuration manquante (NEXT_PUBLIC_SITE_URL). Contactez le support." };
+  }
     priceId,
     userId: params.userId,
     email: params.email,
@@ -92,7 +93,10 @@ export async function createStripeBillingPortal(params: {
     return { url: null, error: "Stripe non configuré." };
   }
 
-  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const origin = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!origin) {
+    return { url: null, error: "Configuration manquante (NEXT_PUBLIC_SITE_URL). Contactez le support." };
+  }
 
   const result = await createPortalSession({
     customerId: params.customerId,

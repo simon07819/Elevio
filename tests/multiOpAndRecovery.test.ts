@@ -186,7 +186,8 @@ test("superadmin: operator page also shows button for superadmin role", () => {
 
 test("superadmin: email comparison is case-insensitive", () => {
   assert.match(AUTH_SUPERADMIN, /toLowerCase/, "lowercase comparison");
-  assert.match(AUTH_SUPERADMIN, /simon@dsdconstruction\.ca/, "canonical email");
+  // No hardcoded email — SUPERADMIN_EMAIL must be set via env var
+  assert.match(AUTH_SUPERADMIN, /SUPERADMIN_EMAIL/, "reads SUPERADMIN_EMAIL env var");
 });
 
 test("superadmin: suspend user action exists", () => {

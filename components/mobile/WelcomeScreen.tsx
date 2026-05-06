@@ -49,7 +49,12 @@ export function WelcomeScreen() {
       } else {
         // ── WEB BROWSER: Initialize then sign in ──
         try {
-          const APPLE_CLIENT_ID = process.env.NEXT_PUBLIC_APPLE_WEB_CLIENT_ID ?? process.env.NEXT_PUBLIC_APPLE_CLIENT_ID ?? "com.elevio.app.web";
+          const APPLE_CLIENT_ID = process.env.NEXT_PUBLIC_APPLE_WEB_CLIENT_ID ?? process.env.NEXT_PUBLIC_APPLE_CLIENT_ID ?? "";
+          if (!APPLE_CLIENT_ID) {
+            setMessage("Configuration Apple manquante. Contactez le support.");
+            setLoading(false);
+            return;
+          }
           const origin = window.location.origin;
 
           await AppleSignIn.initialize({ clientId: APPLE_CLIENT_ID });

@@ -69,7 +69,8 @@ test("flow: profile default role is operator (not admin)", () => {
 
 test("flow: superadmin email gets superadmin role on profile creation", () => {
   assert.match(PROFILE, /superadminEmails/, "superadminEmails function exists");
-  assert.match(AUTH_SUPERADMIN, /simon@dsdconstruction\.ca/, "superadmin email is simon@dsdconstruction.ca");
+  // SUPERADMIN_EMAIL must be configured explicitly — no hardcoded fallback
+  assert.match(AUTH_SUPERADMIN, /SUPERADMIN_EMAIL.*\?\? ?""/, "no hardcoded superadmin email");
   assert.match(AUTH_SUPERADMIN, /toLowerCase/, "uses lowercase comparison");
 });
 

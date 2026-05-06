@@ -80,7 +80,8 @@ test("operator: double-click dropoff guard exists", () => {
 
 test("superadmin: isSuperAdminEmail uses lowercase comparison (bootstrap fallback)", () => {
   assert.match(AUTH_SUPERADMIN, /toLowerCase/, "lowercase comparison");
-  assert.match(AUTH_SUPERADMIN, /simon@dsdconstruction\.ca/, "canonical email present");
+  // No hardcoded fallback — SUPERADMIN_EMAIL must be set explicitly
+  assert.match(AUTH_SUPERADMIN, /SUPERADMIN_EMAIL.*\?\? ?""/, "no hardcoded email fallback");
 });
 
 test("superadmin: isSuperAdminProfile checks profile.account_role", () => {
@@ -163,7 +164,8 @@ test("menu: Metrics NOT in main navigation", () => {
 test("menu: superadminEmails uses SUPERADMIN_EMAIL env var (fix profile.role bug)", () => {
   const PROFILE = readFileSync(join(root, "lib/profile.ts"), "utf8");
   assert.match(PROFILE, /SUPERADMIN_EMAIL/, "superadminEmails reads SUPERADMIN_EMAIL env var");
-  assert.match(PROFILE, /simon@dsdconstruction\.ca/, "default fallback is simon@dsdconstruction.ca");
+  // No hardcoded fallback — must be set explicitly in env
+  assert.match(PROFILE, /SUPERADMIN_EMAIL.*\?\? ?""/, "no hardcoded email fallback in profile.ts");
 });
 
 test("menu: Metrics accessible from superadmin sidebar/dashboard", () => {

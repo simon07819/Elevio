@@ -30,7 +30,7 @@ import { getSubscriptionStatus } from "@/lib/billing/planGuards";
 
 async function appOrigin() {
   const headerStore = await headers();
-  return headerStore.get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  return headerStore.get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "";
 }
 
 /**

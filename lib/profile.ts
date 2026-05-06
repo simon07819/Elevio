@@ -24,7 +24,7 @@ export function superadminEmails() {
     .split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
-  const single = (process.env.SUPERADMIN_EMAIL ?? "simon@dsdconstruction.ca").trim().toLowerCase();
+  const single = (process.env.SUPERADMIN_EMAIL ?? "").trim().toLowerCase();
   if (single && !fromList.includes(single)) {
     fromList.push(single);
   }

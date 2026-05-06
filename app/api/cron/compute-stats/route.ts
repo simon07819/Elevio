@@ -1,17 +1,20 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
-export async function POST(request: Request) {
-  // Auth check — REJECT if secret not configured (production safety)
-  if (!CRON_SECRET) {
-    console.error("[cron/compute-stats] CRON_SECRET not configured — rejecting");
-    return NextResponse.json({ error: "Cron auth not configured" }, { status: 500 });
-  }
-  const authHeader = request.headers.get("authorization");
-  const bearerToken = authHeader?.replace("Bearer ", "");
-  if (bearerToken !== CRON_SECRET) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+export async function POST(request: NextRequest) {
+  // Auth: accept Vercel cron (x-vercel-cron header) OR Bearer CRON_SECRET
+  const isVercelCron = request.headers.get("x-vercel-cron") === "1";
+  if (!isVercelCron) {
+    if (!CRON_SECRET) {
+      console.error("[cron/compute-stats] CRON_SECRET not configured and not Vercel cron — rejecting");
+      return NextResponse.json({ error: "Cron auth not configured" }, { status: 500 });
+    }
+    const authHeader = request.headers.get("authorization");
+    const bearerToken = authHeader?.replace("Bearer ", "");
+    if (bearerToken !== CRON_SECRET) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

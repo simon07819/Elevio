@@ -13,7 +13,7 @@ import type { User } from "@supabase/supabase-js";
 import type { Profile } from "@/lib/profile";
 
 /** The canonical superadmin email (lowercase comparison) — bootstrap fallback only */
-const SUPERADMIN_EMAIL = (process.env.SUPERADMIN_EMAIL ?? "simon@dsdconstruction.ca").trim().toLowerCase();
+const SUPERADMIN_EMAIL = (process.env.SUPERADMIN_EMAIL ?? "").trim().toLowerCase();
 
 /** Check if an email is the superadmin (bootstrap fallback) */
 export function isSuperAdminEmail(email?: string | null): boolean {
