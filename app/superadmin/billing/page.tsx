@@ -1,6 +1,7 @@
 import { requireSuperAdmin } from "@/lib/auth/superadmin";
 import { getSuperadminBilling } from "@/lib/superadmin";
 import { Badge } from "@/components/superadmin/Badge";
+import { SuperadminPlanEditor } from "@/components/superadmin/SuperadminPlanEditor";
 
 export default async function SuperadminBillingPage() {
   await requireSuperAdmin();
@@ -23,6 +24,11 @@ export default async function SuperadminBillingPage() {
           </p>
         </div>
       )}
+
+      <h2 className="mb-3 text-xl font-black text-white">Forfaits</h2>
+      <div className="mb-8">
+        <SuperadminPlanEditor />
+      </div>
 
       <h2 className="mb-3 text-xl font-black text-white">Abonnements</h2>
       <div className="overflow-x-auto">
