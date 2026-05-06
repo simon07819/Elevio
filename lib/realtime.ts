@@ -174,6 +174,9 @@ export function unsubscribe(client: SupabaseClient | null, channel: RealtimeChan
  * Attends une session Supabase puis souscrit au realtime ; recree le canal apres connexion / refresh JWT.
  * Sans ca (Safari, iPad, premier rendu Next), `subscribe()` part souvent avant les cookies auth :
  * le canal reste anonyme, la policy SELECT requests bloque → aucune mise a jour live tant que refresh manuel.
+ *
+ * Also recreates the channel when the WebSocket reconnects after a network interruption,
+ * so the subscriber gets a fresh channel with current server state.
  */
 export function bindRealtimeWithAuthSession(
   client: SupabaseClient | null,
@@ -214,9 +217,17 @@ export function bindRealtimeWithAuthSession(
     }
   });
 
+  // Re-create channel on network reconnect so missed events are recovered via poll.
+  const onOnline = () => {
+    if (cancelled) return;
+    void attachIfSession();
+  };
+  window.addEventListener("online", onOnline);
+
   return () => {
     cancelled = true;
     subscription.unsubscribe();
     teardown();
+    window.removeEventListener("online", onOnline);
   };
 }

@@ -77,7 +77,11 @@ export function OperatorDashboard({
   const [directionOverride, setDirectionOverride] = useState<Direction | null>(null);
   const [cancelingRequestIds, setCancelingRequestIds] = useState<Set<string>>(() => new Set());
   const [isClearingQueue, setIsClearingQueue] = useState(false);
-  const isOnline = useNetworkStatus();
+  const isOnline = useNetworkStatus(() => {
+    // Force immediate re-sync from DB when network comes back
+    logSync("networkBackOnline", { source: "useNetworkStatus" });
+    setLiveRequests((current) => mergeRequestsPropIntoLive(current, requests));
+  });
   const projectId = elevator.project_id;
   const manualFullDesiredRef = useRef<boolean | null>(null);
   const manualFullSyncingRef = useRef(false);
@@ -141,9 +145,28 @@ export function OperatorDashboard({
 
     window.addEventListener("pageshow", onPageShow);
     document.addEventListener("visibilitychange", onVisibilityChange);
+
+    // Capacitor iOS AppState listener — visibilitychange is unreliable on iOS.
+    let capacitorCleanup: (() => void) | null = null;
+    (async () => {
+      try {
+        const mod = await import(/* webpackIgnore: true */ "@capacitor/app");
+        const handler = await mod.App.addListener("appStateChange", (state: { isActive: boolean }) => {
+          if (state.isActive) {
+            logSync("appResume", { source: "capacitor_appStateChange" });
+            setLiveRequests((current) => mergeRequestsPropIntoLive(current, requests));
+          }
+        });
+        capacitorCleanup = () => handler.remove();
+      } catch {
+        // Not running on Capacitor — ignore
+      }
+    })();
+
     return () => {
       window.removeEventListener("pageshow", onPageShow);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      capacitorCleanup?.();
     };
   }, [requests]);
 

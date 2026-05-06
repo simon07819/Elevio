@@ -119,11 +119,11 @@ export function RequestForm({
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
   const [isCancellingRequest, setIsCancellingRequest] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
   const isOnline = useNetworkStatus(() => {
     // On back online: force a sync refresh of elevators + router refresh
     router.refresh();
   });
-  const router = useRouter();
   const { t } = useLanguage();
   const prioritiesEnabled = project.priorities_enabled !== false;
   const capacityEnabled = project.capacity_enabled !== false;
@@ -206,6 +206,28 @@ export function RequestForm({
     trackPassengerQRScanned(project.id, currentFloor.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Capacitor iOS AppState listener — re-sync passenger state on resume from background.
+  useEffect(() => {
+    let capacitorCleanup: (() => void) | null = null;
+    (async () => {
+      try {
+        const mod = await import(/* webpackIgnore: true */ "@capacitor/app");
+        const handler = await mod.App.addListener("appStateChange", (state: { isActive: boolean }) => {
+          if (state.isActive) {
+            // Force router refresh to re-sync with DB after background
+            router.refresh();
+          }
+        });
+        capacitorCleanup = () => handler.remove();
+      } catch {
+        // Not running on Capacitor — ignore
+      }
+    })();
+    return () => {
+      capacitorCleanup?.();
+    };
+  }, [router]);
 
   // Keep requestIdRef in sync with submittedRequest so that the .on() handlers
   // registered on the pre-subscribed channel (at mount time) always check the

@@ -1804,6 +1804,13 @@ export async function updateRequestStatus(
       .eq("id", requestId)
       .maybeSingle();
 
+    // Double-pickup guard: if the request is already assigned to a DIFFERENT elevator,
+    // reject this pickup. This prevents two operators from boarding the same request.
+    if (beforeRequest?.elevator_id && beforeRequest.elevator_id !== options.assignElevatorId) {
+      console.error("[updateRequestStatus] DOUBLE PICKUP BLOCKED", { requestId, existingElevatorId: beforeRequest.elevator_id, attemptedElevatorId: options.assignElevatorId });
+      return { ok: false, message: "Cette demande est déjà prise en charge par un autre opérateur." };
+    }
+
     if (beforeRequest?.elevator_id == null && beforeRequest?.project_id) {
       const { data: lift } = await supabase
         .from("elevators")

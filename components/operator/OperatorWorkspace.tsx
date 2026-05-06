@@ -355,10 +355,34 @@ export function OperatorWorkspace({
     window.addEventListener("pageshow", onPageShow);
     window.addEventListener("online", onOnline);
 
+    // Capacitor iOS AppState listener — visibilitychange is unreliable on iOS.
+    // When the app resumes from background, force a full re-sync from DB.
+    let capacitarCleanup: (() => void) | null = null;
+    (async () => {
+      try {
+        const mod = await import(/* webpackIgnore: true */ "@capacitor/app");
+        const handler = await mod.App.addListener("appStateChange", (state: { isActive: boolean }) => {
+          if (state.isActive) {
+            bump();
+            // Also re-merge SSR props to clear stale state from background
+            setLocalElevators((current) => mergeWithLocalClaim(current, elevators));
+            // Send heartbeat immediately on resume so session stays live
+            if (selectedElevator) {
+              heartbeatOperatorElevator(project.id, selectedElevator.id, sessionId);
+            }
+          }
+        });
+        capacitarCleanup = () => handler.remove();
+      } catch {
+        // Not running on Capacitor — ignore
+      }
+    })();
+
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("online", onOnline);
+      capacitarCleanup?.();
     };
   }, [elevators, mergeWithLocalClaim, router]);
 
