@@ -16,6 +16,10 @@
     "test:e2e:operator-real-flow:live": "npx playwright test --project=operator-real-flow",
     "test:e2e:full-live-regression": "npx playwright test --project=full-live-regression",
     "test:e2e:live": "npx playwright test",
+    "test:e2e:qa-operator": "npx playwright test --project=qa-operator",
+    "test:e2e:qa-passenger": "npx playwright test --project=qa-passenger",
+    "test:e2e:qa-billing": "npx playwright test --project=qa-billing",
+    "test:e2e:qa-stress": "ELEVIO_STRESS_MODE=1 npx playwright test --project=qa-stress",
     "typecheck": "tsc --noEmit",
     "cleanup:requests": "curl -s -X POST \"$NEXT_PUBLIC_SUPABASE_URL/rest/v1/rpc/cleanup_terminal_requests\" -H \"apikey: $SUPABASE_SERVICE_ROLE_KEY\" -H \"Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY\" -H \"Content-Type: application/json\" -d '{}' | jq ."
   },

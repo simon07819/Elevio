@@ -20,5 +20,10 @@ export default defineConfig({
     { name: "pickup-qr-return", testMatch: "pickup-qr-return.spec.ts" },
     { name: "operator-real-flow", testMatch: "operator-real-flow.spec.ts" },
     { name: "full-live-regression", testMatch: "full-live-regression.spec.ts" },
+    // ── LIVE QA ──
+    { name: "qa-operator", testMatch: "qa-operator-scenarios.spec.ts" },
+    { name: "qa-passenger", testMatch: "qa-passenger-scenarios.spec.ts" },
+    { name: "qa-billing", testMatch: "qa-billing-auth-scenarios.spec.ts" },
+    { name: "qa-stress", testMatch: "qa-stress-testing.spec.ts" },
   ],
 });
