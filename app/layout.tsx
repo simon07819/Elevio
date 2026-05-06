@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { LanguageProvider } from "@/components/i18n/LanguageProvider";
 import { SubscriptionSyncProvider } from "@/components/SubscriptionSyncProvider";
+import { BootErrorLogger } from "@/components/BootErrorLogger";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -45,6 +46,7 @@ export default function RootLayout({
     <html lang="fr">
       <body className={`${geistSans.variable} ${geistMono.variable} industrial-bg antialiased`}>
         <LanguageProvider>
+          <BootErrorLogger />
           <SubscriptionSyncProvider>{children}</SubscriptionSyncProvider>
         </LanguageProvider>
       </body>

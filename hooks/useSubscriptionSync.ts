@@ -9,70 +9,100 @@ import { captureError } from "@/lib/errorTracking";
 /**
  * Hook that synchronizes RevenueCat entitlements → Supabase on auth events.
  *
- * Source of truth: **RevenueCat** (the payment processor).
- * Supabase `user_entitlements` is a *cache* that mirrors RevenueCat state.
+ * ONLY runs when:
+ * - Platform is Capacitor native (iOS/Android)
+ * - REVENUECAT_API_KEY is configured
+ * - User has a Supabase session (authenticated)
  *
- * This hook runs:
- * - On mount (app launch / page load): syncs RevenueCat → Supabase
- * - On auth state change (login/logout): configures or logs out RevenueCat
- *
- * Guarantees:
- * - No infinite loops (runs once per auth state change)
- * - No hydration mismatch (client-only via useEffect)
- * - No aggressive polling (event-driven, not interval-based)
- * - Compatible with Capacitor iOS (safe native detection)
- * - Multi-device: syncs on every login, regardless of device
+ * Does NOT run for:
+ * - Unauthenticated passengers scanning QR codes
+ * - Web/PWA users (no Capacitor native)
+ * - Missing RevenueCat API key
  */
 
 export function useSubscriptionSync() {
   const syncedRef = useRef(false);
 
   useEffect(() => {
-    const native = isCapacitorNative();
-    if (!native) return;
+    // ── Guard 1: only run on Capacitor native ──
+    if (!isCapacitorNative()) return;
+
+    // ── Guard 2: RevenueCat API key must be configured ──
+    const rcKey = process.env.NEXT_PUBLIC_REVENUECAT_API_KEY?.trim();
+    if (!rcKey) return;
 
     const supabase = createClient();
     if (!supabase) return;
 
+    let cancelled = false;
+
     async function syncOnAuth() {
-      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
 
-      if (!session?.user) {
-        // User logged out — clean up RevenueCat
-        await logOutRevenueCat();
-        syncedRef.current = false;
-        return;
+        if (cancelled) return;
+
+        if (!session?.user) {
+          // User logged out or no session — clean up RevenueCat
+          try {
+            await logOutRevenueCat();
+          } catch {
+            // Non-critical — RevenueCat may not be initialized yet
+          }
+          syncedRef.current = false;
+          return;
+        }
+
+        // Configure RevenueCat with the current user
+        await configureRevenueCat(session.user.id);
+
+        if (cancelled) return;
+
+        // Sync current entitlement from RevenueCat → Supabase
+        await syncEntitlementFromRC(session.user.id);
+
+        syncedRef.current = true;
+      } catch (err) {
+        // Top-level catch — never let sync crash the app
+        if (!cancelled) {
+          try {
+            captureError(err, { action: "subscriptionSync_syncOnAuth" });
+          } catch {
+            // captureError may not be available yet
+          }
+        }
       }
-
-      // Configure RevenueCat with the current user
-      await configureRevenueCat(session.user.id);
-
-      // Sync current entitlement from RevenueCat → Supabase
-      await syncEntitlementFromRC(session.user.id);
-
-      syncedRef.current = true;
     }
 
     // Run immediately on mount
     syncOnAuth();
 
     // Listen for auth state changes (login, logout, token refresh)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
-      if (session?.user) {
-        // Don't re-sync if we already synced for this user
-        if (!syncedRef.current) {
-          syncOnAuth();
+    let authSubscription: { unsubscribe: () => void } | null = null;
+    try {
+      const { data } = supabase.auth.onAuthStateChange((_event: string, session: { user?: { id: string } } | null) => {
+        if (cancelled) return;
+        if (session?.user) {
+          if (!syncedRef.current) {
+            syncOnAuth();
+          }
+        } else {
+          try { logOutRevenueCat(); } catch { /* non-critical */ }
+          syncedRef.current = false;
         }
-      } else {
-        // Logged out
-        logOutRevenueCat();
-        syncedRef.current = false;
-      }
-    });
+      });
+      authSubscription = data.subscription;
+    } catch (err) {
+      // auth.onAuthStateChange may fail if Supabase client not ready
+      try {
+        captureError(err, { action: "subscriptionSync_authListener" });
+      } catch { /* non-critical */ }
+    }
 
     return () => {
-      subscription.unsubscribe();
+      cancelled = true;
+      authSubscription?.unsubscribe();
     };
   }, []);
 }
