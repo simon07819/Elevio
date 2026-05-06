@@ -91,6 +91,10 @@ export function RecommendedNextStop({
   const { t, locale } = useLanguage();
   // Track pickup click time for performance logging (<200ms target)
   const pickupClickTimeRef = useRef<number>(0);
+  // Anti-spam: prevents double-tap from firing pickup twice before optimistic update disables the button
+  const pickupRunningRef = useRef(false);
+  // Anti-spam: prevents double-tap on skip
+  const skipRunningRef = useRef(false);
 
   const reasonLine = formatDispatchRecommendationReason(
     recommendation.reasonDetail,
@@ -331,6 +335,11 @@ export function RecommendedNextStop({
       return;
     }
 
+    // ── ANTI-SPAM: prevent double-tap from firing pickup twice ──
+    if (pickupRunningRef.current) {
+      return;
+    }
+
     // SAFETY: boarded requests MUST NEVER show pickup button
     const resolved = resolveRequestState(actionRequest);
     if (resolved.action !== "pickup") {
@@ -361,6 +370,9 @@ export function RecommendedNextStop({
 
     // ── PERFORMANCE: measure pickup click → UI update ──
     pickupClickTimeRef.current = performance.now();
+
+    // ── ANTI-SPAM: mark pickup as running ──
+    pickupRunningRef.current = true;
 
     // ── INSTANT OPTIMISTIC UPDATE ──────────────────────────────
     // The UI must update IMMEDIATELY. No spinner, no waiting.
@@ -394,6 +406,7 @@ export function RecommendedNextStop({
           trackRequestPickedUp(requestId, projectId ?? "", operatorElevatorId);
           structuredLog("Performance", "pickup_server_confirmed", { requestId, durationMs: Math.round(pickupDbMs) });
           onPickupConfirmed?.(targetRequest);
+          pickupRunningRef.current = false;
         } else {
           // Real server rejection — rollback the optimistic state
           stopPickupDbTimer();
@@ -401,6 +414,7 @@ export function RecommendedNextStop({
           structuredLog("Error", "pickup_server_error", { requestId, message: result.message });
           captureError(new Error("pickup_failed: " + result.message), { projectId, elevatorId: operatorElevatorId, requestId, userType: "operator", action: "pickup" });
           onPickupFailure?.(targetRequest);
+          pickupRunningRef.current = false;
         }
       })
       .catch((err) => {
@@ -410,11 +424,16 @@ export function RecommendedNextStop({
         structuredLog("Error", "pickup_exception", { requestId, error: String(err) });
         captureError(err, { projectId, elevatorId: operatorElevatorId, requestId, userType: "operator", action: "pickup" });
         onPickupFailure?.(targetRequest);
+        pickupRunningRef.current = false;
       });
   }
 
   function skipPickup() {
     if (!actionRequest) return;
+
+    // Anti-spam: prevent double-tap
+    if (skipRunningRef.current) return;
+    skipRunningRef.current = true;
 
     const requestId = actionRequest.id;
     const targetRequest = actionRequest;
@@ -431,17 +450,16 @@ export function RecommendedNextStop({
     // Fire-and-forget server action — no rollback needed on error
     void skipRequestForCurrentPassage(requestId, operatorElevatorId)
       .then((result) => {
+        skipRunningRef.current = false;
         if (result.ok) {
           structuredLog("Performance", "skip_server_confirmed", { requestId, elevatorId: operatorElevatorId });
         } else {
           setActionError(result.message);
-          // Don't rollback the optimistic skip — the request is still skipped locally
-          // and will come back naturally from poll/realtime
         }
       })
       .catch((err) => {
+        skipRunningRef.current = false;
         captureError(err, { projectId, elevatorId: operatorElevatorId, requestId, userType: "operator", action: "skip" });
-        // Same — don't rollback
       });
   }
 
@@ -506,6 +524,9 @@ export function RecommendedNextStop({
   }
 
   function dropoffAndPickup() {
+    // Anti-spam: prevent double-tap during combined action
+    if (pickupRunningRef.current) return;
+
     // Combined action: first dropoff, then pickup — one click for same-floor actions.
     // Order: Déposer (dropoff) first, then Ramasser (pickup).
     // Dropoff completes the boarded passengers; pickup boards the waiting ones.
@@ -532,6 +553,7 @@ export function RecommendedNextStop({
     if (targetRequest) {
       // Instant optimistic pickup — no spinner, no delay
       pickupClickTimeRef.current = performance.now();
+      pickupRunningRef.current = true;
       onPickupSuccess?.(targetRequest);
       const uiUpdateMs = Math.round(performance.now() - pickupClickTimeRef.current);
       structuredLog("Performance", "pickup_click_to_ui", {
@@ -550,12 +572,14 @@ export function RecommendedNextStop({
             trackRequestPickedUp(targetRequest.id, projectId ?? "", operatorElevatorId);
             structuredLog("Performance", "pickup_server_confirmed", { requestId: targetRequest.id, context: "combined" });
             onPickupConfirmed?.(targetRequest);
+            pickupRunningRef.current = false;
           } else {
             // Real server rejection — rollback
             setActionError(pickupResult.message);
             structuredLog("Error", "pickup_server_error", { requestId: targetRequest.id, context: "combined", message: pickupResult.message });
             captureError(new Error("combined_pickup_failed: " + pickupResult.message), { projectId, elevatorId: operatorElevatorId, requestId: targetRequest.id, userType: "operator", action: "combined_pickup" });
             onPickupFailure?.(targetRequest);
+            pickupRunningRef.current = false;
           }
         })
         .catch((err) => {
@@ -564,6 +588,7 @@ export function RecommendedNextStop({
           structuredLog("Error", "pickup_exception", { requestId: targetRequest.id, context: "combined", error: String(err) });
           captureError(err, { projectId, elevatorId: operatorElevatorId, requestId: targetRequest.id, userType: "operator", action: "combined_pickup" });
           onPickupFailure?.(targetRequest);
+          pickupRunningRef.current = false;
         });
     }
     // Fire dropoff separately (don't block pickup confirmation)

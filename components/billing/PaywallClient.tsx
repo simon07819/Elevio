@@ -10,7 +10,7 @@ import { isIOS } from "@/lib/platform";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-function PlanCard({ planId, onSubscribe, isIOSPlatform }: { planId: PlanId; onSubscribe: (planId: PlanId) => void; isIOSPlatform: boolean }) {
+function PlanCard({ planId, onSubscribe, isIOSPlatform, loading }: { planId: PlanId; onSubscribe: (planId: PlanId) => void; isIOSPlatform: boolean; loading: boolean }) {
   const plan = PLANS[planId];
 
   return (
@@ -54,9 +54,10 @@ function PlanCard({ planId, onSubscribe, isIOSPlatform }: { planId: PlanId; onSu
         <button
           type="button"
           onClick={() => onSubscribe(planId)}
-          className={`touch-target w-full rounded-2xl px-4 py-3 text-sm font-black uppercase tracking-wide transition active:scale-[0.98] ${plan.popular ? "bg-sky-400 text-slate-950 hover:bg-sky-300" : "bg-white/10 text-white hover:bg-white/15"}`}
+          disabled={loading}
+          className={`touch-target w-full rounded-2xl px-4 py-3 text-sm font-black uppercase tracking-wide transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-wait ${plan.popular ? "bg-sky-400 text-slate-950 hover:bg-sky-300" : "bg-white/10 text-white hover:bg-white/15"}`}
         >
-          S&apos;abonner
+          {loading ? "…" : "S&apos;abonner"}
         </button>
       ) : null}
     </div>
@@ -166,9 +167,15 @@ function ActivationCodeBox() {
 export function PaywallClient({ userId, email }: { userId: string; email: string }) {
   const router = useRouter();
   const [iapMessage, setIapMessage] = useState<string | null>(null);
+  const [subscribingPlanId, setSubscribingPlanId] = useState<PlanId | null>(null);
+  const [restoring, setRestoring] = useState(false);
   const iosPlatform = isIOS();
 
   async function handleSubscribe(planId: PlanId) {
+    // Anti-spam: prevent double-click / rage-tap
+    if (subscribingPlanId) return;
+    setSubscribingPlanId(planId);
+    try {
     if (iosPlatform) {
       // iOS: RevenueCat IAP ONLY — never Stripe
       const result = await purchaseProduct(planId === "starter" ? "com.elevio.starter.monthly" : "com.elevio.pro.monthly");
@@ -209,6 +216,9 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
       setIapMessage(result.error ?? "Paiement non disponible pour le moment.");
       setTimeout(() => setIapMessage(null), 5000);
     }
+    } finally {
+      setSubscribingPlanId(null);
+    }
   }
 
   return (
@@ -235,7 +245,7 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
       {/* IAP plans: Starter + Pro */}
       <div className="grid gap-6 mb-8 sm:grid-cols-2">
         {IAP_PLANS.map((planId) => (
-          <PlanCard key={planId} planId={planId} onSubscribe={handleSubscribe} isIOSPlatform={iosPlatform} />
+          <PlanCard key={planId} planId={planId} onSubscribe={handleSubscribe} isIOSPlatform={iosPlatform} loading={subscribingPlanId === planId} />
         ))}
       </div>
 
@@ -259,7 +269,11 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
         <div className="mt-6 text-center">
           <button
             type="button"
+            disabled={restoring}
             onClick={async () => {
+              if (restoring) return;
+              setRestoring(true);
+              try {
               const { restorePurchases } = await import("@/lib/billing/revenuecat");
               const entitlement = await restorePurchases();
               if (entitlement?.isActive) {
@@ -268,10 +282,13 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
                 setIapMessage("Aucun achat antérieur trouvé.");
                 setTimeout(() => setIapMessage(null), 5000);
               }
+              } finally {
+                setRestoring(false);
+              }
             }}
-            className="text-xs font-bold text-slate-500 hover:text-slate-300 underline"
+            className="text-xs font-bold text-slate-500 hover:text-slate-300 underline disabled:opacity-50 disabled:cursor-wait"
           >
-            Restaurer les achats
+            {restoring ? "Restauration en cours…" : "Restaurer les achats"}
           </button>
         </div>
       )}
