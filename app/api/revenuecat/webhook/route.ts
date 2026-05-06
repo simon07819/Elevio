@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { logAppError } from "@/lib/appErrors";
 
 /**
  * RevenueCat webhook handler.
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
   if (REVENUECAT_AUTH_TOKEN) {
     const authHeader = req.headers.get("authorization");
     if (authHeader !== `Bearer ${REVENUECAT_AUTH_TOKEN}`) {
+      void logAppError({ message: "RevenueCat webhook unauthorized", category: "billing", level: "warning" });
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
@@ -43,7 +45,8 @@ export async function POST(req: NextRequest) {
   let body: RCWebhookEvent;
   try {
     body = await req.json();
-  } catch {
+  } catch (err) {
+    void logAppError({ message: "RevenueCat webhook invalid JSON", error: String(err), category: "billing", level: "warning" });
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 

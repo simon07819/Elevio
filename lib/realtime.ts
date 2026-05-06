@@ -13,6 +13,15 @@ function captureRealtimeError(message: string, details: Record<string, unknown>)
       || process.env.NEXT_PUBLIC_DEBUG_SYNC === "true";
     if (debug) console.log(`[Elevio Error]`, message, details);
   }
+  // Also capture to error tracking so it's visible in production
+  try {
+    // Dynamic import to avoid SSR issues — eslint disabled for require
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { captureError } = require("@/lib/errorTracking");
+    captureError(new Error(message), { action: "realtime_error", ...details });
+  } catch {
+    // errorTracking not available (SSR, test) — non-critical
+  }
 }
 
 const TERMINAL_REQUEST_STATUSES: RequestStatus[] = ["completed", "cancelled"];
@@ -202,6 +211,9 @@ export function bindRealtimeWithAuthSession(
     teardown();
     if (session) {
       channel = subscribeFn();
+      logSync("realtimeChannelAttached", { userId: session.user.id.slice(0, 8) });
+    } else {
+      logSync("realtimeNoSession", {});
     }
   };
 
@@ -214,12 +226,16 @@ export function bindRealtimeWithAuthSession(
     teardown();
     if (session) {
       channel = subscribeFn();
+      logSync("realtimeAuthChange", { event: _event, hasSession: true });
+    } else {
+      logSync("realtimeAuthChange", { event: _event, hasSession: false });
     }
   });
 
   // Re-create channel on network reconnect so missed events are recovered via poll.
   const onOnline = () => {
     if (cancelled) return;
+    logSync("realtimeNetworkReconnect", {});
     void attachIfSession();
   };
   window.addEventListener("online", onOnline);

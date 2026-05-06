@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
+import { logAppError } from "@/lib/appErrors";
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
@@ -109,6 +110,7 @@ export async function POST(req: NextRequest) {
       event = stripe.webhooks.constructEvent(body, sig, STRIPE_WEBHOOK_SECRET);
     }
   } catch (err) {
+    void logAppError({ message: "Stripe webhook invalid signature", error: String(err), category: "billing", level: "warning" });
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 

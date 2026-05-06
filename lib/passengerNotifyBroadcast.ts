@@ -1,6 +1,7 @@
 "use client";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { captureError } from "@/lib/errorTracking";
 
 /** Emis par l'operateur apres "Vider la liste" ; payload : IDs des demandes annulees. */
 export const PASSENGER_BROADCAST_QUEUE_CLEARED = "queue_cleared";
@@ -60,8 +61,8 @@ function broadcastPassengerRequestIds(
         event,
         payload: { requestIds },
       });
-    } catch {
-      /* volontairement silencieux */
+    } catch (err) {
+      captureError(err, { action: "broadcast_passengerNotify", event, projectId, requestIds: requestIds.length });
     } finally {
       client.removeChannel(channel);
     }

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { isCapacitorNative } from "@/lib/platform";
 import { configureRevenueCat, getCustomerEntitlement, logOutRevenueCat } from "@/lib/billing/revenuecat";
 import { createClient } from "@/lib/supabase/client";
+import { captureError } from "@/lib/errorTracking";
 
 /**
  * Hook that synchronizes RevenueCat entitlements → Supabase on auth events.
@@ -89,15 +90,19 @@ async function syncEntitlementFromRC(userId: string): Promise<void> {
 
     if (rcEntitlement && rcEntitlement.isActive) {
       // Active entitlement — upsert into Supabase
-      await supabase.from("user_entitlements").upsert({
+      const { error: entError } = await supabase.from("user_entitlements").upsert({
         user_id: userId,
         plan: rcEntitlement.planId,
         activated_via: "iap",
         expires_at: rcEntitlement.expiresAt ?? null,
       }, { onConflict: "user_id" });
 
+      if (entError) {
+        captureError(new Error("entitlement upsert failed: " + entError.message), { action: "subscriptionSync_entitlementUpsert", userId, planId: rcEntitlement.planId });
+      }
+
       // Also update the subscriptions row for consistency
-      await supabase.from("subscriptions").upsert({
+      const { error: subError } = await supabase.from("subscriptions").upsert({
         user_id: userId,
         provider: "revenuecat",
         provider_subscription_id: `${userId}:iap`,
@@ -108,32 +113,48 @@ async function syncEntitlementFromRC(userId: string): Promise<void> {
         current_period_end: rcEntitlement.expiresAt ?? null,
         price_id: rcEntitlement.planId === "pro" ? "com.elevio.pro.monthly" : "com.elevio.starter.monthly",
       }, { onConflict: "user_id,provider,provider_subscription_id" });
+
+      if (subError) {
+        captureError(new Error("subscription upsert failed: " + subError.message), { action: "subscriptionSync_subscriptionUpsert", userId, planId: rcEntitlement.planId });
+      }
     } else {
       // No active entitlement — check if user had IAP before (downgrade)
-      const { data: existing } = await supabase
+      const { data: existing, error: fetchError } = await supabase
         .from("user_entitlements")
         .select("activated_via, plan")
         .eq("user_id", userId)
         .maybeSingle();
 
+      if (fetchError) {
+        captureError(new Error("entitlement fetch failed: " + fetchError.message), { action: "subscriptionSync_entitlementFetch", userId });
+        return;
+      }
+
       if (existing?.activated_via === "iap") {
         // Was an IAP user with no active entitlement — downgrade to starter
-        await supabase.from("user_entitlements").upsert({
+        const { error: downError } = await supabase.from("user_entitlements").upsert({
           user_id: userId,
           plan: "starter",
           activated_via: "default",
           expires_at: null,
         }, { onConflict: "user_id" });
 
+        if (downError) {
+          captureError(new Error("entitlement downgrade failed: " + downError.message), { action: "subscriptionSync_downgrade", userId });
+        }
+
         // Mark subscription as expired
-        await supabase.from("subscriptions")
+        const { error: expError } = await supabase.from("subscriptions")
           .update({ status: "expired" })
           .eq("user_id", userId)
           .eq("provider", "revenuecat");
+
+        if (expError) {
+          captureError(new Error("subscription expire failed: " + expError.message), { action: "subscriptionSync_markExpired", userId });
+        }
       }
-      // If activated_via is "admin" or "activation_code", don't touch it
     }
   } catch (err) {
-    console.error("[SubscriptionSync] sync failed:", err);
+    captureError(err, { action: "subscriptionSync_syncFailed", userId });
   }
 }

@@ -13,6 +13,7 @@
 
 import { PRODUCT_IDS, PRODUCT_PLAN_MAP, type ProductId } from "./productIds";
 import type { PlanId } from "./plans";
+import { captureError } from "@/lib/errorTracking";
 
 export interface Offering {
   productId: ProductId;
@@ -60,6 +61,7 @@ export async function configureRevenueCat(userId: string): Promise<void> {
     });
   } catch (err) {
     console.error("[RevenueCat] configure failed:", err);
+    captureError(err, { action: "revenuecat_configure", userId });
   }
 }
 
@@ -104,6 +106,7 @@ export async function getOfferings(): Promise<Offering[]> {
     ];
   } catch (err) {
     console.error("[RevenueCat] getOfferings failed:", err);
+    captureError(err, { action: "revenuecat_getOfferings" });
     return [];
   }
 }
@@ -178,6 +181,7 @@ export async function restorePurchases(): Promise<CustomerEntitlement | null> {
     return entitlement;
   } catch (err) {
     console.error("[RevenueCat] restorePurchases failed:", err);
+    captureError(err, { action: "revenuecat_restorePurchases" });
     return null;
   }
 }
@@ -196,6 +200,7 @@ export async function getCustomerEntitlement(): Promise<CustomerEntitlement | nu
     return extractEntitlement(customerInfo);
   } catch (err) {
     console.error("[RevenueCat] getCustomerInfo failed:", err);
+    captureError(err, { action: "revenuecat_getCustomerInfo" });
     return null;
   }
 }
@@ -267,6 +272,7 @@ async function syncEntitlementToSupabase(planId: PlanId, activatedVia: string, e
       .upsert({ user_id: user.id, plan: planId, activated_via: activatedVia, expires_at: expiresAt ?? null }, { onConflict: "user_id" });
   } catch (err) {
     console.error("[RevenueCat] sync entitlement failed:", err);
+    captureError(err, { action: "revenuecat_syncEntitlement" });
   }
 }
 
@@ -280,5 +286,6 @@ export async function logOutRevenueCat(): Promise<void> {
     await Purchases.logOut();
   } catch (err) {
     console.error("[RevenueCat] logOut failed:", err);
+    captureError(err, { action: "revenuecat_logOut" });
   }
 }

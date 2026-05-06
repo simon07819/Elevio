@@ -616,7 +616,8 @@ export function RequestForm({
         } else {
           setMessage(result.message || t("request.cancelFailed"));
         }
-      } catch {
+      } catch (err) {
+        captureError(err, { action: "passenger_cancelRequest", projectId: project.id, requestId: submittedRequestId });
         setMessage(t("request.cancelFailed"));
       } finally {
         setIsCancellingRequest(false);

@@ -1,6 +1,7 @@
 "use client";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { captureError } from "@/lib/errorTracking";
 
 /** Émis après désactivation admin d’une tablette (`elevators.operator_session_id` effacé). */
 export const OPERATOR_BROADCAST_ELEVATOR_SESSION_CLEARED = "elevator_operator_session_cleared";
@@ -32,8 +33,9 @@ export function broadcastOperatorElevatorSessionCleared(client: SupabaseClient, 
         event: OPERATOR_BROADCAST_ELEVATOR_SESSION_CLEARED,
         payload: { elevatorId },
       });
-    } catch {
+    } catch (err) {
       /* Realtime ou Postgres finira par aligner */
+      captureError(err, { action: "broadcast_operatorSessionCleared", projectId, elevatorId });
     } finally {
       client.removeChannel(channel);
     }
