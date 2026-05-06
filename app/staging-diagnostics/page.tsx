@@ -68,24 +68,28 @@ export default function StagingDiagnosticsPage() {
 
     const channel = client
       .channel(`staging-diag:${projectId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "requests", filter: `project_id=eq.${projectId}` }, (payload) => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "requests", filter: `project_id=eq.${projectId}` }, // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (payload: any) => {
+        const n = payload.new as Record<string, unknown> | undefined;
         setWsEvents((prev) => [{
           timestamp: new Date().toISOString(),
-          type: payload.eventType,
+          type: String(payload.eventType ?? ""),
           table: "requests",
-          id: (payload.new as Record<string, unknown>)?.id as string ?? "",
-          status: (payload.new as Record<string, unknown>)?.status as string,
+          id: String(n?.id ?? "").slice(0, 8),
+          status: String(n?.status ?? ""),
         }, ...prev].slice(0, 200));
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "elevators", filter: `project_id=eq.${projectId}` }, (payload) => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "elevators", filter: `project_id=eq.${projectId}` }, // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (payload: any) => {
+        const n = payload.new as Record<string, unknown> | undefined;
         setWsEvents((prev) => [{
           timestamp: new Date().toISOString(),
-          type: payload.eventType,
+          type: String(payload.eventType ?? ""),
           table: "elevators",
-          id: (payload.new as Record<string, unknown>)?.id as string ?? "",
+          id: String(n?.id ?? "").slice(0, 8),
         }, ...prev].slice(0, 200));
       })
-      .subscribe((status) => {
+      .subscribe((status: string) => {
         setConnectionStatus(status);
       });
 

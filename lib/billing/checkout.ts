@@ -64,6 +64,8 @@ export async function createStripeCheckout(params: {
   if (!origin) {
     return { url: null, error: "Configuration manquante (NEXT_PUBLIC_SITE_URL). Contactez le support." };
   }
+
+  const result = await createCheckoutSession({
     priceId,
     userId: params.userId,
     email: params.email,
