@@ -201,7 +201,7 @@ export function ScanHome() {
   // Visible fallback while React hydrates — prevents black screen on Capacitor iOS
   if (!mounted) {
     return (
-      <main className="relative z-10 flex min-h-dvh items-center justify-center px-4 text-white">
+      <main className="relative z-10 flex min-h-dvh items-center justify-center px-4 pt-[env(safe-area-inset-top)] text-white">
         <p className="text-lg font-black text-yellow-300">Elevio démarre…</p>
       </main>
     );
@@ -227,7 +227,7 @@ export function ScanHome() {
   }
 
   return (
-    <main className="relative z-10 min-h-dvh px-4 pb-5 pt-2 text-white">
+    <main className="relative z-10 min-h-dvh px-4 pb-5 pt-[calc(env(safe-area-inset-top)+12px)] text-white">
       <header className="mx-auto flex max-w-md items-center justify-between">
         <BrandLogo size="sm" priority clickable />
         <LanguageSwitcher />

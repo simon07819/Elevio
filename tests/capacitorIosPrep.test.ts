@@ -38,11 +38,12 @@ test("capacitor: viewport-fit cover configured", () => {
 // ---------------------------------------------------------------------------
 // 2. safe-area-inset padding on html and body
 // ---------------------------------------------------------------------------
-test("capacitor: safe-area-inset-top on body, bottom handled per-component", () => {
-  const css = readFileSync(join(root, "app/globals.css"), "utf8");
-  assert.match(css, /env\(safe-area-inset-top\)/, "top inset on body (global)");
+test("capacitor: safe-area-inset-top on page component, bottom handled per-component", () => {
+  // Safe area top is applied per-page component (not on body) so it scrolls
+  // with the content instead of scrolling away under the status bar.
+  const scanHome = readFileSync(join(root, "components/ScanHome.tsx"), "utf8");
+  assert.match(scanHome, /env\(safe-area-inset-top\)/, "top inset on ScanHome main container");
   // Bottom safe area is handled per-component (bottom nav, request form, operator footer)
-  // Verify at least one component handles bottom inset
   const bottomNav = readFileSync(join(root, "components/MobileBottomNav.tsx"), "utf8");
   assert.match(bottomNav, /env\(safe-area-inset-bottom\)/, "bottom inset on MobileBottomNav");
 });

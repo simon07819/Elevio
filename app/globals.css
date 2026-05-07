@@ -116,10 +116,9 @@ body {
   margin: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  /* Safe area top: viewportFit:cover extends background under iOS status bar,
-     padding-top ensures content starts below the safe area (not hidden).
-     Bottom/left/right safe areas are handled per-component (bottom nav, etc.) */
-  padding-top: env(safe-area-inset-top);
+  /* Safe area top is NOT applied on body — it scrolls away under the status bar.
+     Instead, each page component applies its own safe area padding so that
+     even when scrolling, the content stays below the notch/status bar. */
   background:
     radial-gradient(circle at 12% 10%, rgba(250, 204, 21, 0.14), transparent 28rem),
     radial-gradient(circle at 88% 4%, rgba(34, 197, 94, 0.12), transparent 24rem),
