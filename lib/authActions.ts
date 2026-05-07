@@ -88,12 +88,17 @@ export async function signUpAdmin(formData: FormData) {
     return { ok: false, message: "Prenom, nom, compagnie et telephone sont obligatoires." };
   }
 
-  const origin = await appOrigin();
+  // Always use NEXT_PUBLIC_SITE_URL for emailRedirectTo — never capacitor://localhost
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!siteUrl) {
+    return { ok: false, message: "Configuration manquante. Contactez le support." };
+  }
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent("/admin/profile?onboarding=1")}`,
+      emailRedirectTo: `${siteUrl}/auth/callback?next=${encodeURIComponent("/admin/profile?onboarding=1")}`,
       data: profile,
     },
   });
@@ -101,6 +106,14 @@ export async function signUpAdmin(formData: FormData) {
   if (error) {
     return { ok: false, message: error.message };
   }
+
+  // Log signup result for diagnostics (not sensitive — no tokens)
+  console.log("[signUpAdmin]", {
+    userId: data.user?.id?.slice(0, 8),
+    emailConfirmedAt: data.user?.email_confirmed_at ?? null,
+    confirmationSentAt: data.user?.confirmation_sent_at ?? null,
+    hasSession: !!data.session,
+  });
 
   if (data.session && data.user) {
     await ensureProfileForUser(supabase, data.user);

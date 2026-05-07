@@ -179,12 +179,17 @@ export async function signUpMobile(formData: FormData) {
     return { ok: false, message: "Prénom et nom obligatoires." };
   }
 
-  const origin = await appOrigin();
+  // Always use NEXT_PUBLIC_SITE_URL for emailRedirectTo — never capacitor://localhost
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!siteUrl) {
+    return { ok: false, message: "Configuration manquante. Contactez le support." };
+  }
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent("/onboarding?step=confirm")}`,
+      emailRedirectTo: `${siteUrl}/auth/callback?next=${encodeURIComponent("/onboarding?step=confirm")}`,
       data: {
         first_name: firstName,
         last_name: lastName,
@@ -199,6 +204,14 @@ export async function signUpMobile(formData: FormData) {
   if (error) {
     return { ok: false, message: error.message };
   }
+
+  // Log signup result for diagnostics
+  console.log("[signUpMobile]", {
+    userId: data.user?.id?.slice(0, 8),
+    emailConfirmedAt: data.user?.email_confirmed_at ?? null,
+    confirmationSentAt: data.user?.confirmation_sent_at ?? null,
+    hasSession: !!data.session,
+  });
 
   if (data.session && data.user) {
     await ensureProfileForUser(supabase, data.user);
