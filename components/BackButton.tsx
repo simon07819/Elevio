@@ -27,10 +27,10 @@ export function BackButton({ fallback = "/" }: { fallback?: string } = {}) {
         }
       }}
       className="touch-target flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:border-white/20 hover:bg-white/10 hover:text-white active:scale-[0.97]"
-      aria-label="Back"
+      aria-label="Retour"
     >
       <ArrowLeft size={14} />
-      <span className="hidden sm:inline">Back</span>
+      <span className="hidden sm:inline">Retour</span>
     </button>
   );
 }

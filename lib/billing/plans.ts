@@ -51,24 +51,21 @@ export interface Plan {
 
 export const PLANS: Record<PlanId, Plan> = {
   free: {
-    // No paid subscription — user has NOT purchased any plan.
-    // Treated as Starter for limit checks, but enforcePaymentStatus blocks access.
-    // Superadmin can assign this to revoke paid features.
     id: "free",
     label: "Gratuit",
-    description: "Aucun forfait actif — accès passager QR uniquement",
+    description: "Découvrir la plateforme — aucune fonction payante",
     priceMonthly: 0,
     priceAnnual: 0,
     limits: {
-      maxProjects: 1,
-      maxOperators: 2,
-      maxRequestsPerDay: null,
-      analytics: "simple",
-      analyticsDashboard: true,
+      maxProjects: 0,
+      maxOperators: 0,
+      maxRequestsPerDay: 0,
+      analytics: "none",
+      analyticsDashboard: false,
       efficiencyScore: false,
       businessInsights: false,
-      peakHours: true,
-      floorUsage: true,
+      peakHours: false,
+      floorUsage: false,
       operatorPerformance: false,
       multiOperator: false,
       prioritySupport: false,
@@ -82,9 +79,9 @@ export const PLANS: Record<PlanId, Plan> = {
   starter: {
     id: "starter",
     label: "Starter",
-    description: "Reduce wait times — 1 chantier, analytics simples",
+    description: "Réduire les temps d'attente — 1 chantier, dispatch en temps réel",
     priceMonthly: 199,
-    priceAnnual: 1990,
+    priceAnnual: 1908,  // 199 * 12 * 0.8 = 1908 → 20% discount
     limits: {
       maxProjects: 1,
       maxOperators: 2,
@@ -108,11 +105,11 @@ export const PLANS: Record<PlanId, Plan> = {
   pro: {
     id: "pro",
     label: "Pro",
-    description: "See where time is lost — smart dispatch, analytics avancés",
+    description: "Voir où le temps est perdu — dispatch intelligent, analytics avancés",
     priceMonthly: 499,
-    priceAnnual: 4990,
+    priceAnnual: 4788,  // 499 * 12 * 0.8 = 4788 → 20% discount
     limits: {
-      maxProjects: 3,
+      maxProjects: 5,
       maxOperators: 10,
       maxRequestsPerDay: null,
       analytics: "advanced",
@@ -123,7 +120,7 @@ export const PLANS: Record<PlanId, Plan> = {
       floorUsage: true,
       operatorPerformance: true,
       multiOperator: true,
-      prioritySupport: false,
+      prioritySupport: true,
       customSupport: false,
       customContract: false,
       activationCode: false,
@@ -135,7 +132,7 @@ export const PLANS: Record<PlanId, Plan> = {
   business: {
     id: "business",
     label: "Business",
-    description: "Optimize operator performance — support prioritaire, contrat annuel",
+    description: "Optimiser la performance opérateur — support prioritaire, contrat annuel",
     priceMonthly: null,
     priceAnnual: null,
     limits: {
@@ -161,7 +158,7 @@ export const PLANS: Record<PlanId, Plan> = {
   enterprise: {
     id: "enterprise",
     label: "Enterprise",
-    description: "Prove productivity gains — illimité, intégrations, SLA",
+    description: "Prouver les gains de productivité — illimité, intégrations, SLA",
     priceMonthly: null,
     priceAnnual: null,
     limits: {

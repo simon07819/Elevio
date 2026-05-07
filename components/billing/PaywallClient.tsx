@@ -10,8 +10,12 @@ import { isIOS } from "@/lib/platform";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-function PlanCard({ planId, onSubscribe, isIOSPlatform, loading }: { planId: PlanId; onSubscribe: (planId: PlanId) => void; isIOSPlatform: boolean; loading: boolean }) {
+function PlanCard({ planId, period, onSubscribe, isIOSPlatform, loading }: { planId: PlanId; period: "monthly" | "annual"; onSubscribe: (planId: PlanId, period: "monthly" | "annual") => void; isIOSPlatform: boolean; loading: boolean }) {
   const plan = PLANS[planId];
+  const isAnnual = period === "annual";
+  const displayPrice = isAnnual && plan.priceAnnual !== null ? plan.priceAnnual : plan.priceMonthly;
+  const priceLabel = isAnnual ? "$CA/an" : "$CA/mois";
+  const altPrice = isAnnual && plan.priceMonthly !== null ? `${plan.priceMonthly} $CA/mois` : plan.priceAnnual !== null ? `${plan.priceAnnual} $CA/an` : null;
 
   return (
     <div className={`relative flex flex-col rounded-3xl border p-6 ${plan.popular ? "border-sky-400/50 bg-sky-950/30 ring-2 ring-sky-400/30" : "border-white/10 bg-white/5"}`}>
@@ -27,14 +31,19 @@ function PlanCard({ planId, onSubscribe, isIOSPlatform, loading }: { planId: Pla
       <p className="text-sm font-bold text-slate-400 mb-4">{plan.description}</p>
 
       <div className="mb-4">
-        {plan.priceAnnual !== null ? (
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-black text-white">{plan.priceAnnual}</span>
-            <span className="text-sm font-bold text-slate-400">$CA/an</span>
+        {displayPrice !== null ? (
+          <div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-black text-white">{displayPrice}</span>
+              <span className="text-sm font-bold text-slate-400">{priceLabel}</span>
+            </div>
+            {altPrice && (
+              <p className="text-sm font-bold text-slate-500">{altPrice}</p>
+            )}
+            {isAnnual && (
+              <span className="mt-1 inline-block rounded-lg bg-emerald-400/15 px-2 py-0.5 text-[10px] font-black text-emerald-400">Économisez 20%</span>
+            )}
           </div>
-        ) : null}
-        {plan.priceMonthly !== null ? (
-          <p className="text-sm font-bold text-slate-500">ou {plan.priceMonthly} $CA/mois</p>
         ) : null}
       </div>
 
@@ -42,22 +51,22 @@ function PlanCard({ planId, onSubscribe, isIOSPlatform, loading }: { planId: Pla
         <Feature text={`${plan.limits.maxProjects ?? "∞"} chantier${(plan.limits.maxProjects ?? 2) > 1 ? "s" : ""}`} />
         <Feature text={`${plan.limits.maxOperators ?? "∞"} opérateur${(plan.limits.maxOperators ?? 2) > 1 ? "s" : ""}`} />
         {plan.limits.analytics !== "none" && <Feature text={`Analytics ${plan.limits.analytics === "advanced" ? "avancés" : "simples"}`} />}
-        {plan.limits.efficiencyScore && <Feature text="Efficiency score" />}
-        {plan.limits.businessInsights && <Feature text="Business insights" />}
-        {plan.limits.operatorPerformance && <Feature text="Operator performance" />}
+        {plan.limits.efficiencyScore && <Feature text="Score d'efficacité" />}
+        {plan.limits.businessInsights && <Feature text="Analyses commerciales" />}
+        {plan.limits.operatorPerformance && <Feature text="Performance opérateur" />}
         {plan.limits.multiOperator && <Feature text="Multi-opérateur" />}
         {plan.limits.prioritySupport && <Feature text="Support prioritaire" />}
-        {!plan.limits.efficiencyScore && plan.limits.analytics !== "none" && <Feature text="See where time is lost" />}
+        {!plan.limits.efficiencyScore && plan.limits.analytics !== "none" && <Feature text="Voir où le temps est perdu" />}
       </ul>
 
       {plan.iapAvailable ? (
         <button
           type="button"
-          onClick={() => onSubscribe(planId)}
+          onClick={() => onSubscribe(planId, period)}
           disabled={loading}
           className={`touch-target w-full rounded-2xl px-4 py-3 text-sm font-black uppercase tracking-wide transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-wait ${plan.popular ? "bg-sky-400 text-slate-950 hover:bg-sky-300" : "bg-white/10 text-white hover:bg-white/15"}`}
         >
-          {loading ? "…" : "S&apos;abonner"}
+          {loading ? "…" : "Choisir ce forfait"}
         </button>
       ) : null}
     </div>
@@ -78,15 +87,15 @@ function EnterpriseContactCard({ isIOSPlatform }: { isIOSPlatform: boolean }) {
     <div className="rounded-3xl border border-amber-400/25 bg-amber-950/20 p-6">
       <div className="flex items-center gap-2 mb-3">
         <Crown size={20} className="text-amber-300" />
-        <h3 className="text-xl font-black text-amber-100">Business & Enterprise</h3>
+        <h3 className="text-xl font-black text-amber-100">Business &amp; Enterprise</h3>
       </div>
       <p className="text-sm font-bold text-amber-200/80 mb-4">
         Chantiers et opérateurs personnalisés, support prioritaire, contrat annuel.
       </p>
       <ul className="mb-6 space-y-2">
-        <Feature text="Chantiers personnalisés" />
-        <Feature text="Opérateurs personnalisés" />
-        <Feature text="Support prioritaire" />
+        <Feature text="Chantiers et opérateurs illimités" />
+        <Feature text="Score d'efficacité et analyses" />
+        <Feature text="Support prioritaire et personnalisé" />
         <Feature text="Contrat annuel" />
         <Feature text="Activation par code" />
       </ul>
@@ -136,7 +145,7 @@ function ActivationCodeBox() {
     <div id="activation" className="rounded-3xl border border-white/10 bg-white/5 p-6">
       <h3 className="text-lg font-black text-white mb-2">Activer avec un code</h3>
       <p className="text-sm font-bold text-slate-400 mb-4">
-        Entrez votre code d&apos;activation Enterprise fourni par votre représentant.
+        Entrez votre code d&apos;accès fourni par votre représentant.
       </p>
       <div className="flex gap-3">
         <input
@@ -169,19 +178,21 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
   const [iapMessage, setIapMessage] = useState<string | null>(null);
   const [subscribingPlanId, setSubscribingPlanId] = useState<PlanId | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [period, setPeriod] = useState<"monthly" | "annual">("annual");
   const iosPlatform = isIOS();
 
-  async function handleSubscribe(planId: PlanId) {
+  async function handleSubscribe(planId: PlanId, selectedPeriod: "monthly" | "annual") {
     // Anti-spam: prevent double-click / rage-tap
     if (subscribingPlanId) return;
     setSubscribingPlanId(planId);
     try {
     if (iosPlatform) {
       // iOS: RevenueCat IAP ONLY — never Stripe
-      const result = await purchaseProduct(planId === "starter" ? "com.elevio.starter.monthly" : "com.elevio.pro.monthly");
+      const productId = selectedPeriod === "annual"
+        ? (planId === "starter" ? "com.elevio.starter.annual" : "com.elevio.pro.annual")
+        : (planId === "starter" ? "com.elevio.starter.monthly" : "com.elevio.pro.monthly");
+      const result = await purchaseProduct(productId);
       if (result.ok) {
-        // Use router.push instead of window.location.reload to avoid infinite reload loops on Capacitor.
-        // The SubscriptionSyncProvider will sync RevenueCat → Supabase on the next render.
         router.push("/operator");
         return;
       }
@@ -193,7 +204,7 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
     // Web: Stripe Checkout via server action (iOS already handled above)
     const result = await startStripeCheckout({
       planId,
-      period: "monthly",
+      period: selectedPeriod,
       userId,
       email,
     });
@@ -214,13 +225,13 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
       <div className="mb-6">
         <Link href="/" className="touch-target inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:border-white/20 hover:bg-white/10 hover:text-white">
           <ArrowLeft size={14} />
-          Back
+          Retour
         </Link>
       </div>
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-black text-white mb-2">Choisissez votre plan</h1>
+        <h1 className="text-4xl font-black text-white mb-2">Choisissez votre forfait</h1>
         <p className="text-lg font-bold text-slate-400">
-          Démarrez gratuitement, évoluez selon vos besoins.
+          Réduisez les temps d&apos;attente. Évoluez selon vos besoins.
         </p>
       </div>
 
@@ -230,10 +241,31 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
         </div>
       )}
 
+      {/* Period toggle */}
+      <div className="flex justify-center mb-6">
+        <div className="inline-flex items-center gap-1 rounded-2xl border border-white/10 bg-white/5 p-1">
+          <button
+            type="button"
+            onClick={() => setPeriod("monthly")}
+            className={`rounded-xl px-4 py-2 text-xs font-black transition ${period === "monthly" ? "bg-white/15 text-white" : "text-slate-400 hover:text-white"}`}
+          >
+            Mensuel
+          </button>
+          <button
+            type="button"
+            onClick={() => setPeriod("annual")}
+            className={`rounded-xl px-4 py-2 text-xs font-black transition ${period === "annual" ? "bg-white/15 text-white" : "text-slate-400 hover:text-white"}`}
+          >
+            Annuel
+            <span className="ml-1.5 rounded-md bg-emerald-400/15 px-1.5 py-0.5 text-[9px] font-black text-emerald-400">-20%</span>
+          </button>
+        </div>
+      </div>
+
       {/* IAP plans: Starter + Pro */}
       <div className="grid gap-6 mb-8 sm:grid-cols-2">
         {IAP_PLANS.map((planId) => (
-          <PlanCard key={planId} planId={planId} onSubscribe={handleSubscribe} isIOSPlatform={iosPlatform} loading={subscribingPlanId === planId} />
+          <PlanCard key={planId} planId={planId} period={period} onSubscribe={handleSubscribe} isIOSPlatform={iosPlatform} loading={subscribingPlanId === planId} />
         ))}
       </div>
 

@@ -17,7 +17,7 @@ import { PLANS, effectivePlanId } from "@/lib/billing/plans";
 
 /** Whether the plan allows any paid feature (project creation, dispatch, etc.) */
 export function isPaidPlan(planId: PlanId): boolean {
-  return effectivePlanId(planId) !== "starter" || planId !== "free";
+  return planId !== "free";
 }
 
 /** Whether the user can create a project */

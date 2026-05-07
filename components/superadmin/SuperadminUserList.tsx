@@ -20,6 +20,7 @@ type UserRow = {
   plan: string;
   activatedVia: string;
   expiresAt: string | null;
+  subscriptionStatus: string | null;
 };
 
 function paymentBadge(via: string) {
@@ -42,6 +43,18 @@ function planBadge(planId: string) {
   if (planId === "enterprise") return <Badge variant="green">{plan.label}</Badge>;
   if (planId === "pro") return <Badge variant="yellow">{plan.label}</Badge>;
   return <Badge variant="default">{plan.label}</Badge>;
+}
+
+function SubscriptionStatusBadge({ status }: { status: string | null }) {
+  if (!status) return <span className="text-xs text-slate-600">—</span>;
+  switch (status) {
+    case "active": return <Badge variant="green">Actif</Badge>;
+    case "trialing": return <Badge variant="green">Essai</Badge>;
+    case "past_due": return <Badge variant="red">En retard</Badge>;
+    case "canceled": return <Badge variant="red">Annulé</Badge>;
+    case "expired": return <Badge variant="default">Expiré</Badge>;
+    default: return <Badge variant="default">{status}</Badge>;
+  }
 }
 
 export function SuperadminUserList({ users }: { users: UserRow[] }) {
@@ -110,6 +123,7 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
               <th className="pb-3 pr-4">Courriel</th>
               <th className="pb-3 pr-4">Compagnie</th>
               <th className="pb-3 pr-4">Forfait</th>
+              <th className="pb-3 pr-4">Abonnement</th>
               <th className="pb-3 pr-4">Paiement</th>
               <th className="pb-3 pr-4">Rôle</th>
               <th className="pb-3 pr-4">Créé</th>
@@ -139,6 +153,9 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
                       ))}
                     </select>
                   </div>
+                </td>
+                <td className="py-3 pr-4">
+                  <SubscriptionStatusBadge status={u.subscriptionStatus} />
                 </td>
                 <td className="py-3 pr-4">
                   <div className="flex items-center gap-1">

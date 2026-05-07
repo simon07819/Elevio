@@ -38,14 +38,14 @@ export function UpgradeCTA({ feature, requiredPlan, compact = false }: UpgradeCT
         <Lock size={20} className={`mt-0.5 shrink-0 ${iconColor}`} />
         <div className="flex-1">
           <p className="text-sm font-bold text-slate-200">{feature}</p>
-          <p className="mt-1 text-xs text-slate-500">Available on {planLabel}</p>
+          <p className="mt-1 text-xs text-slate-500">Disponible avec le forfait {planLabel}</p>
         </div>
         <Link
           href={href}
           className={`flex items-center gap-1.5 rounded-xl bg-white/[0.06] border border-white/[0.1] px-4 py-2 text-xs font-black uppercase tracking-wide ${iconColor} transition hover:bg-white/[0.1]`}
         >
           <Sparkles size={14} />
-          Upgrade
+          Voir les forfaits
         </Link>
       </div>
     </div>

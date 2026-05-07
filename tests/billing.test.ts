@@ -61,9 +61,9 @@ test("billing: Starter plan limits — 1 project, 2 operators, simple analytics"
 // ═══════════════════════════════════════════════════════════════════
 // 4. Pro plan limits
 // ═══════════════════════════════════════════════════════════════════
-test("billing: Pro plan limits — 3 projects, 10 operators, advanced analytics", () => {
+test("billing: Pro plan limits — 5 projects, 10 operators, advanced analytics", () => {
   const proSection = PLANS.match(/pro: \{[\s\S]*?\n\}/)?.[0] ?? "";
-  assert.match(proSection, /maxProjects: 3/, "Pro maxProjects = 3");
+  assert.match(proSection, /maxProjects: 5/, "Pro maxProjects = 5");
   assert.match(proSection, /maxOperators: 10/, "Pro maxOperators = 10");
   assert.match(proSection, /analytics: "advanced"/, "Pro analytics = advanced");
   assert.match(proSection, /multiOperator: true/, "Pro multiOperator = true");
@@ -111,9 +111,9 @@ test("billing: activation code checks already-used codes", () => {
   assert.match(ACTIVATION, /Ce code a déjà été utilisé/, "already used message");
 });
 
-test("billing: activation code marks as used on success", () => {
-  assert.match(ACTIVATION, /used_at: now/, "sets used_at");
-  assert.match(ACTIVATION, /used_by_user_id: user\.id/, "sets used_by_user_id");
+test("billing: activation code tracks usage on success", () => {
+  assert.match(ACTIVATION, /current_uses.*\+.*1/, "increments current_uses");
+  assert.match(ACTIVATION, /access_code_usage/, "records usage in tracking table");
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -151,7 +151,7 @@ test("billing: paywall route exists at /paywall", () => {
 
 test("billing: paywall shows Starter and Pro plans", () => {
   assert.match(PAYWALL_CLIENT, /IAP_PLANS/, "renders IAP plans");
-  assert.match(PAYWALL_CLIENT, /(&apos;|')abonner/, "subscribe button text");
+  assert.match(PAYWALL_CLIENT, /Choisir ce forfait/, "choose plan button text");
 });
 
 test("billing: paywall shows Business/Enterprise section", () => {

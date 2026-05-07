@@ -148,12 +148,13 @@ export async function getSuperadminUsers() {
 
   const entitlementMap = new Map((entitlements ?? []).map((e) => [e.user_id, e]));
 
-  // Build a map: userId → best subscription provider (prefer active, then most recent)
+  // Build a map: userId → subscription provider + status
   const subProviderMap = new Map<string, string>();
+  const subStatusMap = new Map<string, string>();
   for (const s of subscriptions ?? []) {
     if (!subProviderMap.has(s.user_id)) {
-      // First entry per user = most recent (ordered by created_at desc)
       subProviderMap.set(s.user_id, s.provider);
+      subStatusMap.set(s.user_id, s.status);
     }
   }
 
@@ -175,11 +176,15 @@ export async function getSuperadminUsers() {
       activatedVia = "default";
     }
 
+    // Determine subscription status
+    const subStatus = subStatusMap.get(p.id) ?? null;
+
     return {
       ...p,
       plan,
       activatedVia,
       expiresAt: ent?.expires_at ?? null,
+      subscriptionStatus: subStatus,
     };
   });
 }

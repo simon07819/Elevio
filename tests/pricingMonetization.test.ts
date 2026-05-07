@@ -34,16 +34,16 @@ const PLATFORM = readFileSync(join(root, "lib/platform.ts"), "utf8");
 // 1. Value-based plan descriptions
 // ═══════════════════════════════════════════════════════════════════
 
-test("pricing: Starter plan has value description 'Reduce wait times'", () => {
-  assert.match(PLANS, /Reduce wait times/, "Starter value description");
+test("pricing: Starter plan has French value description", () => {
+  assert.match(PLANS, /Réduire les temps d'attente/, "Starter value description in French");
 });
 
-test("pricing: Pro plan has value description 'See where time is lost'", () => {
-  assert.match(PLANS, /See where time is lost/, "Pro value description");
+test("pricing: Pro plan has French value description", () => {
+  assert.match(PLANS, /Voir où le temps est perdu/, "Pro value description in French");
 });
 
-test("pricing: Enterprise plan has value description 'Prove productivity gains'", () => {
-  assert.match(PLANS, /Prove productivity gains/, "Enterprise value description");
+test("pricing: Enterprise plan has French value description", () => {
+  assert.match(PLANS, /Prouver les gains de productivité/, "Enterprise value description in French");
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -222,23 +222,23 @@ test("pricing: planGuards still enforce project/operator/request limits", () => 
 // 9. Value copy in pricing UIs
 // ═══════════════════════════════════════════════════════════════════
 
-test("pricing: PricingGrid shows value-based features", () => {
-  assert.match(PRICING_GRID, /Reduce wait times/, "Starter value copy");
-  assert.match(PRICING_GRID, /See where time is lost|Optimize operator performance/, "Pro value copy");
-  assert.match(PRICING_GRID, /Prove productivity gains/, "Enterprise value copy");
+test("pricing: PricingGrid shows French value-based features", () => {
+  assert.match(PRICING_GRID, /Réduire les temps/, "Starter French value copy");
+  assert.match(PRICING_GRID, /Voir où le temps est perdu|Optimiser la performance/, "Pro French value copy");
+  assert.match(PRICING_GRID, /Prouver les gains/, "Enterprise French value copy");
 });
 
-test("pricing: AppPricingScreen shows value-based features", () => {
-  assert.match(APP_PRICING, /Reduce wait times/, "Starter value copy");
-  assert.match(APP_PRICING, /Optimize operator performance/, "Pro value copy");
-  assert.match(APP_PRICING, /Prove productivity gains/, "Enterprise value copy");
+test("pricing: AppPricingScreen shows French value-based features", () => {
+  assert.match(APP_PRICING, /Réduire les temps/, "Starter French value copy");
+  assert.match(APP_PRICING, /Optimiser la performance/, "Pro French value copy");
+  assert.match(APP_PRICING, /Prouver les gains/, "Enterprise French value copy");
 });
 
-test("pricing: PaywallClient shows value-based features", () => {
-  assert.match(PAYWALL_CLIENT, /Efficiency score/, "efficiency score feature");
-  assert.match(PAYWALL_CLIENT, /Business insights/, "business insights feature");
-  assert.match(PAYWALL_CLIENT, /Operator performance/, "operator performance feature");
-  assert.match(PAYWALL_CLIENT, /See where time is lost/, "value copy for starter");
+test("pricing: PaywallClient shows French feature labels", () => {
+  assert.match(PAYWALL_CLIENT, /Score d'efficacité/, "efficiency score feature in French");
+  assert.match(PAYWALL_CLIENT, /Analyses commerciales/, "business insights feature in French");
+  assert.match(PAYWALL_CLIENT, /Performance opérateur/, "operator performance feature in French");
+  assert.match(PAYWALL_CLIENT, /Voir où le temps est perdu/, "value copy for starter in French");
 });
 
 // ═══════════════════════════════════════════════════════════════════
