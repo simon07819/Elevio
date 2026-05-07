@@ -5,7 +5,7 @@ import { changeUserPlan, setUserSuspended } from "@/lib/superadminActions";
 import { Badge } from "@/components/superadmin/Badge";
 import { ManualPlanModal } from "@/components/superadmin/ManualPlanModal";
 import type { PlanId } from "@/lib/billing/plans";
-import { VISIBLE_PLAN_IDS, PLANS } from "@/lib/billing/plans";
+import { ADMIN_PLAN_IDS, PLANS } from "@/lib/billing/plans";
 
 type UserRow = {
   id: string;
@@ -24,12 +24,13 @@ type UserRow = {
 
 function sourceBadge(via: string) {
   switch (via) {
+    case "free": return <Badge variant="default">Gratuit</Badge>;
     case "manual": return <Badge variant="yellow">Manuel</Badge>;
     case "iap": case "revenuecat": return <Badge variant="default">App Store</Badge>;
     case "stripe": return <Badge variant="default">Stripe</Badge>;
     case "admin": return <Badge variant="yellow">Admin</Badge>;
     case "activation_code": return <Badge variant="green">Code</Badge>;
-    default: return <Badge variant="default">—</Badge>;
+    default: return <Badge variant="default">Gratuit</Badge>;
   }
 }
 
@@ -37,8 +38,15 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
   const [loading, setLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [modalUser, setModalUser] = useState<UserRow | null>(null);
+  const [confirmFree, setConfirmFree] = useState<string | null>(null); // userId pending free downgrade
 
   async function handleChangePlan(userId: string, newPlan: PlanId) {
+    // Confirm before downgrade to free
+    if (newPlan === "free" && confirmFree !== userId) {
+      setConfirmFree(userId);
+      return;
+    }
+    setConfirmFree(null);
     setLoading(userId);
     setMessage(null);
     const result = await changeUserPlan(userId, newPlan);
@@ -61,6 +69,26 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
       {message && (
         <div className="mb-4 rounded-xl bg-yellow-400/10 border border-yellow-400/20 p-3 text-sm font-bold text-yellow-300">
           {message}
+        </div>
+      )}
+
+      {confirmFree && (
+        <div className="mb-4 rounded-xl border border-red-400/20 bg-red-400/5 p-3 text-sm font-bold text-red-300">
+          Ce membre sera remis au forfait gratuit et perdra l&apos;accès aux fonctions payantes. Continuer?
+          <div className="mt-2 flex gap-2">
+            <button
+              className="rounded-lg bg-red-500 px-3 py-1 text-xs font-bold text-white hover:bg-red-600"
+              onClick={() => handleChangePlan(confirmFree, "free")}
+            >
+              Confirmer la résiliation
+            </button>
+            <button
+              className="rounded-lg bg-white/10 px-3 py-1 text-xs font-bold text-slate-300 hover:bg-white/15"
+              onClick={() => setConfirmFree(null)}
+            >
+              Annuler
+            </button>
+          </div>
         </div>
       )}
 
@@ -94,7 +122,7 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
                     disabled={loading === u.id}
                     onChange={(e) => handleChangePlan(u.id, e.target.value as PlanId)}
                   >
-                    {VISIBLE_PLAN_IDS.map((p) => (
+                    {ADMIN_PLAN_IDS.map((p) => (
                       <option key={p} value={p}>{PLANS[p].label}</option>
                     ))}
                   </select>

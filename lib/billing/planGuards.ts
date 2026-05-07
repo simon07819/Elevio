@@ -37,8 +37,14 @@ export async function getSubscriptionStatus(userId: string): Promise<{
     .eq("user_id", userId)
     .maybeSingle();
 
-  const planId = effectivePlanId((entitlement?.plan as PlanId) ?? "starter");
+  const rawPlan = (entitlement?.plan as PlanId) ?? "starter";
+  const planId = effectivePlanId(rawPlan);
   const activatedVia = entitlement?.activated_via ?? "default";
+
+  // Explicit "free" plan = no paid subscription, always blocked by paywall
+  if (rawPlan === "free" && activatedVia === "default") {
+    return { hasActiveSubscription: false, status: "free", provider: null, planId: "starter" };
+  }
 
   // Admin/activation_code/manual users don't need a subscription check
   // (manual plans use expires_at for expiration, checked below)
@@ -186,6 +192,7 @@ export async function enforcePaymentStatus(userId: string): Promise<GuardResult>
   }
 
   const statusMessages: Record<string, string> = {
+    free: "Aucun forfait actif. Souscrivez à un forfait pour continuer.",
     past_due: "Paiement en retard. Mettez à jour votre méthode de paiement pour continuer.",
     expired: "Abonnement expiré. Renouvelez votre forfait pour continuer.",
     canceled: "Abonnement annulé. Réactivez votre forfait pour continuer.",

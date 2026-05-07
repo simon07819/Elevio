@@ -5,18 +5,48 @@ import { requireSuperAdmin } from "@/lib/auth/superadmin";
 import { PLANS, effectivePlanId, type PlanId } from "@/lib/billing/plans";
 import { logAppError } from "@/lib/appErrors";
 
-/** Change a user's plan (legacy — sets activated_via to "admin") */
+/** Change a user's plan — superadmin only. Handles downgrade to free. */
 export async function changeUserPlan(userId: string, newPlan: PlanId) {
   await requireSuperAdmin();
   const supabase = await createClient();
   if (!supabase) return { ok: false, message: "Service indisponible." };
+
+  if (newPlan === "free") {
+    // Downgrade to free: expire entitlements and active subscriptions
+    const { error: entitlementError } = await supabase
+      .from("user_entitlements")
+      .update({ plan: "free", activated_via: "default", expires_at: new Date().toISOString() })
+      .eq("user_id", userId);
+
+    if (entitlementError) return { ok: false, message: entitlementError.message };
+
+    // Expire all active manual/admin subscriptions
+    await supabase
+      .from("subscriptions")
+      .update({ status: "expired", updated_at: new Date().toISOString() })
+      .eq("user_id", userId)
+      .in("provider", ["manual", "admin"])
+      .eq("status", "active");
+
+    // Audit log
+    const { data: { user: adminUser } } = await supabase.auth.getUser();
+    await logAppError({
+      message: "Membre remis au forfait Gratuit",
+      category: "billing",
+      level: "info",
+      userId: adminUser?.id,
+      metadata: { targetUserId: userId, newPlan: "free" },
+    });
+
+    return { ok: true, message: "Membre remis au forfait Gratuit. Il perdra l'accès aux fonctions payantes." };
+  }
 
   const { error } = await supabase
     .from("user_entitlements")
     .upsert({ user_id: userId, plan: newPlan, activated_via: "admin" }, { onConflict: "user_id" });
 
   if (error) return { ok: false, message: error.message };
-  return { ok: true, message: `Plan changé vers ${newPlan}.` };
+  return { ok: true, message: `Plan changé vers ${PLANS[effectivePlanId(newPlan)].label}.` };
 }
 
 /** Suspend or reactivate a user */

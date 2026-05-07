@@ -43,6 +43,7 @@ for each row execute function set_updated_at();
 -- Seed from hardcoded plans (idempotent)
 insert into billing_plans (id, label, description, price_monthly, price_annual, max_projects, max_operators, analytics, efficiency_score, business_insights, operator_performance, multi_operator, priority_support, iap_available, contact_sales, popular, active, sort_order)
 values
+  ('free', 'Gratuit', 'Aucun forfait actif — accès passager QR uniquement', 0, 0, 1, 2, 'simple', false, false, false, false, false, false, false, false, false, true, 0),
   ('starter', 'Starter', 'Reduce wait times — 1 chantier, analytics simples', 199, 1990, 1, 2, 'simple', false, false, false, false, false, true, false, false, true, 1),
   ('pro', 'Pro', 'See where time is lost — smart dispatch, analytics avancés', 499, 4990, 3, 10, 'advanced', true, true, true, true, false, true, false, true, true, 2),
   ('enterprise', 'Enterprise', 'Prove productivity gains — illimité, intégrations, SLA', null, null, null, null, 'advanced', true, true, true, true, true, false, true, false, true, 3)

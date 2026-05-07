@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { attributeManualPlan, cancelManualPlan } from "@/lib/superadminActions";
-import { PLANS, VISIBLE_PLAN_IDS, type PlanId } from "@/lib/billing/plans";
+import { PLANS, ADMIN_PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import { Badge } from "@/components/superadmin/Badge";
 
 type Props = {
@@ -116,7 +116,7 @@ export function ManualPlanModal({ userId, email, name, currentPlan, activatedVia
               value={planId}
               onChange={(e) => setPlanId(e.target.value as PlanId)}
             >
-              {VISIBLE_PLAN_IDS.map((id) => (
+              {ADMIN_PLAN_IDS.map((id) => (
                 <option key={id} value={id}>{PLANS[id].label} — {PLANS[id].description}</option>
               ))}
             </select>

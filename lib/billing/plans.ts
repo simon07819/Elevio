@@ -13,6 +13,9 @@ export type BillingPeriod = "monthly" | "annual";
 /** Plans visible to users (Free excluded from new sign-ups) */
 export const VISIBLE_PLAN_IDS: PlanId[] = ["starter", "pro", "enterprise"];
 
+/** Plans available to superadmin for manual assignment (includes free for downgrade) */
+export const ADMIN_PLAN_IDS: PlanId[] = ["free", "starter", "pro", "enterprise"];
+
 /** Legacy "free" maps to "starter" for all limit checks */
 const FREE_EQUIVALENT: PlanId = "starter";
 
@@ -48,10 +51,12 @@ export interface Plan {
 
 export const PLANS: Record<PlanId, Plan> = {
   free: {
-    // LEGACY — not offered to new users. Treated as Starter for all checks.
+    // No paid subscription — user has NOT purchased any plan.
+    // Treated as Starter for limit checks, but enforcePaymentStatus blocks access.
+    // Superadmin can assign this to revoke paid features.
     id: "free",
-    label: "Starter",
-    description: "Petite équipe — 1 chantier, 2 opérateurs",
+    label: "Gratuit",
+    description: "Aucun forfait actif — accès passager QR uniquement",
     priceMonthly: 0,
     priceAnnual: 0,
     limits: {

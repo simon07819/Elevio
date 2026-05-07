@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/superadmin/Badge";
-import { resolveAppError, clearAppErrors } from "@/lib/superadminActions";
+import { resolveAppError } from "@/lib/superadminActions";
 
 type LogLevel = "info" | "warning" | "error" | "critical";
 type LogEntry = {
@@ -64,13 +64,18 @@ export function SuperadminLogViewer() {
   async function handleClear() {
     setClearing(true);
     setClearMessage(null);
-    const result = await clearAppErrors();
-    if (result.ok) {
-      setLogs([]);
-      setClearMessage(result.message);
-      setConfirmClear(false);
-    } else {
-      setClearMessage(result.message);
+    try {
+      const res = await fetch("/api/superadmin/logs", { method: "DELETE" });
+      const result = await res.json();
+      if (result.ok) {
+        setLogs([]);
+        setClearMessage(result.message);
+        setConfirmClear(false);
+      } else {
+        setClearMessage(result.message || "Erreur lors de la suppression.");
+      }
+    } catch {
+      setClearMessage("Erreur réseau lors de la suppression.");
     }
     setClearing(false);
   }

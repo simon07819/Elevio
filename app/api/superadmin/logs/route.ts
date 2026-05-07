@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { getErrorLogs, getPerformanceLogs, getLogHistory } from "@/lib/structuredLogger";
+import { getErrorLogs, getPerformanceLogs, getLogHistory, clearLogHistory } from "@/lib/structuredLogger";
 import { createClient } from "@/lib/supabase/server";
+import { requireSuperAdmin } from "@/lib/auth/superadmin";
+import { logAppError } from "@/lib/appErrors";
 
 export async function GET() {
   // In-memory structured logs (client-side buffer, may be empty on server)
@@ -44,6 +46,46 @@ export async function GET() {
     .slice(0, 200);
 
   return NextResponse.json({ logs: all });
+}
+
+/** DELETE: clear all logs (DB + in-memory) — superadmin only */
+export async function DELETE() {
+  try {
+    await requireSuperAdmin();
+  } catch {
+    return NextResponse.json({ error: "Non autorisé." }, { status: 401 });
+  }
+
+  // 1. Clear in-memory structured logs
+  clearLogHistory();
+
+  // 2. Clear app_errors table
+  const supabase = await createClient();
+  let dbCount = 0;
+  if (supabase) {
+    const { count } = await supabase
+      .from("app_errors")
+      .select("id", { count: "exact", head: true });
+    dbCount = count ?? 0;
+
+    const { error } = await supabase
+      .from("app_errors")
+      .delete()
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+
+    if (error) {
+      return NextResponse.json({ ok: false, message: error.message });
+    }
+  }
+
+  // Audit log
+  await logAppError({
+    message: `Logs vidés par superadmin (${dbCount} entrées DB + mémoire)`,
+    category: "general",
+    level: "info",
+  });
+
+  return NextResponse.json({ ok: true, message: `${dbCount} logs DB supprimés + mémoire vidée.` });
 }
 
 async function fetchDbErrors(limit: number) {
