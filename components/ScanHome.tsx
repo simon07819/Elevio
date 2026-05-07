@@ -227,7 +227,7 @@ export function ScanHome() {
   }
 
   return (
-    <main className="relative z-10 min-h-dvh px-4 py-5 text-white">
+    <main className="relative z-10 min-h-dvh px-4 pb-5 pt-2 text-white">
       <header className="mx-auto flex max-w-md items-center justify-between">
         <BrandLogo size="sm" priority clickable />
         <LanguageSwitcher />
