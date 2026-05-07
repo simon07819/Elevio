@@ -40,8 +40,17 @@ export async function getSubscriptionStatus(userId: string): Promise<{
   const planId = effectivePlanId((entitlement?.plan as PlanId) ?? "starter");
   const activatedVia = entitlement?.activated_via ?? "default";
 
-  // Admin/activation_code users don't need a subscription check
-  if (activatedVia === "admin" || activatedVia === "activation_code") {
+  // Admin/activation_code/manual users don't need a subscription check
+  // (manual plans use expires_at for expiration, checked below)
+  if (activatedVia === "admin" || activatedVia === "activation_code" || activatedVia === "manual") {
+    // For manual plans, check expiration
+    if (activatedVia === "manual" && entitlement?.expires_at) {
+      const expiresAt = new Date(entitlement.expires_at);
+      if (expiresAt < new Date()) {
+        // Manual plan expired — treat as no subscription
+        return { hasActiveSubscription: false, status: "expired", provider: "manual", planId: "starter" };
+      }
+    }
     return { hasActiveSubscription: true, status: "active", provider: activatedVia, planId };
   }
 

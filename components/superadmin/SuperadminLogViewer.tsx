@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/superadmin/Badge";
-import { resolveAppError } from "@/lib/superadminActions";
+import { resolveAppError, clearAppErrors } from "@/lib/superadminActions";
 
 type LogLevel = "info" | "warning" | "error" | "critical";
 type LogEntry = {
@@ -24,21 +24,28 @@ export function SuperadminLogViewer() {
   const [filterTag, setFilterTag] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearMessage, setClearMessage] = useState<string | null>(null);
+
+  async function fetchLogs() {
+    try {
+      const res = await fetch("/api/superadmin/logs");
+      if (res.ok) {
+        const data = await res.json();
+        setLogs(data.logs ?? []);
+      }
+    } catch {
+      // API not available
+    }
+  }
 
   useEffect(() => {
-    async function fetchLogs() {
-      try {
-        const res = await fetch("/api/superadmin/logs");
-        if (res.ok) {
-          const data = await res.json();
-          setLogs(data.logs ?? []);
-        }
-      } catch {
-        // API not available
-      }
+    async function initialFetch() {
+      await fetchLogs();
       setLoading(false);
     }
-    fetchLogs();
+    initialFetch();
     const interval = setInterval(fetchLogs, 15000);
     return () => clearInterval(interval);
   }, []);
@@ -54,6 +61,20 @@ export function SuperadminLogViewer() {
     setResolving(null);
   }
 
+  async function handleClear() {
+    setClearing(true);
+    setClearMessage(null);
+    const result = await clearAppErrors();
+    if (result.ok) {
+      setLogs([]);
+      setClearMessage(result.message);
+      setConfirmClear(false);
+    } else {
+      setClearMessage(result.message);
+    }
+    setClearing(false);
+  }
+
   const filtered = logs.filter((l) => {
     if (filterLevel !== "all" && l.level !== filterLevel) return false;
     if (filterTag !== "all" && l.tag !== filterTag) return false;
@@ -66,8 +87,15 @@ export function SuperadminLogViewer() {
 
   return (
     <div>
-      {/* Filters */}
-      <div className="mb-4 flex flex-wrap gap-3">
+      {/* Feedback banner */}
+      {clearMessage && (
+        <div className={`mb-4 rounded-xl border p-3 text-sm font-bold ${clearMessage.includes("supprim") ? "bg-emerald-400/10 border-emerald-400/20 text-emerald-300" : "bg-yellow-400/10 border-yellow-400/20 text-yellow-300"}`}>
+          {clearMessage}
+        </div>
+      )}
+
+      {/* Filters + Clear button */}
+      <div className="mb-4 flex flex-wrap items-end gap-3">
         <div>
           <label className="mb-1 block text-xs font-black uppercase text-slate-400">Niveau</label>
           <select
@@ -89,6 +117,35 @@ export function SuperadminLogViewer() {
             <option value="all">Tous</option>
             {TAGS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
+        </div>
+
+        <div className="ml-auto">
+          {!confirmClear ? (
+            <button
+              className="rounded-lg bg-red-400/15 px-4 py-1.5 text-sm font-bold text-red-400 hover:bg-red-400/25 disabled:opacity-50"
+              disabled={clearing || logs.length === 0}
+              onClick={() => setConfirmClear(true)}
+            >
+              Vider les logs
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-red-300">Confirmer la suppression de tous les logs visibles? Cette action est irréversible.</span>
+              <button
+                className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600 disabled:opacity-50"
+                disabled={clearing}
+                onClick={handleClear}
+              >
+                {clearing ? "Suppression…" : "Confirmer"}
+              </button>
+              <button
+                className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/15"
+                onClick={() => setConfirmClear(false)}
+              >
+                Annuler
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

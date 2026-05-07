@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS subscriptions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  provider TEXT NOT NULL CHECK (provider IN ('stripe', 'revenuecat', 'admin', 'activation_code')),
+  provider TEXT NOT NULL CHECK (provider IN ('stripe', 'revenuecat', 'admin', 'activation_code', 'manual')),
   provider_subscription_id TEXT,
   provider_customer_id TEXT,
   plan_id TEXT NOT NULL DEFAULT 'starter' CHECK (plan_id IN ('free', 'starter', 'pro', 'business', 'enterprise')),

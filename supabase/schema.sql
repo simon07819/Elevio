@@ -710,7 +710,7 @@ create table if not exists user_entitlements (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null unique references auth.users(id) on delete cascade,
   plan text not null default 'free' check (plan in ('free', 'starter', 'pro', 'business', 'enterprise')),
-  activated_via text not null default 'default' check (activated_via in ('default', 'iap', 'activation_code', 'admin')),
+  activated_via text not null default 'default' check (activated_via in ('default', 'iap', 'activation_code', 'admin', 'manual')),
   activation_code_id uuid references enterprise_activation_codes(id) on delete set null,
   expires_at timestamptz,
   created_at timestamptz not null default now(),

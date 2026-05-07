@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { changeUserPlan, setUserSuspended } from "@/lib/superadminActions";
 import { Badge } from "@/components/superadmin/Badge";
+import { ManualPlanModal } from "@/components/superadmin/ManualPlanModal";
 import type { PlanId } from "@/lib/billing/plans";
-import { VISIBLE_PLAN_IDS } from "@/lib/billing/plans";
+import { VISIBLE_PLAN_IDS, PLANS } from "@/lib/billing/plans";
 
 type UserRow = {
   id: string;
@@ -21,9 +22,21 @@ type UserRow = {
   expiresAt: string | null;
 };
 
+function sourceBadge(via: string) {
+  switch (via) {
+    case "manual": return <Badge variant="yellow">Manuel</Badge>;
+    case "iap": case "revenuecat": return <Badge variant="default">App Store</Badge>;
+    case "stripe": return <Badge variant="default">Stripe</Badge>;
+    case "admin": return <Badge variant="yellow">Admin</Badge>;
+    case "activation_code": return <Badge variant="green">Code</Badge>;
+    default: return <Badge variant="default">—</Badge>;
+  }
+}
+
 export function SuperadminUserList({ users }: { users: UserRow[] }) {
   const [loading, setLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [modalUser, setModalUser] = useState<UserRow | null>(null);
 
   async function handleChangePlan(userId: string, newPlan: PlanId) {
     setLoading(userId);
@@ -59,6 +72,7 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
               <th className="pb-3 pr-4">Courriel</th>
               <th className="pb-3 pr-4">Compagnie</th>
               <th className="pb-3 pr-4">Plan</th>
+              <th className="pb-3 pr-4">Source</th>
               <th className="pb-3 pr-4">Rôle</th>
               <th className="pb-3 pr-4">Créé</th>
               <th className="pb-3 pr-4">Statut</th>
@@ -81,9 +95,17 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
                     onChange={(e) => handleChangePlan(u.id, e.target.value as PlanId)}
                   >
                     {VISIBLE_PLAN_IDS.map((p) => (
-                      <option key={p} value={p}>{p}</option>
+                      <option key={p} value={p}>{PLANS[p].label}</option>
                     ))}
                   </select>
+                </td>
+                <td className="py-3 pr-4">
+                  {sourceBadge(u.activatedVia)}
+                  {u.expiresAt && (
+                    <span className="ml-1 text-xs text-slate-500">
+                      {new Date(u.expiresAt) > new Date() ? "→" : "exp."} {new Date(u.expiresAt).toLocaleDateString("fr-CA")}
+                    </span>
+                  )}
                 </td>
                 <td className="py-3 pr-4">
                   <Badge variant={u.account_role === "superadmin" ? "yellow" : "default"}>
@@ -101,23 +123,32 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
                   )}
                 </td>
                 <td className="py-3">
-                  {u.suspended ? (
+                  <div className="flex gap-2">
                     <button
-                      className="rounded-lg bg-emerald-400/15 px-3 py-1 text-xs font-bold text-emerald-400 hover:bg-emerald-400/25"
+                      className="rounded-lg bg-yellow-400/15 px-3 py-1 text-xs font-bold text-yellow-400 hover:bg-yellow-400/25"
                       disabled={loading === u.id}
-                      onClick={() => handleSuspend(u.id, false)}
+                      onClick={() => setModalUser(u)}
                     >
-                      Réactiver
+                      Attribuer forfait
                     </button>
-                  ) : (
-                    <button
-                      className="rounded-lg bg-red-400/15 px-3 py-1 text-xs font-bold text-red-400 hover:bg-red-400/25"
-                      disabled={loading === u.id}
-                      onClick={() => handleSuspend(u.id, true)}
-                    >
-                      Suspendre
-                    </button>
-                  )}
+                    {u.suspended ? (
+                      <button
+                        className="rounded-lg bg-emerald-400/15 px-3 py-1 text-xs font-bold text-emerald-400 hover:bg-emerald-400/25"
+                        disabled={loading === u.id}
+                        onClick={() => handleSuspend(u.id, false)}
+                      >
+                        Réactiver
+                      </button>
+                    ) : (
+                      <button
+                        className="rounded-lg bg-red-400/15 px-3 py-1 text-xs font-bold text-red-400 hover:bg-red-400/25"
+                        disabled={loading === u.id}
+                        onClick={() => handleSuspend(u.id, true)}
+                      >
+                        Suspendre
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -127,6 +158,19 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
 
       {users.length === 0 && (
         <p className="mt-8 text-center text-slate-500">Aucun compte utilisateur.</p>
+      )}
+
+      {modalUser && (
+        <ManualPlanModal
+          userId={modalUser.id}
+          email={modalUser.email}
+          name={`${modalUser.first_name ?? ""} ${modalUser.last_name ?? ""}`.trim() || modalUser.email}
+          currentPlan={modalUser.plan}
+          activatedVia={modalUser.activatedVia}
+          expiresAt={modalUser.expiresAt}
+          onClose={() => setModalUser(null)}
+          onSaved={() => { setModalUser(null); window.location.reload(); }}
+        />
       )}
     </div>
   );

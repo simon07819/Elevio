@@ -74,6 +74,10 @@ create policy "authenticated insert app_errors" on app_errors
 create policy "anon insert app_errors" on app_errors
   for insert to anon with check (true);
 
+-- Only superadmin can delete app_errors (for "Vider les logs")
+create policy "superadmin delete app_errors" on app_errors
+  for delete using (is_superadmin());
+
 -- ─── Seed default site settings ──────────────────────────────────────────
 insert into site_settings (key, value, label) values
   ('support_email', 'support@elevio.app', 'Courriel support'),
