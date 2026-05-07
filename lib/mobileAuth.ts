@@ -56,7 +56,23 @@ export async function signInWithApple(identityToken: string, fullName?: { firstN
   });
 
   if (error) {
-    return { ok: false as const, message: `Erreur Apple : ${error.message}`, provider: "apple" as const };
+    // Provide actionable error messages for common Apple Sign-In config issues
+    let message = error.message;
+    if (message.includes("not enabled") || message.includes("Provider")) {
+      message = "Connexion Apple non configurée. Le provider Apple doit être activé dans Supabase Dashboard → Authentication → Providers → Apple, avec les champs Service ID, Team ID, Key ID et Private Key remplis.";
+      console.error("[signInWithApple] Apple provider not enabled in Supabase.", {
+        fix: "Go to Supabase Dashboard → Authentication → Providers → Apple → Enable",
+        required: "Service ID, Team ID, Key ID, Private Key (.p8)",
+        docs: "https://supabase.com/docs/guides/auth/social-login/auth-apple",
+      });
+    } else if (message.includes("Invalid") || message.includes("invalid")) {
+      message = "Jeton Apple invalide. Réessayez.";
+      console.error("[signInWithApple] Invalid Apple id_token. Check Apple Developer config:", {
+        bundleId: "Ensure App ID has Sign in with Apple capability",
+        keyId: "Check APPLE_KEY_ID matches the key in Apple Developer",
+      });
+    }
+    return { ok: false as const, message: `Erreur Apple : ${message}`, provider: "apple" as const };
   }
 
   if (data.user) {

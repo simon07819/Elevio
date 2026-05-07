@@ -53,7 +53,8 @@ export function WelcomeScreen() {
         try {
           const APPLE_CLIENT_ID = process.env.NEXT_PUBLIC_APPLE_WEB_CLIENT_ID ?? process.env.NEXT_PUBLIC_APPLE_CLIENT_ID ?? "";
           if (!APPLE_CLIENT_ID) {
-            setMessage("Configuration Apple manquante. Contactez le support.");
+            console.error("[Apple] Missing env vars. Set NEXT_PUBLIC_APPLE_WEB_CLIENT_ID or NEXT_PUBLIC_APPLE_CLIENT_ID for Apple Sign-In on web.");
+            setMessage("Connexion Apple indisponible sur navigateur. Utilisez votre courriel.");
             setLoading(false);
             return;
           }

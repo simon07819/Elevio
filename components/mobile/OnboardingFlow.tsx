@@ -74,6 +74,7 @@ export function OnboardingFlow() {
         // Web browser fallback
         const APPLE_CLIENT_ID = process.env.NEXT_PUBLIC_APPLE_WEB_CLIENT_ID ?? process.env.NEXT_PUBLIC_APPLE_CLIENT_ID ?? "";
         if (!APPLE_CLIENT_ID) {
+          console.error("[Apple] Missing env vars. Set NEXT_PUBLIC_APPLE_WEB_CLIENT_ID or NEXT_PUBLIC_APPLE_CLIENT_ID for Apple Sign-In on web.");
           setMessage("Connexion Apple indisponible. Utilisez votre courriel.");
           setAppleLoading(false);
           return;
