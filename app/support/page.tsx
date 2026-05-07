@@ -3,6 +3,7 @@ import { BackButton } from "@/components/BackButton";
 import { APP_VERSION } from "@/lib/version";
 import { getSiteSettings } from "@/lib/siteSettings";
 import { getServerLocale, serverT, type Locale } from "@/lib/i18nServer";
+import { SUPPORT_TYPES } from "@/app/api/support/route";
 import Link from "next/link";
 import {
   Mail, Shield, HelpCircle, AlertTriangle, Database,
@@ -226,7 +227,7 @@ export default async function SupportPage() {
                   <label className="block text-xs font-bold text-slate-400 mb-1">{t("support.typeLabel")}</label>
                   <select name="type" required className="w-full rounded-xl bg-white/10 border border-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-sky-400/50">
                     {msgTypes.map((typeLabel, i) => (
-                      <option key={i} value={["technical", "general", "payment", "account", "safety", "other"][i]} className="bg-slate-900">{typeLabel}</option>
+                      <option key={i} value={SUPPORT_TYPES[i]} className="bg-slate-900">{typeLabel}</option>
                     ))}
                   </select>
                 </div>

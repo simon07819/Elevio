@@ -2,6 +2,7 @@ import { requireSuperAdmin } from "@/lib/auth/superadmin";
 import { createClient } from "@/lib/supabase/server";
 import { SupportMessageActions } from "@/components/superadmin/SupportMessageActions";
 import { getServerLocale, serverT } from "@/lib/i18nServer";
+import { SUPPORT_TYPES, type SupportType } from "@/app/api/support/route";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,20 @@ const STATUS_LABELS: Record<string, string> = {
   en_cours: "En cours",
   "résolu": "Résolu",
 };
+
+/** Map English type key → French label (for superadmin display) */
+const TYPE_LABELS: Record<string, string> = {
+  technical: "Problème technique",
+  general: "Question générale",
+  payment: "Paiement / abonnement",
+  account: "Compte / accès",
+  safety: "Sécurité chantier",
+  other: "Autre",
+};
+
+function typeLabel(key: string): string {
+  return TYPE_LABELS[key] ?? key;
+}
 
 export default async function SupportInboxPage() {
   await requireSuperAdmin();
@@ -89,7 +104,7 @@ export default async function SupportInboxPage() {
               </div>
 
               <div className="flex items-center gap-2 mb-3 text-xs text-slate-500">
-                <span className="rounded-lg bg-white/[0.06] px-2 py-0.5">{msg.type}</span>
+                <span className="rounded-lg bg-white/[0.06] px-2 py-0.5">{typeLabel(msg.type)}</span>
                 <span className="rounded-lg bg-white/[0.06] px-2 py-0.5">{msg.role}</span>
                 {msg.project && <span className="rounded-lg bg-white/[0.06] px-2 py-0.5">{msg.project}</span>}
                 <span className="ml-auto">{new Date(msg.created_at).toLocaleDateString("fr-CA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>

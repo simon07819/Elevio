@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const VALID_TYPES = [
-  "Problème technique",
-  "Question générale",
-  "Paiement / abonnement",
-  "Compte / accès",
-  "Sécurité chantier",
-  "Autre",
-];
+/**
+ * Support ticket types — source of truth.
+ * Values are stable English keys used in the DB and API.
+ * French labels are in the i18n system and the support page UI.
+ */
+export const SUPPORT_TYPES = [
+  "technical",
+  "general",
+  "payment",
+  "account",
+  "safety",
+  "other",
+] as const;
+
+export type SupportType = (typeof SUPPORT_TYPES)[number];
+
+const VALID_TYPES: string[] = [...SUPPORT_TYPES];
 const VALID_ROLES = ["passenger", "operator", "admin", "autre"];
 const VALID_STATUSES = ["nouveau", "en_cours", "résolu"];
 
@@ -31,7 +40,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Message requis (max 2000 car.)" }, { status: 400 });
     }
     if (!VALID_TYPES.includes(type)) {
-      return NextResponse.json({ error: "Type invalide" }, { status: 400 });
+      console.warn("[support] Rejected type:", JSON.stringify(type), "accepted:", VALID_TYPES);
+      return NextResponse.json(
+        { error: "Type invalide. Veuillez rafraîchir la page et réessayer." },
+        { status: 400 },
+      );
     }
     if (!VALID_ROLES.includes(role)) {
       return NextResponse.json({ error: "Rôle invalide" }, { status: 400 });

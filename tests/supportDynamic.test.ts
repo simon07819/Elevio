@@ -96,6 +96,31 @@ test("api: /api/support validates input", () => {
   assert.match(route, /support_messages/, "inserts into support_messages table");
 });
 
+test("api: SUPPORT_TYPES uses English keys (source of truth)", () => {
+  const route = readFileSync(join(root, "app/api/support/route.ts"), "utf8");
+  assert.match(route, /SUPPORT_TYPES/, "exports SUPPORT_TYPES constant");
+  assert.match(route, /"technical"/, "includes technical key");
+  assert.match(route, /"general"/, "includes general key");
+  assert.match(route, /"payment"/, "includes payment key");
+  assert.match(route, /"account"/, "includes account key");
+  assert.match(route, /"safety"/, "includes safety key");
+  assert.match(route, /"other"/, "includes other key");
+  // Must NOT contain French labels
+  assert.doesNotMatch(route, /Problème technique/, "no French label in VALID_TYPES");
+  assert.doesNotMatch(route, /Question générale/, "no French label in VALID_TYPES");
+});
+
+test("api: support form sends English keys matching SUPPORT_TYPES", () => {
+  const page = readFileSync(join(root, "app/support/page.tsx"), "utf8");
+  const route = readFileSync(join(root, "app/api/support/route.ts"), "utf8");
+  assert.match(page, /SUPPORT_TYPES/, "page imports SUPPORT_TYPES from route");
+  // The form select uses SUPPORT_TYPES[i] as values
+  assert.match(page, /value=\{SUPPORT_TYPES/, "form uses SUPPORT_TYPES for option values");
+  // French labels are in i18n, not hardcoded as values
+  assert.match(page, /typeTechnical/, "uses i18n key for technical label");
+  assert.match(page, /typeGeneral/, "uses i18n key for general label");
+});
+
 test("api: /api/support PATCH requires superadmin", () => {
   const route = readFileSync(join(root, "app/api/support/route.ts"), "utf8");
   assert.match(route, /requireSuperAdmin/, "PATCH requires superadmin auth");
@@ -169,12 +194,22 @@ test("sql: support_messages table DDL exists", () => {
   assert.match(sql, /Superadmin can read/, "only superadmin can read");
   assert.match(sql, /Superadmin can update/, "only superadmin can update");
   assert.match(sql, /check.*status/, "has status CHECK constraint");
+  assert.match(sql, /check.*type.*technical.*general/, "type CHECK constraint uses English keys");
+  assert.match(sql, /default 'general'/, "type defaults to 'general' (English key)");
   assert.match(sql, /type.*not null/, "has type column");
   assert.match(sql, /name.*not null/, "has name column");
   assert.match(sql, /email.*not null/, "has email column");
   assert.match(sql, /message.*not null/, "has message column");
   assert.match(sql, /internal_note/, "has internal_note column");
   assert.match(sql, /support_messages_status_idx/, "has index");
+});
+
+test("sql: migration exists for French→English type values", () => {
+  const migration = readFileSync(join(root, "supabase/migrations/support_types_english.sql"), "utf8");
+  assert.match(migration, /Problème technique.*technical/, "maps French→English");
+  assert.match(migration, /Question générale.*general/, "maps general");
+  assert.match(migration, /support_messages_type_check/, "adds CHECK constraint");
+  assert.match(migration, /SET DEFAULT 'general'/, "sets default to English key");
 });
 
 // ═══════════════════════════════════════════════════════════════════

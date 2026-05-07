@@ -1,7 +1,10 @@
 -- Support messages table for internal support system
+-- type values are stable English keys: technical, general, payment, account, safety, other
+-- (French labels live in i18n / the support page UI only)
 create table if not exists support_messages (
   id uuid primary key default gen_random_uuid(),
-  type text not null default 'Question générale',
+  type text not null default 'general'
+    check (type in ('technical', 'general', 'payment', 'account', 'safety', 'other')),
   name text not null,
   email text not null,
   role text not null default 'passenger',
