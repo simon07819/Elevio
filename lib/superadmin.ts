@@ -125,7 +125,7 @@ export async function getSuperadminDashboardData(): Promise<DashboardData> {
   };
 }
 
-/** Get all users with their entitlement info */
+/** Get all users with their entitlement + subscription info */
 export async function getSuperadminUsers() {
   const supabase = await createClient();
   if (!supabase) return [];
@@ -139,14 +139,49 @@ export async function getSuperadminUsers() {
     .from("user_entitlements")
     .select("user_id,plan,activated_via,expires_at");
 
+  // Also fetch active/recent subscriptions to determine the real source
+  const { data: subscriptions } = await supabase
+    .from("subscriptions")
+    .select("user_id,provider,status,plan_id")
+    .in("status", ["active", "trialing", "canceled", "expired", "past_due"])
+    .order("created_at", { ascending: false });
+
   const entitlementMap = new Map((entitlements ?? []).map((e) => [e.user_id, e]));
 
-  return (profiles ?? []).map((p) => ({
-    ...p,
-    plan: (entitlementMap.get(p.id)?.plan ?? "starter") as string,
-    activatedVia: entitlementMap.get(p.id)?.activated_via ?? "default",
-    expiresAt: entitlementMap.get(p.id)?.expires_at ?? null,
-  }));
+  // Build a map: userId → best subscription provider (prefer active, then most recent)
+  const subProviderMap = new Map<string, string>();
+  for (const s of subscriptions ?? []) {
+    if (!subProviderMap.has(s.user_id)) {
+      // First entry per user = most recent (ordered by created_at desc)
+      subProviderMap.set(s.user_id, s.provider);
+    }
+  }
+
+  return (profiles ?? []).map((p) => {
+    const ent = entitlementMap.get(p.id);
+    const plan = (ent?.plan ?? "free") as string;
+    const entitlementVia = ent?.activated_via ?? null;
+
+    // Determine the real source:
+    // 1. If entitlement has explicit activated_via (iap, manual, admin, activation_code) — use it
+    // 2. If there's an active/recent subscription — use its provider
+    // 3. Otherwise — "default" (no paid source)
+    let activatedVia: string;
+    if (entitlementVia && entitlementVia !== "default") {
+      activatedVia = entitlementVia;
+    } else if (subProviderMap.has(p.id)) {
+      activatedVia = subProviderMap.get(p.id)!;
+    } else {
+      activatedVia = "default";
+    }
+
+    return {
+      ...p,
+      plan,
+      activatedVia,
+      expiresAt: ent?.expires_at ?? null,
+    };
+  });
 }
 
 /** Get all projects with owner info */

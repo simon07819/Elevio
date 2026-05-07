@@ -25,12 +25,14 @@ type UserRow = {
 function sourceBadge(via: string) {
   switch (via) {
     case "free": return <Badge variant="default">Gratuit</Badge>;
+    case "default": return <Badge variant="default">Gratuit</Badge>;
     case "manual": return <Badge variant="yellow">Manuel</Badge>;
-    case "iap": case "revenuecat": return <Badge variant="default">App Store</Badge>;
+    case "iap": return <Badge variant="default">App Store</Badge>;
+    case "revenuecat": return <Badge variant="default">App Store</Badge>;
     case "stripe": return <Badge variant="default">Stripe</Badge>;
     case "admin": return <Badge variant="yellow">Admin</Badge>;
     case "activation_code": return <Badge variant="green">Code</Badge>;
-    default: return <Badge variant="default">Gratuit</Badge>;
+    default: return <Badge variant="default">{via}</Badge>;
   }
 }
 
