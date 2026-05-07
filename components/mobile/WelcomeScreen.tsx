@@ -1,109 +1,19 @@
 "use client";
 
 import { BrandLogo } from "@/components/BrandLogo";
-import { signInWithApple, signInMobile } from "@/lib/mobileAuth";
-import { isCapacitorNative } from "@/lib/platform";
+import { signInMobile } from "@/lib/mobileAuth";
+import { useAppleSignIn } from "@/hooks/useAppleSignIn";
 import { Apple, ChevronRight, Mail } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export function WelcomeScreen() {
-  const router = useRouter();
   const [showEmail, setShowEmail] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  async function handleApple() {
-    setLoading(true);
-    setMessage(null);
-
-    try {
-      // Dynamic import — prevents plugin JS from evaluating at boot
-      const { AppleSignIn, SignInScope } = await import("@capawesome/capacitor-apple-sign-in");
-
-      if (isCapacitorNative()) {
-        // ── NATIVE iOS: Use Capawesome Apple Sign-In plugin (Capacitor 8) ──
-        const result = await AppleSignIn.signIn({
-          scopes: [SignInScope.Email, SignInScope.FullName],
-        });
-
-        const { idToken, givenName, familyName } = result;
-
-        if (!idToken) {
-          setMessage("Erreur Apple : jeton manquant. Réessayez.");
-          setLoading(false);
-          return;
-        }
-
-        // Send the identityToken to the server action for Supabase verification
-        const serverResult = await signInWithApple(idToken, {
-          firstName: givenName,
-          familyName: familyName,
-        });
-
-        if (!serverResult.ok) {
-          setMessage(serverResult.message);
-        }
-        // If ok, the server action redirects (throws) — that's expected
-      } else {
-        // ── WEB BROWSER: Initialize then sign in ──
-        try {
-          const APPLE_CLIENT_ID = process.env.NEXT_PUBLIC_APPLE_WEB_CLIENT_ID ?? process.env.NEXT_PUBLIC_APPLE_CLIENT_ID ?? "";
-          if (!APPLE_CLIENT_ID) {
-            console.error("[Apple] Missing env vars. Set NEXT_PUBLIC_APPLE_WEB_CLIENT_ID or NEXT_PUBLIC_APPLE_CLIENT_ID for Apple Sign-In on web.");
-            setMessage("Connexion Apple indisponible sur navigateur. Utilisez votre courriel.");
-            setLoading(false);
-            return;
-          }
-          const origin = window.location.origin;
-
-          await AppleSignIn.initialize({ clientId: APPLE_CLIENT_ID });
-
-          const result = await AppleSignIn.signIn({
-            redirectUrl: `${origin}/welcome`,
-            scopes: [SignInScope.Email, SignInScope.FullName],
-          });
-
-          const { idToken, givenName, familyName } = result;
-
-          if (!idToken) {
-            setMessage("Erreur Apple : jeton manquant. Réessayez.");
-            setLoading(false);
-            return;
-          }
-
-          const serverResult = await signInWithApple(idToken, {
-            firstName: givenName,
-            familyName: familyName,
-          });
-
-          if (!serverResult.ok) {
-            setMessage(serverResult.message);
-          }
-        } catch (webErr) {
-          // Apple JS SDK failed (not configured, popup blocked, etc.)
-          setMessage("Connexion Apple indisponible sur navigateur. Utilisez votre courriel.");
-        }
-      }
-    } catch (err) {
-      // redirect() throws — that's the normal success path
-      if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) {
-        return;
-      }
-      // User cancelled or real error
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("cancel") || msg.includes("CANCELED") || msg.includes("SIGN_IN_CANCELED") || msg.includes("1001")) {
-        setMessage(""); // User cancelled — no error message
-      } else {
-        setMessage(`Apple : ${msg.slice(0, 100)}`);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { signIn: handleApple, appleLoading, appleError } = useAppleSignIn();
 
   async function handleEmailLogin(formData: FormData) {
     setLoading(true);
@@ -143,11 +53,11 @@ export function WelcomeScreen() {
         <button
           type="button"
           onClick={handleApple}
-          disabled={loading}
+          disabled={loading || appleLoading}
           className="touch-target flex w-full items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-base font-black text-slate-950 transition hover:bg-slate-100 active:scale-[0.98] disabled:opacity-50"
         >
           <Apple size={20} />
-          Continuer avec Apple
+          {appleLoading ? "Connexion…" : "Continuer avec Apple"}
         </button>
 
         {/* Email toggle */}
@@ -199,9 +109,9 @@ export function WelcomeScreen() {
         )}
 
         {/* Message */}
-        {message && (
+        {(message || appleError) && (
           <p className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-100">
-            {message}
+            {appleError || message}
           </p>
         )}
       </div>

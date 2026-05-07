@@ -1,8 +1,8 @@
 "use client";
 
 import { BrandLogo } from "@/components/BrandLogo";
-import { signUpMobile, signInWithApple } from "@/lib/mobileAuth";
-import { isCapacitorNative } from "@/lib/platform";
+import { signUpMobile } from "@/lib/mobileAuth";
+import { useAppleSignIn } from "@/hooks/useAppleSignIn";
 import { ArrowLeft, ArrowRight, Building2, Check, HardHat, Crown, User, Apple } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -39,81 +39,8 @@ export function OnboardingFlow() {
   // Plan
   const [planId, setPlanId] = useState("starter");
 
-  // Apple Sign-In
-  const [appleLoading, setAppleLoading] = useState(false);
-
-  async function handleApple() {
-    setAppleLoading(true);
-    setMessage(null);
-    try {
-      // Dynamic import — prevents plugin JS from evaluating at boot on iOS
-      const { AppleSignIn, SignInScope } = await import("@capawesome/capacitor-apple-sign-in");
-
-      if (isCapacitorNative()) {
-        const result = await AppleSignIn.signIn({
-          scopes: [SignInScope.Email, SignInScope.FullName],
-        });
-
-        const { idToken, givenName, familyName } = result;
-
-        if (!idToken) {
-          setMessage("Erreur Apple : jeton manquant. Réessayez.");
-          setAppleLoading(false);
-          return;
-        }
-
-        const serverResult = await signInWithApple(idToken, {
-          firstName: givenName,
-          familyName: familyName,
-        });
-
-        if (!serverResult.ok) {
-          setMessage(serverResult.message);
-        }
-      } else {
-        // Web browser fallback
-        const APPLE_CLIENT_ID = process.env.NEXT_PUBLIC_APPLE_WEB_CLIENT_ID ?? process.env.NEXT_PUBLIC_APPLE_CLIENT_ID ?? "";
-        if (!APPLE_CLIENT_ID) {
-          console.error("[Apple] Missing env vars. Set NEXT_PUBLIC_APPLE_WEB_CLIENT_ID or NEXT_PUBLIC_APPLE_CLIENT_ID for Apple Sign-In on web.");
-          setMessage("Connexion Apple indisponible. Utilisez votre courriel.");
-          setAppleLoading(false);
-          return;
-        }
-        const origin = window.location.origin;
-        await AppleSignIn.initialize({ clientId: APPLE_CLIENT_ID });
-        const result = await AppleSignIn.signIn({
-          redirectUrl: `${origin}/onboarding`,
-          scopes: [SignInScope.Email, SignInScope.FullName],
-        });
-        const { idToken, givenName, familyName } = result;
-        if (!idToken) {
-          setMessage("Erreur Apple : jeton manquant. Réessayez.");
-          setAppleLoading(false);
-          return;
-        }
-        const serverResult = await signInWithApple(idToken, {
-          firstName: givenName,
-          familyName: familyName,
-        });
-        if (!serverResult.ok) {
-          setMessage(serverResult.message);
-        }
-      }
-    } catch (err) {
-      // redirect() throws — that's the normal success path
-      if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) {
-        return;
-      }
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("cancel") || msg.includes("CANCELED") || msg.includes("SIGN_IN_CANCELED") || msg.includes("1001")) {
-        setMessage(""); // User cancelled — no error
-      } else {
-        setMessage(`Apple : ${msg.slice(0, 100)}`);
-      }
-    } finally {
-      setAppleLoading(false);
-    }
-  }
+  // Shared Apple Sign-In hook
+  const { signIn: handleApple, appleLoading, appleError } = useAppleSignIn();
 
   function canAdvance(): boolean {
     switch (step) {
@@ -413,9 +340,9 @@ export function OnboardingFlow() {
       </div>
 
       {/* Message */}
-      {message && step !== "done" && (
+      {(message || appleError) && step !== "done" && (
         <p className="mt-3 rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-100">
-          {message}
+          {appleError || message}
         </p>
       )}
 

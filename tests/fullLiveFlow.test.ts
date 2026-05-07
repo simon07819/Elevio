@@ -20,6 +20,7 @@ const CHECKOUT = readFileSync(join(root, "lib/billing/checkout.ts"), "utf8");
 const PLATFORM = readFileSync(join(root, "lib/platform.ts"), "utf8");
 const MOBILE_AUTH = readFileSync(join(root, "lib/mobileAuth.ts"), "utf8");
 const WELCOME = readFileSync(join(root, "components/mobile/WelcomeScreen.tsx"), "utf8");
+const APPLE_HOOK = readFileSync(join(root, "hooks/useAppleSignIn.ts"), "utf8");
 const ONBOARDING = readFileSync(join(root, "components/mobile/OnboardingFlow.tsx"), "utf8");
 const APP_PRICING = readFileSync(join(root, "components/mobile/AppPricingScreen.tsx"), "utf8");
 const PAYWALL_CLIENT = readFileSync(join(root, "components/billing/PaywallClient.tsx"), "utf8");
@@ -40,8 +41,9 @@ const SUPERADMIN_LAYOUT = readFileSync(join(root, "app/superadmin/layout.tsx"), 
 
 test("flow: /welcome exists as a standalone page", () => {
   assert.ok(WELCOME.length > 0, "/welcome page component exists");
-  assert.match(WELCOME, /isCapacitorNative/, "detects native platform");
-  assert.match(WELCOME, /signInWithApple/, "has Apple Sign-In");
+  assert.match(WELCOME, /useAppleSignIn/, "uses shared Apple hook");
+  assert.match(APPLE_HOOK, /isCapacitorNative/, "hook detects native platform");
+  assert.match(APPLE_HOOK, /signInWithApple/, "hook calls Apple Sign-In server action");
   assert.match(WELCOME, /signInMobile/, "has email login");
 });
 

@@ -18,6 +18,7 @@ import assert from "node:assert/strict";
 const root = process.cwd();
 const WELCOME = readFileSync(join(root, "app/welcome/page.tsx"), "utf8");
 const WELCOME_SCREEN = readFileSync(join(root, "components/mobile/WelcomeScreen.tsx"), "utf8");
+const APPLE_HOOK = readFileSync(join(root, "hooks/useAppleSignIn.ts"), "utf8");
 const ONBOARDING = readFileSync(join(root, "app/onboarding/page.tsx"), "utf8");
 const ONBOARDING_FLOW = readFileSync(join(root, "components/mobile/OnboardingFlow.tsx"), "utf8");
 const APP_PRICING = readFileSync(join(root, "app/app-pricing/page.tsx"), "utf8");
@@ -41,27 +42,26 @@ test("mobile: welcome has Apple sign-in button", () => {
 });
 
 test("mobile: welcome uses Capawesome Apple Sign-In plugin (Capacitor 8)", () => {
-  assert.match(WELCOME_SCREEN, /@capawesome\/capacitor-apple-sign-in/, "imports Capawesome plugin");
-  assert.match(WELCOME_SCREEN, /AppleSignIn\.signIn/, "calls AppleSignIn.signIn()");
-  assert.match(WELCOME_SCREEN, /SignInScope/, "uses SignInScope enum");
-  assert.match(WELCOME_SCREEN, /idToken/, "extracts idToken from result");
-  assert.doesNotMatch(WELCOME_SCREEN, /@capacitor-community\/apple-sign-in/, "no longer uses old Capacitor 7 plugin");
+  assert.match(APPLE_HOOK, /@capawesome\/capacitor-apple-sign-in/, "imports Capawesome plugin");
+  assert.match(APPLE_HOOK, /AppleSignIn\.signIn/, "calls AppleSignIn.signIn()");
+  assert.match(APPLE_HOOK, /SignInScope/, "uses SignInScope enum");
+  assert.match(APPLE_HOOK, /idToken/, "extracts idToken from result");
+  assert.doesNotMatch(WELCOME_SCREEN, /@capawesome\/capacitor-apple-sign-in/, "no static import in WelcomeScreen");
 });
 
 test("mobile: welcome detects Capacitor native vs web", () => {
-  assert.match(WELCOME_SCREEN, /isCapacitorNative/, "has native detection function");
-  // The function is imported from @/lib/platform which contains Capacitor.isNativePlatform
+  assert.match(APPLE_HOOK, /isCapacitorNative/, "hook uses native detection function");
   const PLATFORM = readFileSync(join(root, "lib/platform.ts"), "utf-8");
   assert.match(PLATFORM, /Capacitor\.isNativePlatform/, "platform module checks Capacitor.isNativePlatform()");
 });
 
 test("mobile: welcome sends idToken to signInWithApple server action", () => {
-  assert.match(WELCOME_SCREEN, /signInWithApple\(idToken/, "passes idToken to server action");
-  assert.match(WELCOME_SCREEN, /givenName|familyName/, "passes name from Apple response");
+  assert.match(APPLE_HOOK, /signInWithApple\(idToken/, "passes idToken to server action");
+  assert.match(APPLE_HOOK, /givenName|familyName/, "passes name from Apple response");
 });
 
 test("mobile: welcome handles Apple cancellation gracefully", () => {
-  assert.match(WELCOME_SCREEN, /cancel|CANCELED|SIGN_IN_CANCELED/, "handles user cancellation");
+  assert.match(APPLE_HOOK, /cancel|CANCELED|SIGN_IN_CANCELED/, "handles user cancellation");
 });
 
 test("mobile: welcome has email sign-in", () => {

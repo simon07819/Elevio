@@ -3,8 +3,7 @@
 import { useState, useTransition } from "react";
 import { LockKeyhole, LogIn, UserPlus, Apple } from "lucide-react";
 import { signInAdmin, signUpAdmin } from "@/lib/authActions";
-import { signInWithApple } from "@/lib/mobileAuth";
-import { isCapacitorNative } from "@/lib/platform";
+import { useAppleSignIn } from "@/hooks/useAppleSignIn";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
 export function AdminLoginForm() {
@@ -12,83 +11,10 @@ export function AdminLoginForm() {
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [appleLoading, setAppleLoading] = useState(false);
+  const { signIn: handleApple, appleLoading, appleError } = useAppleSignIn();
   const { t } = useLanguage();
 
   const action = mode === "signin" ? signInAdmin : signUpAdmin;
-
-  async function handleApple() {
-    setAppleLoading(true);
-    setMessage(null);
-    try {
-      // Dynamic import — prevents plugin JS from evaluating at boot on iOS
-      const { AppleSignIn, SignInScope } = await import("@capawesome/capacitor-apple-sign-in");
-
-      if (isCapacitorNative()) {
-        const result = await AppleSignIn.signIn({
-          scopes: [SignInScope.Email, SignInScope.FullName],
-        });
-
-        const { idToken, givenName, familyName } = result;
-
-        if (!idToken) {
-          setMessage("Erreur Apple : jeton manquant. Réessayez.");
-          setAppleLoading(false);
-          return;
-        }
-
-        const serverResult = await signInWithApple(idToken, {
-          firstName: givenName,
-          familyName: familyName,
-        });
-
-        if (!serverResult.ok) {
-          setMessage(serverResult.message);
-        }
-      } else {
-        // Web browser fallback
-        const APPLE_CLIENT_ID = process.env.NEXT_PUBLIC_APPLE_WEB_CLIENT_ID ?? process.env.NEXT_PUBLIC_APPLE_CLIENT_ID ?? "";
-        if (!APPLE_CLIENT_ID) {
-          console.error("[Apple] Missing env vars. Set NEXT_PUBLIC_APPLE_WEB_CLIENT_ID or NEXT_PUBLIC_APPLE_CLIENT_ID for Apple Sign-In on web.");
-          setMessage("Connexion Apple indisponible. Utilisez votre courriel.");
-          setAppleLoading(false);
-          return;
-        }
-        const origin = window.location.origin;
-        await AppleSignIn.initialize({ clientId: APPLE_CLIENT_ID });
-        const result = await AppleSignIn.signIn({
-          redirectUrl: `${origin}/admin/login`,
-          scopes: [SignInScope.Email, SignInScope.FullName],
-        });
-        const { idToken, givenName, familyName } = result;
-        if (!idToken) {
-          setMessage("Erreur Apple : jeton manquant. Réessayez.");
-          setAppleLoading(false);
-          return;
-        }
-        const serverResult = await signInWithApple(idToken, {
-          firstName: givenName,
-          familyName: familyName,
-        });
-        if (!serverResult.ok) {
-          setMessage(serverResult.message);
-        }
-      }
-    } catch (err) {
-      // redirect() throws — that's the normal success path
-      if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) {
-        return;
-      }
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("cancel") || msg.includes("CANCELED") || msg.includes("SIGN_IN_CANCELED") || msg.includes("1001")) {
-        setMessage(""); // User cancelled — no error
-      } else {
-        setMessage(`Apple : ${msg.slice(0, 100)}`);
-      }
-    } finally {
-      setAppleLoading(false);
-    }
-  }
 
   return (
     <section className="mx-auto w-full max-w-md rounded-[2rem] border border-white/10 bg-white/10 p-5 text-white shadow-2xl backdrop-blur">
@@ -187,7 +113,13 @@ export function AdminLoginForm() {
         </button>
       </div>
 
-      {message && (
+      {appleError && (
+        <div className="mt-4 rounded-2xl bg-red-500/15 p-3 text-sm font-bold text-red-100">
+          {appleError}
+        </div>
+      )}
+
+      {(message && !appleError) && (
         <div className={success ? "mt-4 rounded-2xl bg-emerald-400/15 p-3 text-sm font-bold text-emerald-100" : "mt-4 rounded-2xl bg-red-500/15 p-3 text-sm font-bold text-red-100"}>
           {message}
           {success && mode === "signup" && (
