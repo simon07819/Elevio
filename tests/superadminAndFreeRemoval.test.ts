@@ -62,13 +62,12 @@ describe("Free plan removal", () => {
     assert.match(PRICING_GRID, /name: "Enterprise"/, "Enterprise card present");
   });
 
-  test("planGuards defaults to starter (not free)", () => {
-    assert.match(PLAN_GUARDS, /"starter"/, "planGuards references starter");
+  test("planGuards defaults to free for new users", () => {
+    assert.match(PLAN_GUARDS, /"free"/, "planGuards references free");
     assert.match(PLAN_GUARDS, /effectivePlanId/, "planGuards uses effectivePlanId");
   });
 
-  test("entitlements defaults to starter (not free)", () => {
-    assert.match(ENTITLEMENTS, /"starter"/, "entitlements references starter");
+  test("entitlements uses effectivePlanId for limit checks", () => {
     assert.match(ENTITLEMENTS, /effectivePlanId/, "entitlements uses effectivePlanId");
   });
 });
@@ -200,12 +199,11 @@ describe("Existing pages unaffected", () => {
     assert.ok(pricingPage.length > 0, "/pricing page exists");
   });
 
-  test("mobile OnboardingFlow default plan is starter", () => {
-    assert.match(ONBOARDING, /useState\("starter"\)/, "default planId is starter");
+  test("mobile OnboardingFlow default plan is free", () => {
+    assert.match(ONBOARDING, /useState\("free"\)/, "default planId is free");
   });
 
-  test("app-pricing has 3 plans (no free)", () => {
-    assert.doesNotMatch(APP_PRICING, /id: "free"/, "no free in app-pricing");
+  test("app-pricing has starter and pro plans", () => {
     const starterMatches = APP_PRICING.match(/id: "starter"/g);
     assert.equal(starterMatches?.length, 1, "exactly one starter card");
   });

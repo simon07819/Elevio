@@ -56,8 +56,8 @@ test("flow: / renders ScanHome directly with mounted fallback (passenger QR on b
   assert.doesNotMatch(SCAN_HOME, /router\.replace\("\/welcome"\)/, "no redirect to /welcome (would loop)");
 });
 
-test("flow: onboarding uses default starter plan", () => {
-  assert.match(ONBOARDING, /useState\("starter"\)/, "default plan is starter");
+test("flow: onboarding uses default free plan", () => {
+  assert.match(ONBOARDING, /useState\("free"\)/, "default plan is free");
   assert.match(ONBOARDING, /signUpMobile/, "calls signUpMobile server action");
   assert.match(ONBOARDING, /firstName|first_name/, "collects first name");
   assert.match(ONBOARDING, /lastName|last_name/, "collects last name");

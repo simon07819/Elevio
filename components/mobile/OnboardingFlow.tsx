@@ -11,6 +11,7 @@ import { useState } from "react";
 type Step = "account" | "company" | "role" | "plan" | "done";
 
 const PLANS = [
+  { id: "free", name: "Gratuit", price: "0 $", desc: "Accès limité — découvrir la plateforme", free: true },
   { id: "starter", name: "Starter", price: "199 $/mois", desc: "1 chantier, 2 opérateurs, QR" },
   { id: "pro", name: "Pro", price: "499 $/mois", desc: "5 chantiers, opérateurs illimités", popular: true },
   { id: "enterprise", name: "Enterprise", price: "Sur mesure", desc: "Illimité, multi-sites, intégrations" },
@@ -37,7 +38,7 @@ export function OnboardingFlow() {
   const [role, setRole] = useState<"owner" | "admin" | "operator">("operator");
 
   // Plan
-  const [planId, setPlanId] = useState("starter");
+  const [planId, setPlanId] = useState("free");
 
   // Shared Apple Sign-In hook
   const { signIn: handleApple, appleLoading, appleError } = useAppleSignIn();
@@ -297,7 +298,9 @@ export function OnboardingFlow() {
                   onClick={() => setPlanId(plan.id)}
                   className={`touch-target relative flex w-full items-center gap-4 rounded-3xl border p-5 text-left transition active:scale-[0.98] ${
                     planId === plan.id
-                      ? "border-yellow-400/40 bg-yellow-400/5 ring-2 ring-yellow-400/20"
+                      ? plan.free
+                        ? "border-emerald-400/40 bg-emerald-400/5 ring-2 ring-emerald-400/20"
+                        : "border-yellow-400/40 bg-yellow-400/5 ring-2 ring-yellow-400/20"
                       : "border-white/10 bg-white/5 hover:bg-white/10"
                   }`}
                 >
@@ -309,11 +312,16 @@ export function OnboardingFlow() {
                   <div className="flex-1">
                     <p className="text-base font-black">{plan.name}</p>
                     <p className="mt-0.5 text-xs font-bold text-slate-400">{plan.desc}</p>
+                    {plan.free && planId === plan.id && (
+                      <p className="mt-1 text-xs font-bold text-emerald-400">
+                        Vous pourrez créer des projets après mise à niveau
+                      </p>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="text-lg font-black">{plan.price}</p>
                   </div>
-                  {planId === plan.id && <Check size={20} className="text-yellow-400" />}
+                  {planId === plan.id && <Check size={20} className={plan.free ? "text-emerald-400" : "text-yellow-400"} />}
                 </button>
               ))}
             </div>

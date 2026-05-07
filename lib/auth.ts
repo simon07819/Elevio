@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ensureProfileForUser, type AccountRole, type Profile } from "@/lib/profile";
-import { enforcePaymentStatus } from "@/lib/billing/planGuards";
+import { enforcePaymentStatus, getSubscriptionStatus } from "@/lib/billing/planGuards";
+import type { PlanId } from "@/lib/billing/plans";
 
 const OPERATOR_ROLES: AccountRole[] = ["operator", "admin", "superadmin"];
 const ADMIN_ROLES: AccountRole[] = ["admin", "superadmin"];
@@ -70,6 +71,27 @@ export async function requireAdmin() {
   }
 
   return { user, profile };
+}
+
+/**
+ * Soft admin guard: allows free-plan users to access the dashboard.
+ * Returns plan info so UI can show upgrade CTA for free users.
+ * Free users can see their dashboard, profile, support, legal.
+ * Free users CANNOT access project/operator/dispatch pages (still redirects to paywall).
+ */
+export async function requireAdminWithPlan() {
+  const user = await requireUser();
+  const profile = await getCurrentProfile();
+
+  if (!profile || !ADMIN_ROLES.includes(profile.account_role)) {
+    redirect("/admin/login");
+  }
+
+  const subStatus = await getSubscriptionStatus(user.id);
+  const isFree = !subStatus.hasActiveSubscription;
+  const planId = subStatus.planId;
+
+  return { user, profile, isFree, planId };
 }
 
 export async function getCurrentProfile(): Promise<Profile | null> {

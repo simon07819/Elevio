@@ -245,10 +245,24 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
       {/* Activation code */}
       <ActivationCodeBox />
 
+      {/* Continue with free plan */}
+      <div className="mt-6 text-center">
+        <button
+          type="button"
+          onClick={() => router.push("/admin/projects")}
+          className="touch-target rounded-2xl border border-white/10 bg-white/5 px-8 py-3 text-sm font-bold text-slate-300 transition hover:bg-white/10 hover:text-white active:scale-[0.98]"
+        >
+          Continuer avec le forfait gratuit
+        </button>
+        <p className="mt-2 text-xs font-bold text-slate-500">
+          Accès limité : pas de création de projets, pas de dispatch.
+        </p>
+      </div>
+
       {/* No "pay on website" text on iOS — App Store rule 3.1.1 */}
       {!iosPlatform && (
         <p className="mt-6 text-center text-xs font-bold text-slate-500">
-          Le plan Starter (1 chantier, 2 opérateurs) est actif par défaut. Aucune carte requise.
+          Tous les forfaits incluent l&apos;accès au dispatch en temps réel et au suivi par QR.
         </p>
       )}
 

@@ -37,13 +37,14 @@ export async function getSubscriptionStatus(userId: string): Promise<{
     .eq("user_id", userId)
     .maybeSingle();
 
-  const rawPlan = (entitlement?.plan as PlanId) ?? "starter";
+  const rawPlan = (entitlement?.plan as PlanId) ?? "free";
   const planId = effectivePlanId(rawPlan);
   const activatedVia = entitlement?.activated_via ?? "default";
 
-  // Explicit "free" plan = no paid subscription, always blocked by paywall
+  // Explicit "free" plan = limited access, NOT fully blocked
+  // Free users can view dashboard, support, legal, but cannot create projects/use paid features
   if (rawPlan === "free" && activatedVia === "default") {
-    return { hasActiveSubscription: false, status: "free", provider: null, planId: "starter" };
+    return { hasActiveSubscription: false, status: "free", provider: null, planId: "free" };
   }
 
   // Admin/activation_code/manual users don't need a subscription check
@@ -77,13 +78,13 @@ export async function getSubscriptionStatus(userId: string): Promise<{
     .order("created_at", { ascending: false });
 
   if (!subs || subs.length === 0) {
-    // No subscription row — could be a new user with starter default
-    // Starter without a subscription: allow (grandfathered)
-    if (planId === "starter") {
-      return { hasActiveSubscription: true, status: "default", provider: null, planId };
+    // No subscription row — user is on free plan unless manually activated
+    if (activatedVia === "admin" || activatedVia === "activation_code" || activatedVia === "manual") {
+      // Manually activated — already handled above, but safety check
+      return { hasActiveSubscription: true, status: "active", provider: activatedVia, planId };
     }
-    // Pro/Enterprise without subscription: block
-    return { hasActiveSubscription: false, status: null, provider: null, planId };
+    // No subscription + no manual activation = free user
+    return { hasActiveSubscription: false, status: "free", provider: null, planId: "free" };
   }
 
   // Check if ANY subscription is active
@@ -123,8 +124,8 @@ export async function getPlanForUser(userId: string): Promise<PlanId> {
     .eq("user_id", userId)
     .maybeSingle();
 
-  const raw = (data?.plan as PlanId) ?? "starter";
-  return effectivePlanId(raw);
+  const raw = (data?.plan as PlanId) ?? "free";
+  return raw;
 }
 
 /** Count non-archived projects for a user */

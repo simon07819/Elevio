@@ -1,4 +1,5 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { PlanId } from "@/lib/billing/plans";
 
 export type AccountRole = "passenger" | "operator" | "admin" | "superadmin";
 
@@ -93,5 +94,21 @@ export async function ensureProfileForUser(supabase: SupabaseClient, user: User)
   };
 
   await supabase.from("profiles").insert(payload);
+
+  // Create initial entitlement row based on selected_plan from signup metadata
+  // Default to "free" — user must purchase or be assigned a plan for paid features
+  const selectedPlan = (metadata.selected_plan as PlanId) || "free";
+  const validPlans: PlanId[] = ["free", "starter", "pro", "business", "enterprise"];
+  const plan = validPlans.includes(selectedPlan) ? selectedPlan : "free";
+  const isManualPlan = plan !== "free";
+
+  // Insert entitlement row
+  await supabase.from("user_entitlements").upsert({
+    user_id: user.id,
+    plan,
+    activated_via: isManualPlan ? "admin" : "default",
+    expires_at: null,
+  }, { onConflict: "user_id" });
+
   return payload;
 }

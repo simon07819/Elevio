@@ -1,10 +1,10 @@
-insert into projects (id, name, address, active)
-values ('11111111-1111-1111-1111-111111111111', 'Tour Nord - Phase 2', '1280 rue de l''Acier, Montreal', true)
+insert into projects (id, name, address, active, archived_at)
+values ('11111111-1111-1111-1111-111111111111', 'Tour Nord - Phase 2', '1280 rue de l''Acier, Montreal', false, now())
 on conflict (id) do nothing;
 
 insert into projects (id, name, address, active, archived_at)
 values
-  ('11111111-1111-1111-1111-111111111112', 'Tour Sud - Preparation', '420 avenue Beton, Montreal', false, null),
+  ('11111111-1111-1111-1111-111111111112', 'Tour Sud - Preparation', '420 avenue Beton, Montreal', false, now()),
   ('11111111-1111-1111-1111-111111111113', 'Garage Est - Archive', '88 rue des Grues, Laval', false, now() - interval '15 days')
 on conflict (id) do nothing;
 

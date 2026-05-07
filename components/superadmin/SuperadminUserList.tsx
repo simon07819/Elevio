@@ -22,18 +22,26 @@ type UserRow = {
   expiresAt: string | null;
 };
 
-function sourceBadge(via: string) {
+function paymentBadge(via: string) {
   switch (via) {
-    case "free": return <Badge variant="default">Gratuit</Badge>;
-    case "default": return <Badge variant="default">Gratuit</Badge>;
+    case "default": return null; // No badge for free users — clean display
     case "manual": return <Badge variant="yellow">Manuel</Badge>;
     case "iap": return <Badge variant="default">App Store</Badge>;
     case "revenuecat": return <Badge variant="default">App Store</Badge>;
     case "stripe": return <Badge variant="default">Stripe</Badge>;
     case "admin": return <Badge variant="yellow">Admin</Badge>;
     case "activation_code": return <Badge variant="green">Code</Badge>;
-    default: return <Badge variant="default">{via}</Badge>;
+    default: return via ? <Badge variant="default">{via}</Badge> : null;
   }
+}
+
+function planBadge(planId: string) {
+  const plan = PLANS[planId as PlanId];
+  if (!plan) return <Badge variant="default">{planId}</Badge>;
+  if (planId === "free") return <Badge variant="default">{plan.label}</Badge>;
+  if (planId === "enterprise") return <Badge variant="green">{plan.label}</Badge>;
+  if (planId === "pro") return <Badge variant="yellow">{plan.label}</Badge>;
+  return <Badge variant="default">{plan.label}</Badge>;
 }
 
 export function SuperadminUserList({ users }: { users: UserRow[] }) {
@@ -101,8 +109,8 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
               <th className="pb-3 pr-4">Nom</th>
               <th className="pb-3 pr-4">Courriel</th>
               <th className="pb-3 pr-4">Compagnie</th>
-              <th className="pb-3 pr-4">Plan</th>
-              <th className="pb-3 pr-4">Source</th>
+              <th className="pb-3 pr-4">Forfait</th>
+              <th className="pb-3 pr-4">Paiement</th>
               <th className="pb-3 pr-4">Rôle</th>
               <th className="pb-3 pr-4">Créé</th>
               <th className="pb-3 pr-4">Statut</th>
@@ -118,24 +126,29 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
                 <td className="py-3 pr-4 text-slate-300">{u.email}</td>
                 <td className="py-3 pr-4 text-slate-400">{u.company ?? "—"}</td>
                 <td className="py-3 pr-4">
-                  <select
-                    className="rounded-lg border border-white/10 bg-slate-800 px-2 py-1 text-xs font-bold text-white"
-                    value={u.plan}
-                    disabled={loading === u.id}
-                    onChange={(e) => handleChangePlan(u.id, e.target.value as PlanId)}
-                  >
-                    {ADMIN_PLAN_IDS.map((p) => (
-                      <option key={p} value={p}>{PLANS[p].label}</option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-2">
+                    {planBadge(u.plan)}
+                    <select
+                      className="rounded-lg border border-white/10 bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-400"
+                      value={u.plan}
+                      disabled={loading === u.id}
+                      onChange={(e) => handleChangePlan(u.id, e.target.value as PlanId)}
+                    >
+                      {ADMIN_PLAN_IDS.map((p) => (
+                        <option key={p} value={p}>{PLANS[p].label}</option>
+                      ))}
+                    </select>
+                  </div>
                 </td>
                 <td className="py-3 pr-4">
-                  {sourceBadge(u.activatedVia)}
-                  {u.expiresAt && (
-                    <span className="ml-1 text-xs text-slate-500">
-                      {new Date(u.expiresAt) > new Date() ? "→" : "exp."} {new Date(u.expiresAt).toLocaleDateString("fr-CA")}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {paymentBadge(u.activatedVia)}
+                    {u.expiresAt && (
+                      <span className="text-xs text-slate-500">
+                        {new Date(u.expiresAt) > new Date() ? "→" : "exp."} {new Date(u.expiresAt).toLocaleDateString("fr-CA")}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-3 pr-4">
                   <Badge variant={u.account_role === "superadmin" ? "yellow" : "default"}>

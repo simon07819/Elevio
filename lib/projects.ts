@@ -69,10 +69,12 @@ export async function getProjects(): Promise<ProjectsLoadResult> {
     return { projects: [], loadError: null, qrReadyProjectIds: [] };
   }
 
-  /** Visibilité = policy RLS (propriétaire ou membre), sans filtrer seulement sur owner_id. */
+  /** Visibilité = RLS + explicit owner_id filter for defense-in-depth */
   let projectQuery = (await supabase
     .from("projects")
     .select(PROJECT_SELECT_WITH_CAPACITY)
+    .eq("owner_id", user.id)
+    .is("archived_at", null)
     .order("active", { ascending: false })
     .order("created_at", { ascending: false })) as unknown as {
     data: Project[] | null;
@@ -84,6 +86,8 @@ export async function getProjects(): Promise<ProjectsLoadResult> {
     projectQuery = (await supabase
       .from("projects")
       .select(PROJECT_SELECT_LEGACY)
+      .eq("owner_id", user.id)
+      .is("archived_at", null)
       .order("active", { ascending: false })
       .order("created_at", { ascending: false })) as unknown as {
       data: Project[] | null;

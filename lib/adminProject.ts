@@ -134,6 +134,11 @@ export async function getAdminProjectData(
     notFound();
   }
 
+  // Ownership check: non-superadmin can only access their own projects
+  if (project.owner_id !== user.id && user.app_metadata?.account_role !== "superadmin") {
+    notFound();
+  }
+
   const branding: AdminProjectBranding = {
     company_logo_url: profileBranding?.company_logo_url ?? null,
     project_logo_url: profileBranding?.project_logo_url ?? null,

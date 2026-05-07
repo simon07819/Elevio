@@ -113,8 +113,8 @@ test("mobile: onboarding has 3 roles: owner, admin, operator", () => {
   assert.match(ONBOARDING_FLOW, /"operator"/, "operator role");
 });
 
-test("mobile: onboarding has 3 plans (Free removed)", () => {
-  assert.doesNotMatch(ONBOARDING_FLOW, /id: "free"/, "free plan removed from onboarding");
+test("mobile: onboarding has 4 plans including free option", () => {
+  assert.match(ONBOARDING_FLOW, /id: "free"/, "free plan available in onboarding");
   assert.match(ONBOARDING_FLOW, /id: "starter"/, "starter plan");
   assert.match(ONBOARDING_FLOW, /id: "pro"/, "pro plan");
   assert.match(ONBOARDING_FLOW, /id: "enterprise"/, "enterprise plan");
