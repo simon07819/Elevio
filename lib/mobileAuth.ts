@@ -74,20 +74,21 @@ export async function signInWithApple(identityToken: string, fullName?: { firstN
     }
   }
 
-  // Determine if user is new (no profile yet) or existing
+  // Determine if user needs to complete their profile
   const { data: profile } = await supabase
     .from("profiles")
-    .select("account_role, first_name")
+    .select("account_role, first_name, company, phone")
     .eq("id", data.user?.id ?? "")
     .maybeSingle();
 
-  const isNewUser = !profile?.first_name;
+  // Profile incomplete: missing name or company info → profile onboarding
+  const isProfileIncomplete = !profile?.first_name || !profile?.company || !profile?.phone;
 
-  if (isNewUser) {
-    redirect("/onboarding");
+  if (isProfileIncomplete) {
+    redirect("/admin/profile?onboarding=1");
   }
 
-  // Route based on role — check subscription first for non-superadmins
+  // Profile complete — check subscription before routing to protected pages
   const role = profile?.account_role;
   if (role !== "superadmin") {
     const { hasActiveSubscription } = await getSubscriptionStatus(data.user?.id ?? "");
@@ -127,14 +128,20 @@ export async function signInMobile(formData: FormData) {
     await ensureProfileForUser(supabase, data.user);
   }
 
-  // Route based on role
+  // Route based on profile completeness and role
   const { data: profile } = await supabase
     .from("profiles")
-    .select("account_role")
+    .select("account_role, first_name, company, phone")
     .eq("id", data.user?.id ?? "")
     .maybeSingle();
 
   const role = profile?.account_role;
+  const isProfileIncomplete = !profile?.company || !profile?.phone;
+
+  // Incomplete profile → onboarding
+  if (isProfileIncomplete) {
+    redirect("/admin/profile?onboarding=1");
+  }
 
   // Superadmins always get direct access
   if (role === "superadmin") {

@@ -168,9 +168,9 @@ test("mobile: signInWithApple updates profile with Apple name on first sign-in",
   assert.match(MOBILE_AUTH, /last_name.*fullName/, "updates last_name from Apple name");
 });
 
-test("mobile: signInWithApple routes new users to /onboarding", () => {
-  assert.match(MOBILE_AUTH, /isNewUser/, "checks if user is new");
-  assert.match(MOBILE_AUTH, /redirect\("\/onboarding"\)/, "redirects new users to onboarding");
+test("mobile: signInWithApple routes incomplete profiles to /admin/profile?onboarding=1", () => {
+  assert.match(MOBILE_AUTH, /isProfileIncomplete/, "checks if profile is incomplete");
+  assert.match(MOBILE_AUTH, /\/admin\/profile\?onboarding=1/, "redirects incomplete profiles to profile onboarding");
 });
 
 test("mobile: signInMobile routes by role", () => {
