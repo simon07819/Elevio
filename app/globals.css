@@ -108,7 +108,6 @@ html {
   background: var(--background);
   overflow-x: hidden;
   overflow-y: auto;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 body {
@@ -117,7 +116,10 @@ body {
   margin: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding-bottom: env(safe-area-inset-bottom);
+  /* Safe area top: viewportFit:cover extends background under iOS status bar,
+     padding-top ensures content starts below the safe area (not hidden).
+     Bottom/left/right safe areas are handled per-component (bottom nav, etc.) */
+  padding-top: env(safe-area-inset-top);
   background:
     radial-gradient(circle at 12% 10%, rgba(250, 204, 21, 0.14), transparent 28rem),
     radial-gradient(circle at 88% 4%, rgba(34, 197, 94, 0.12), transparent 24rem),

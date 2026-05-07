@@ -38,12 +38,13 @@ test("capacitor: viewport-fit cover configured", () => {
 // ---------------------------------------------------------------------------
 // 2. safe-area-inset padding on html and body
 // ---------------------------------------------------------------------------
-test("capacitor: safe-area-inset padding on html and body", () => {
+test("capacitor: safe-area-inset-top on body, bottom handled per-component", () => {
   const css = readFileSync(join(root, "app/globals.css"), "utf8");
-  assert.match(css, /env\(safe-area-inset-top\)/, "top inset on html");
-  assert.match(css, /env\(safe-area-inset-bottom\)/, "bottom inset on body");
-  assert.match(css, /env\(safe-area-inset-left\)/, "left inset on html");
-  assert.match(css, /env\(safe-area-inset-right\)/, "right inset on html");
+  assert.match(css, /env\(safe-area-inset-top\)/, "top inset on body (global)");
+  // Bottom safe area is handled per-component (bottom nav, request form, operator footer)
+  // Verify at least one component handles bottom inset
+  const bottomNav = readFileSync(join(root, "components/MobileBottomNav.tsx"), "utf8");
+  assert.match(bottomNav, /env\(safe-area-inset-bottom\)/, "bottom inset on MobileBottomNav");
 });
 
 // ---------------------------------------------------------------------------
