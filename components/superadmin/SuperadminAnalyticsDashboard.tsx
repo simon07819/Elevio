@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import {
   Users, Building2, ClipboardList, AlertTriangle, CreditCard,
-  TrendingUp, BarChart3, Clock, ArrowUpRight, Shield,
+  TrendingUp, BarChart3, Clock, Shield,
 } from "lucide-react";
 import type { PlatformAnalytics } from "@/lib/analytics";
 import type { DashboardData } from "@/lib/superadmin";
@@ -135,11 +135,12 @@ export function SuperadminAnalyticsDashboard({ data, platform }: { data: Dashboa
       {/* ── Platform Overview ──────────────────────────────────────── */}
       <section>
         <h2 className="mb-4 text-xs font-black uppercase tracking-[0.25em] text-slate-500">Platform Overview</h2>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           <MetricCard icon={Users} label="Total Users" value={platform.total_users} sub={`+${data.newAccounts7d} this week`} accent="from-sky-500/[0.08] to-sky-500/[0.02]" />
           <MetricCard icon={Building2} label="Active Projects" value={platform.active_projects} accent="from-yellow-500/[0.08] to-yellow-500/[0.02]" />
           <MetricCard icon={ClipboardList} label="Requests (7d)" value={platform.total_requests} sub={`${platform.completed_requests} completed`} accent="from-violet-500/[0.08] to-violet-500/[0.02]" />
-          <MetricCard icon={CreditCard} label="MRR" value={`$${data.estimatedMonthlyRevenue}`} sub={data.plansSold} accent="from-emerald-500/[0.08] to-emerald-500/[0.02]" />
+          <MetricCard icon={CreditCard} label="Revenus encaissés" value={`$${data.confirmedRevenue}`} sub={data.confirmedPlansSold} accent="from-emerald-500/[0.08] to-emerald-500/[0.02]" />
+          <MetricCard icon={TrendingUp} label="Valeur théorique" value={`$${data.theoreticalMRR}`} sub={data.plansSold} accent="from-slate-500/[0.08] to-slate-500/[0.02]" />
           <MetricCard icon={AlertTriangle} label="Errors (24h)" value={platform.errors_24h} sub={platform.errors_24h > 5 ? "Needs attention" : "Healthy"} accent="from-red-500/[0.08] to-red-500/[0.02]" />
         </div>
       </section>

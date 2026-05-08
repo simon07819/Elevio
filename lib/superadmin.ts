@@ -15,7 +15,13 @@ export type DashboardData = {
   activeProjects: number;
   activeOperators: number;
   requestsToday: number;
-  estimatedMonthlyRevenue: number;
+  /** Revenue from confirmed paid subscriptions only (stripe + revenuecat, active/trialing) */
+  confirmedRevenue: number;
+  /** Theoretical MRR if all active paid-plan users were paying (includes manual, code, admin) */
+  theoreticalMRR: number;
+  /** Breakdown of confirmed revenue: "Starter: 3, Pro: 2" etc. */
+  confirmedPlansSold: string;
+  /** Breakdown of all active plans: "Starter: 5, Pro: 4" etc. */
   plansSold: string;
   recentErrors24h: number;
   recentErrors: Array<{ message?: string; error?: string; created_at?: string }>;
@@ -52,8 +58,9 @@ export async function getSuperadminDashboardData(): Promise<DashboardData> {
   if (!supabase) {
     return {
       newAccounts7d: 0, activeAccounts: 0, activeProjects: 0,
-      activeOperators: 0, requestsToday: 0, estimatedMonthlyRevenue: 0,
-      plansSold: "—", recentErrors24h: 0, recentErrors: [], planDistribution: [],
+      activeOperators: 0, requestsToday: 0, confirmedRevenue: 0,
+      theoreticalMRR: 0, confirmedPlansSold: "—", plansSold: "—",
+      recentErrors24h: 0, recentErrors: [], planDistribution: [],
     };
   }
 
@@ -71,6 +78,7 @@ export async function getSuperadminDashboardData(): Promise<DashboardData> {
     { count: requestsToday },
     { data: entitlements },
     { data: recentErrors },
+    { data: paidSubscriptions },
   ] = await Promise.all([
     // New accounts in the last 7 days
     supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", sevenDaysAgo),
@@ -86,6 +94,8 @@ export async function getSuperadminDashboardData(): Promise<DashboardData> {
     supabase.from("user_entitlements").select("plan"),
     // Recent errors from structured log buffer or a dedicated table
     supabase.from("app_errors").select("message,error,created_at").gte("created_at", yesterday24h).order("created_at", { ascending: false }).limit(20),
+    // Confirmed paid subscriptions (stripe + revenuecat only, active/trialing)
+    supabase.from("subscriptions").select("provider,plan_id,status").in("provider", ["stripe", "revenuecat"]).in("status", ["active", "trialing"]),
   ]);
 
   // Calculate plan distribution
@@ -98,18 +108,35 @@ export async function getSuperadminDashboardData(): Promise<DashboardData> {
     .map(([plan, count]) => ({ plan, count }))
     .sort((a, b) => b.count - a.count);
 
-  // Estimated monthly revenue (Starter: $199, Pro: $499, Enterprise: $999)
+  // Theoretical MRR: all active paid-plan users (including manual, code, admin — NOT real revenue)
   const starterCount = planCounts["starter"] ?? 0;
   const proCount = planCounts["pro"] ?? 0;
-  const enterpriseCount = planCounts["enterprise"] ?? 0;
-  const estimatedMonthlyRevenue = starterCount * 199 + proCount * 499 + enterpriseCount * 999;
+  const enterpriseCount = planCounts["enterprise"] ?? 999; // enterprise pricing is custom, use 999 as floor
+  const theoreticalMRR = starterCount * 199 + proCount * 499 + (planCounts["enterprise"] ?? 0) * enterpriseCount;
 
-  // Plans sold string
+  // Plans sold string (all active plans)
   const plansParts: string[] = [];
   if (starterCount) plansParts.push(`Starter: ${starterCount}`);
   if (proCount) plansParts.push(`Pro: ${proCount}`);
-  if (enterpriseCount) plansParts.push(`Enterprise: ${enterpriseCount}`);
+  if (planCounts["enterprise"]) plansParts.push(`Enterprise: ${planCounts["enterprise"]}`);
   const plansSold = plansParts.length > 0 ? plansParts.join(", ") : "—";
+
+  // ── Confirmed revenue: only real paid subscriptions (stripe/revenuecat, active/trialing) ──
+  const confirmedCounts: Record<string, number> = {};
+  for (const s of paidSubscriptions ?? []) {
+    const plan = effectivePlanId((s.plan_id as PlanId) ?? "starter");
+    confirmedCounts[plan] = (confirmedCounts[plan] ?? 0) + 1;
+  }
+  const confirmedStarter = confirmedCounts["starter"] ?? 0;
+  const confirmedPro = confirmedCounts["pro"] ?? 0;
+  const confirmedEnterprise = confirmedCounts["enterprise"] ?? 0;
+  const confirmedRevenue = confirmedStarter * 199 + confirmedPro * 499 + confirmedEnterprise * 999;
+
+  const confirmedParts: string[] = [];
+  if (confirmedStarter) confirmedParts.push(`Starter: ${confirmedStarter}`);
+  if (confirmedPro) confirmedParts.push(`Pro: ${confirmedPro}`);
+  if (confirmedEnterprise) confirmedParts.push(`Enterprise: ${confirmedEnterprise}`);
+  const confirmedPlansSold = confirmedParts.length > 0 ? confirmedParts.join(", ") : "—";
 
   return {
     newAccounts7d: newAccounts7d ?? 0,
@@ -117,7 +144,9 @@ export async function getSuperadminDashboardData(): Promise<DashboardData> {
     activeProjects: activeProjects ?? 0,
     activeOperators: activeElevators?.length ?? 0,
     requestsToday: requestsToday ?? 0,
-    estimatedMonthlyRevenue,
+    confirmedRevenue,
+    theoreticalMRR,
+    confirmedPlansSold,
     plansSold,
     recentErrors24h: recentErrors?.length ?? 0,
     recentErrors: (recentErrors ?? []) as Array<{ message?: string; error?: string; created_at?: string }>,

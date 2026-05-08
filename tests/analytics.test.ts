@@ -104,7 +104,8 @@ test("analytics: superadmin dashboard uses platform analytics", () => {
   assert.match(SUPERADMIN_DASH, /total_users/, "references total users");
   assert.match(SUPERADMIN_DASH, /avg_wait_seconds/, "references avg wait");
   assert.match(SUPERADMIN_DASH, /requests_per_day/, "shows trend chart");
-  assert.match(SUPERADMIN_DASH, /estimatedMonthlyRevenue|MRR/, "shows revenue");
+  assert.match(SUPERADMIN_DASH, /confirmedRevenue|Revenus encaissés/, "shows confirmed revenue");
+  assert.match(SUPERADMIN_DASH, /theoreticalMRR|Valeur théorique/, "shows theoretical MRR");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -193,7 +194,8 @@ test("analytics: SuperadminAnalyticsDashboard shows all required metrics", () =>
   const DASHBOARD = readFileSync(join(root, "components/superadmin/SuperadminAnalyticsDashboard.tsx"), "utf8");
   assert.match(DASHBOARD, /Total Users/, "shows total users");
   assert.match(DASHBOARD, /Active Projects/, "shows active projects");
-  assert.match(DASHBOARD, /MRR/, "shows monthly recurring revenue");
+  assert.match(DASHBOARD, /Revenus encaissés/, "shows confirmed revenue");
+  assert.match(DASHBOARD, /Valeur théorique/, "shows theoretical MRR");
   assert.match(DASHBOARD, /Errors \(24h\)/, "shows 24h errors");
   assert.match(DASHBOARD, /Plan Distribution/, "shows plan distribution");
   assert.match(DASHBOARD, /Error Trends/, "shows error trends");
@@ -228,4 +230,51 @@ test("analytics: i18n keys exist for analytics page", () => {
   const I18N = readFileSync(join(root, "lib/i18n.ts"), "utf8");
   assert.match(I18N, /"analytics\.title"/, "has analytics.title key");
   assert.match(I18N, /"analytics\.subtitle"/, "has analytics.subtitle key");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Revenue calculation — confirmed vs theoretical
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("revenue: DashboardData has confirmedRevenue and theoreticalMRR (not estimatedMonthlyRevenue)", () => {
+  const SUPERADMIN_LIB = readFileSync(join(root, "lib/superadmin.ts"), "utf8");
+  assert.match(SUPERADMIN_LIB, /confirmedRevenue/, "has confirmedRevenue field");
+  assert.match(SUPERADMIN_LIB, /theoreticalMRR/, "has theoreticalMRR field");
+  assert.doesNotMatch(SUPERADMIN_LIB, /estimatedMonthlyRevenue/, "old estimatedMonthlyRevenue removed");
+});
+
+test("revenue: confirmed revenue only counts stripe/revenuecat active subscriptions", () => {
+  const SUPERADMIN_LIB = readFileSync(join(root, "lib/superadmin.ts"), "utf8");
+  assert.match(SUPERADMIN_LIB, /paidSubscriptions/, "fetches paid subscriptions");
+  assert.match(SUPERADMIN_LIB, /"stripe".*"revenuecat"/, "filters by stripe + revenuecat providers");
+  assert.match(SUPERADMIN_LIB, /"active".*"trialing"/, "only active/trialing status");
+  assert.match(SUPERADMIN_LIB, /confirmedRevenue/, "calculates confirmedRevenue from paid subs");
+});
+
+test("revenue: theoretical MRR counts all active plans (includes manual/code/admin)", () => {
+  const SUPERADMIN_LIB = readFileSync(join(root, "lib/superadmin.ts"), "utf8");
+  assert.match(SUPERADMIN_LIB, /theoreticalMRR/, "calculates theoreticalMRR");
+  assert.match(SUPERADMIN_LIB, /planCounts/, "uses planCounts for theoretical");
+});
+
+test("revenue: dashboard shows both metrics with clear labels", () => {
+  const DASH = readFileSync(join(root, "components/superadmin/SuperadminAnalyticsDashboard.tsx"), "utf8");
+  assert.match(DASH, /Revenus encaissés/, "primary: confirmed revenue label");
+  assert.match(DASH, /confirmedRevenue/, "primary: confirmed revenue value");
+  assert.match(DASH, /Valeur théorique/, "secondary: theoretical MRR label");
+  assert.match(DASH, /theoreticalMRR/, "secondary: theoretical MRR value");
+});
+
+test("revenue: manual/code/admin sources are excluded from confirmed revenue", () => {
+  const SUPERADMIN_LIB = readFileSync(join(root, "lib/superadmin.ts"), "utf8");
+  // The query explicitly filters subscriptions by provider IN ('stripe', 'revenuecat')
+  // This excludes: manual, manual_code, admin, activation_code, default
+  const match = SUPERADMIN_LIB.match(/\.in\("provider",\s*\[[^\]]*\]\)/);
+  assert.ok(match, "uses .in() filter on provider");
+  assert.match(match![0], /"stripe"/, "includes stripe");
+  assert.match(match![0], /"revenuecat"/, "includes revenuecat");
+  assert.doesNotMatch(match![0], /"manual"/, "excludes manual");
+  assert.doesNotMatch(match![0], /"manual_code"/, "excludes manual_code");
+  assert.doesNotMatch(match![0], /"admin"/, "excludes admin");
+  assert.doesNotMatch(match![0], /"activation_code"/, "excludes activation_code");
 });
