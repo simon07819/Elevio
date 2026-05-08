@@ -145,6 +145,12 @@ export function OperatorWorkspace({
   }));
   const [locallyReleasedElevatorIds, setLocallyReleasedElevatorIds] = useState<Set<string>>(() => new Set());
   const localElevatorsRef = useRef(localElevators);
+  // Tracks whether the elevators realtime channel is currently SUBSCRIBED.
+  // When true, the LTE-friendly fallback polling loop skips its DB fetch.
+  const realtimeConnectedRef = useRef(false);
+  // Imperative handle to the latest elevators refetch implementation. Used by
+  // the visibility / online / appResume listeners to do ONE explicit refetch.
+  const syncElevatorsRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     localElevatorsRef.current = localElevators;
@@ -242,6 +248,15 @@ export function OperatorWorkspace({
 
           setLocalElevators((current) => mergeWithLocalClaim(current, [nid]));
         },
+        onStatus: (status) => {
+          if (status === "SUBSCRIBED") {
+            realtimeConnectedRef.current = true;
+          } else {
+            realtimeConnectedRef.current = false;
+            // On reconnect/error: do ONE explicit refetch to recover any missed events.
+            void syncElevatorsRef.current?.();
+          }
+        },
       }),
     );
 
@@ -284,12 +299,28 @@ export function OperatorWorkspace({
       setLocalElevators((c) => mergeWithLocalClaim(c, rows));
     }
 
+    // Expose syncElevators so visibility / online / appResume / realtime-degraded
+    // listeners can fire a single explicit refetch instead of constantly polling.
+    syncElevatorsRef.current = syncElevators;
+
     void syncElevators();
-    const poll = window.setInterval(syncElevators, 250);
+
+    // ── LTE-FRIENDLY FALLBACK POLL ────────────────────────────────────────
+    // Realtime is the primary live source for the elevators table. The 30s
+    // loop only fires a DB fetch when realtime is NOT currently SUBSCRIBED.
+    // On a healthy realtime channel this costs ~zero bytes/min on LTE.
+    const FALLBACK_POLL_MS = 30_000;
+    const poll = window.setInterval(() => {
+      if (realtimeConnectedRef.current) return;
+      void syncElevators();
+    }, FALLBACK_POLL_MS);
 
     return () => {
       cancelled = true;
       window.clearInterval(poll);
+      if (syncElevatorsRef.current === syncElevators) {
+        syncElevatorsRef.current = null;
+      }
       cleanupRealtime();
     };
   }, [activatingElevatorId, mergeWithLocalClaim, project.id, releasingElevatorId, sessionId]);
@@ -332,7 +363,14 @@ export function OperatorWorkspace({
   }, [project.id]);
 
   useEffect(() => {
-    const bump = () => router.refresh();
+    // Single explicit refetch on focus/online/resume — never a polling loop.
+    // `router.refresh()` re-renders SSR with fresh props; the elevators
+    // refetch via syncElevatorsRef recovers any realtime events missed while
+    // the tab was hidden or LTE was offline.
+    const bump = () => {
+      router.refresh();
+      void syncElevatorsRef.current?.();
+    };
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
@@ -372,6 +410,8 @@ export function OperatorWorkspace({
             }
           }
         });
+        // Note: bump() already calls syncElevatorsRef internally, so iOS
+        // resume gets an explicit refetch without any polling loop.
         capacitarCleanup = () => handler.remove();
       } catch {
         // Not running on Capacitor — ignore

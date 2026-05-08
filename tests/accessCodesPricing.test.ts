@@ -86,17 +86,19 @@ test("superadmin: access codes CRUD actions exist", () => {
 
 test("superadmin: AccessCodeManager component exists with full UI", () => {
   assert.match(ACCESS_CODES_UI, /AccessCodeManager/, "component export");
-  assert.match(ACCESS_CODES_UI, /Créer un code/, "create button");
+  assert.match(ACCESS_CODES_UI, /G[ée]n[ée]rer des codes|Cr[ée]er un code/, "create button");
   assert.match(ACCESS_CODES_UI, /Désactiver|Activer/, "toggle buttons");
   assert.match(ACCESS_CODES_UI, /Supprimer/, "delete button");
   assert.match(ACCESS_CODES_UI, /copyCode/, "copy code function");
   assert.match(ACCESS_CODES_UI, /usageModal/, "usage modal");
+  assert.match(ACCESS_CODES_UI, /Source \/ provider/, "source/provider distinct from plan");
+  assert.match(ACCESS_CODES_UI, /Cycle de facturation/, "billing interval field");
 });
 
 test("superadmin: /superadmin/codes page exists", () => {
   assert.match(ACCESS_CODES_PAGE, /requireSuperAdmin/, "requires auth");
   assert.match(ACCESS_CODES_PAGE, /AccessCodeManager/, "renders manager");
-  assert.match(ACCESS_CODES_PAGE, /Codes d.*accès/, "French title");
+  assert.match(ACCESS_CODES_PAGE, /Codes (achat|d.*acc[èe]s)/, "French title");
 });
 
 // ═══════════════════════════════════════════════════════════════════

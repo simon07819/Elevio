@@ -133,16 +133,30 @@ export function mergeServerRequestsWithLive(previous: HoistRequest[], server: Ho
   );
 }
 
+export type RealtimeChannelStatus =
+  | "SUBSCRIBED"
+  | "CHANNEL_ERROR"
+  | "TIMED_OUT"
+  | "CLOSED";
+
 export function subscribeToTable<T>({
   client,
   table,
   filter,
   onChange,
+  onStatus,
 }: {
   client: SupabaseClient | null;
   table: string;
   filter?: string;
   onChange: RealtimeHandler<T>;
+  /**
+   * Optional connection status callback. Used by the operator UI to gate the
+   * fallback polling loop: when realtime is SUBSCRIBED, the LTE-friendly slow
+   * poll (every 30s) is skipped; on CHANNEL_ERROR / TIMED_OUT / CLOSED it
+   * resumes so the operator stays live without burning data.
+   */
+  onStatus?: (status: RealtimeChannelStatus) => void;
 }): RealtimeChannel | null {
   if (!client) {
     return null;
@@ -167,6 +181,14 @@ export function subscribeToTable<T>({
     .subscribe((status: string) => {
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         captureRealtimeError(`realtime_subscribe_failed: ${status}`, { table, filter, status });
+      }
+      if (
+        status === "SUBSCRIBED" ||
+        status === "CHANNEL_ERROR" ||
+        status === "TIMED_OUT" ||
+        status === "CLOSED"
+      ) {
+        onStatus?.(status);
       }
     });
 

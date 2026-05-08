@@ -1,7 +1,7 @@
 "use client";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { captureError } from "@/lib/errorTracking";
+import { sendBroadcastFireAndForget } from "@/lib/broadcastSend";
 
 /** Emis par l'operateur apres "Vider la liste" ; payload : IDs des demandes annulees. */
 export const PASSENGER_BROADCAST_QUEUE_CLEARED = "queue_cleared";
@@ -18,7 +18,9 @@ export function passengerProjectBroadcastChannel(projectId: string) {
 
 /**
  * Notifie les telephones passagers (canal Realtime Broadcast, pas Postgres).
- * Ne bloque pas l'UI -- si ca echoue, le poll RPC reprend le relais.
+ * Strictement non-bloquant : aucune exception ne remonte à React, et un timeout
+ * d'abonnement est journalisé en warning (pas en error Sentry critique).
+ * Si Realtime est indisponible, le poll RPC reprend le relais cote passager.
  */
 export function broadcastPassengerQueueCleared(client: SupabaseClient, projectId: string, requestIds: string[]): void {
   broadcastPassengerRequestIds(client, projectId, PASSENGER_BROADCAST_QUEUE_CLEARED, requestIds);
@@ -46,31 +48,12 @@ function broadcastPassengerRequestIds(
     return;
   }
 
-  const channel = client.channel(passengerProjectBroadcastChannel(projectId));
-
-  void (async () => {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const timeoutId = window.setTimeout(() => reject(new Error("broadcast subscribe timeout")), 5000);
-        channel.subscribe((status, err) => {
-          if (status === "SUBSCRIBED") {
-            window.clearTimeout(timeoutId);
-            resolve();
-          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            window.clearTimeout(timeoutId);
-            reject(err ?? new Error(String(status)));
-          }
-        });
-      });
-      await channel.send({
-        type: "broadcast",
-        event,
-        payload: { requestIds },
-      });
-    } catch (err) {
-      captureError(err, { action: "broadcast_passengerNotify", event, projectId, requestIds: requestIds.length });
-    } finally {
-      client.removeChannel(channel);
-    }
-  })();
+  sendBroadcastFireAndForget({
+    client,
+    channelName: passengerProjectBroadcastChannel(projectId),
+    event,
+    payload: { requestIds },
+    action: "broadcast_passengerNotify",
+    context: { projectId, requestCount: requestIds.length },
+  });
 }

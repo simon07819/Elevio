@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Scale,
   DollarSign,
+  Ticket,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
@@ -30,6 +31,7 @@ function NAV_ITEMS(t: (k: TranslationKey) => string): NavItem[] {
     { href: "/superadmin", label: "superadmin.dashboard", icon: LayoutDashboard },
     { href: "/superadmin/users", label: "superadmin.clients", icon: Users },
     { href: "/superadmin/billing", label: "superadmin.plansAndPricing", icon: DollarSign },
+    { href: "/superadmin/codes", label: "superadmin.purchaseCodes", icon: Ticket },
     { href: "/superadmin/accounts", label: "superadmin.subscriptions", icon: CreditCard },
     { section: "superadmin.metrics" },
     { href: "/superadmin/metrics", label: "superadmin.platformMetrics", icon: BarChart3 },

@@ -29,14 +29,15 @@ test("combined-button: showCombined computed when dropoff floor = pickup floor",
   assert.match(comp, /from_floor_id === effectiveDropFloorId/, "checks pickup floor matches effective dropoff floor");
 });
 
-test("combined-button: dropoffAndPickup function does both actions", () => {
+test("combined-button: dropoffAndPickup function uses atomic server action", () => {
   const comp = readFileSync(join(root, "components/operator/RecommendedNextStop.tsx"), "utf8");
   assert.match(comp, /function dropoffAndPickup/, "combined function exists");
-  // Calls both advanceRequestStatus for completed and boarded
-  assert.match(comp, /advanceRequestStatus\(requestId, .completed.\)/, "dropoff completes requests");
-  assert.match(comp, /advanceRequestStatus\(targetRequest\.id, .boarded./, "pickup boards requests");
-  // Both fired in parallel
-  assert.match(comp, /Promise\.all/, "both actions fired in parallel");
+  assert.match(comp, /function pickupAndDropoff/, "reverse-order combined function exists");
+  // Single atomic server call instead of two parallel advanceRequestStatus
+  assert.match(comp, /applyCombinedOperatorAction/, "uses atomic combined server action");
+  assert.match(comp, /actionOrder/, "passes the action order to the server");
+  assert.match(comp, /dropoff_then_pickup/, "supports dropoff_then_pickup order");
+  assert.match(comp, /pickup_then_dropoff/, "supports pickup_then_dropoff order");
   // On success: onPickupConfirmed called (broadcast to passenger)
   assert.match(comp, /onPickupConfirmed/, "pickup confirmed callback called");
   // On dropoff success: onDropoffSuccess called
@@ -56,6 +57,8 @@ test("combined-button: i18n keys for dropoffAndPickup", () => {
   const i18n = readFileSync(join(root, "lib/i18n.ts"), "utf8");
   assert.match(i18n, /operator\.dropoffAndPickup.*Déposer \+ Ramasser/, "French key exists");
   assert.match(i18n, /operator\.dropoffAndPickup.*Drop off \+ Pickup/, "English key exists");
+  assert.match(i18n, /operator\.pickupAndDropoff.*Ramasser \+ Déposer/, "French reverse key exists");
+  assert.match(i18n, /operator\.pickupAndDropoff.*Pickup \+ Drop off/, "English reverse key exists");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

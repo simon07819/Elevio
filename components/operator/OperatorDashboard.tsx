@@ -92,9 +92,12 @@ export function OperatorDashboard({
   const [cancelingRequestIds, setCancelingRequestIds] = useState<Set<string>>(() => new Set());
   const [isClearingQueue, setIsClearingQueue] = useState(false);
   const isOnline = useNetworkStatus(() => {
-    // Force immediate re-sync from DB when network comes back
+    // Force immediate re-sync from DB when network comes back: merge the
+    // current SSR snapshot AND fire one explicit refetch (never a polling
+    // loop) so the operator iPad burns minimal LTE data.
     logSync("networkBackOnline", { source: "useNetworkStatus" });
     setLiveRequests((current) => mergeRequestsPropIntoLive(current, requests));
+    void syncRequestsRef.current?.();
   });
   const projectId = elevator.project_id;
   const manualFullDesiredRef = useRef<boolean | null>(null);
@@ -104,6 +107,15 @@ export function OperatorDashboard({
   const clearedIdsRef = useRef<Set<string>>(new Set());
   // Persistent broadcast channel — pre-subscribed so passenger QR reset is near-instant.
   const broadcastChannelRef = useRef<{ channel: unknown; ready: boolean } | null>(null);
+  // Tracks whether the requests realtime channel is currently SUBSCRIBED.
+  // When true, the LTE-friendly fallback polling loop skips its DB fetch.
+  // When false (CHANNEL_ERROR / TIMED_OUT / CLOSED) the slow poll resumes
+  // so the operator stays live without aggressive 1–2s polling on LTE.
+  const realtimeConnectedRef = useRef(false);
+  // Imperative handle to the latest poll/refetch implementation. Used by the
+  // visibility / online / appResume listeners to do ONE explicit refetch on
+  // resume instead of constantly polling.
+  const syncRequestsRef = useRef<(() => Promise<void>) | null>(null);
 
   function rememberOptimisticRequest(request: HoistRequest) {
     optimisticRequestsRef.current.set(request.id, {
@@ -146,14 +158,16 @@ export function OperatorDashboard({
       if (event.persisted) {
         logSync("bfcacheRestore", { source: "pageshow" });
         setLiveRequests((current) => mergeRequestsPropIntoLive(current, requests));
+        void syncRequestsRef.current?.();
       }
     };
 
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        // Force immediate poll to re-sync from DB
+        // Single explicit refetch on tab/app focus — no polling loop on LTE.
         logSync("visibilityChange", { source: "visibilitychange" });
         setLiveRequests((current) => mergeRequestsPropIntoLive(current, requests));
+        void syncRequestsRef.current?.();
       }
     };
 
@@ -169,6 +183,7 @@ export function OperatorDashboard({
           if (state.isActive) {
             logSync("appResume", { source: "capacitor_appStateChange" });
             setLiveRequests((current) => mergeRequestsPropIntoLive(current, requests));
+            void syncRequestsRef.current?.();
           }
         });
         capacitorCleanup = () => handler.remove();
@@ -204,6 +219,17 @@ export function OperatorDashboard({
           // Haptic + sound alert for priority requests
           if (payload.eventType !== "DELETE" && payload.new.priority === true && payload.new.status === "pending") {
             tryHapticForPriority();
+          }
+        },
+        onStatus: (status) => {
+          if (status === "SUBSCRIBED") {
+            realtimeConnectedRef.current = true;
+            logSync("realtimeConnected", { table: "requests", projectId });
+          } else {
+            realtimeConnectedRef.current = false;
+            logSync("realtimeDegraded", { table: "requests", projectId, status });
+            // On reconnect/error: do ONE explicit refetch to recover any missed events.
+            void syncRequestsRef.current?.();
           }
         },
       }),
@@ -311,11 +337,32 @@ export function OperatorDashboard({
       });
     }
 
+    // Expose syncRequests so visibility / online / appResume / realtime-degraded
+    // listeners can fire a single explicit refetch instead of constantly polling.
+    syncRequestsRef.current = syncRequests;
+
+    // Initial fetch on mount: ensures the operator sees the freshest snapshot
+    // even if the SSR `requests` prop is slightly stale.
     void syncRequests();
-    const id = window.setInterval(syncRequests, 400);
+
+    // ── LTE-FRIENDLY FALLBACK POLL ────────────────────────────────────────
+    // Realtime (Supabase Postgres CDC channel) is the primary live source for
+    // operator requests. This 30s loop only fires a DB fetch when realtime is
+    // NOT currently SUBSCRIBED, so a healthy realtime channel costs ~zero
+    // bytes/min on the operator iPad LTE. If realtime fails (CHANNEL_ERROR /
+    // TIMED_OUT / CLOSED), the loop resumes refetching at a calm 30s cadence
+    // until the channel re-subscribes.
+    const FALLBACK_POLL_MS = 30_000;
+    const id = window.setInterval(() => {
+      if (realtimeConnectedRef.current) return;
+      void syncRequests();
+    }, FALLBACK_POLL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(id);
+      if (syncRequestsRef.current === syncRequests) {
+        syncRequestsRef.current = null;
+      }
     };
   }, [elevator.id, projectId, sessionStartedAt]);
 

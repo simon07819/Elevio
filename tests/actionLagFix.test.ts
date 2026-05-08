@@ -108,12 +108,15 @@ test("action lag: background tasks still run after fast return", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 10. Combined button also uses optimistic pickup without timeout
+// 10. Combined button uses atomic server action with optimistic pickup
 // ---------------------------------------------------------------------------
-test("action lag: combined button uses instant optimistic pickup without timeout", () => {
-  const combinedFn = RECOMMENDED.match(/function dropoffAndPickup\(\) \{[\s\S]*?^  \}/m)?.[0] ?? "";
-  assert.match(combinedFn, /onPickupSuccess/, "onPickupSuccess in combined");
-  assert.doesNotMatch(combinedFn, /withTimeout/, "no withTimeout in combined");
+test("action lag: combined button uses atomic action and instant optimistic pickup", () => {
+  // The combined action MUST run optimistic UI before the server call.
+  const runCombined = RECOMMENDED.match(/function runCombined\([\s\S]*?^  \}/m)?.[0] ?? "";
+  assert.match(runCombined, /onPickupSuccess/, "onPickupSuccess in combined helper");
+  assert.match(runCombined, /onDropoffSuccess/, "onDropoffSuccess in combined helper");
+  assert.match(runCombined, /applyCombinedOperatorAction/, "uses atomic server action");
+  assert.doesNotMatch(runCombined, /withTimeout/, "no withTimeout in combined");
 });
 
 // ---------------------------------------------------------------------------

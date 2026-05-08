@@ -21,9 +21,9 @@ export default async function AccessCodesPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-black text-white mb-1">Codes d&apos;accès</h1>
+      <h1 className="text-2xl font-black text-white mb-1">Codes achat</h1>
       <p className="text-sm text-slate-400 mb-6">
-        Créez et gérez les codes d&apos;accès pour attribuer des forfaits aux utilisateurs.
+        Générez et gérez les codes donnés aux entreprises pour activer un forfait. La source/provider est distincte du forfait.
       </p>
       <AccessCodeManager codes={codes} />
     </div>

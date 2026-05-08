@@ -254,9 +254,17 @@ test("PRO6: realtime subscribe failure logged and error captured", () => {
   assert.match(REALTIME, /\[Elevio Error\]/, "structured log tag");
 });
 
-test("PRO6: poll fallback exists (250ms interval) in OperatorWorkspace", () => {
+test("PRO6: LTE-friendly poll fallback exists in OperatorWorkspace (>= 15s, gated on realtime)", () => {
+  // The aggressive 250ms elevators poll was removed in favor of an LTE-friendly
+  // fallback gated by realtime connection state. Realtime is the primary live
+  // source; the poll only fires when realtime is degraded.
   assert.match(WORKSPACE, /syncElevators/, "poll function exists");
-  assert.match(WORKSPACE, /250/, "250ms poll interval");
+  assert.match(WORKSPACE, /const FALLBACK_POLL_MS = 30_000;/, "30s LTE-friendly fallback cadence");
+  assert.match(
+    WORKSPACE,
+    /if \(realtimeConnectedRef\.current\) return;\s*void syncElevators\(\);/,
+    "poll skips when realtime is SUBSCRIBED",
+  );
 });
 
 test("PRO6: passenger poll fallback exists (250ms) in RequestForm", () => {

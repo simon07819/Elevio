@@ -54,7 +54,14 @@ if (!dashboard.includes("OPERATOR_VISIBLE_REQUEST_STATUSES")) {
   throw new Error("FAIL: OperatorDashboard missing OPERATOR_VISIBLE_REQUEST_STATUSES filter");
 }
 // Verify the poll uses .in("status", ...)
-const pollSection = dashboard.slice(dashboard.indexOf("syncRequests"));
+// Look for the actual function definition (not just the first textual occurrence
+// of `syncRequests`, which is now a ref-based imperative handle introduced for
+// LTE optimization).
+const fnIdx = dashboard.indexOf("async function syncRequests()");
+if (fnIdx < 0) {
+  throw new Error("FAIL: syncRequests function not found in OperatorDashboard");
+}
+const pollSection = dashboard.slice(fnIdx);
 if (!pollSection.slice(0, 2000).includes('.in("status"')) {
   throw new Error("FAIL: syncRequests poll doesn't filter by status");
 }

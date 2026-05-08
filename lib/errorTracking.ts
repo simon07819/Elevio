@@ -71,6 +71,56 @@ function mapActionToCategory(action?: string): string {
   return "general";
 }
 
+/**
+ * Capture a non-critical, recoverable condition (e.g. realtime broadcast subscribe timeout).
+ * Logged as `warning` in app_errors and `Sentry.captureMessage(level="warning")` so it is
+ * never reported as a hard error in production dashboards.
+ */
+export function captureWarning(message: string, context: ElevioErrorContext = {}) {
+  initSentry();
+  structuredLog("Error", context.action ?? "warning", { message, level: "warning", ...context });
+
+  if (typeof window !== "undefined") {
+    fetch("/api/errors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message,
+        error: message,
+        category: mapActionToCategory(context.action),
+        level: "warning",
+        projectId: context.projectId,
+        path: context.path,
+        statusCode: context.statusCode,
+        metadata: context,
+      }),
+    }).catch(() => {
+      // Fire-and-forget, failure is non-critical
+    });
+  }
+
+  if (initialized && SentryLib) {
+    try {
+      SentryLib.withScope((scope: typeof SentryLib.Scope) => {
+        scope.setLevel("warning");
+        if (context.projectId) scope.setTag("projectId", context.projectId);
+        if (context.elevatorId) scope.setTag("elevatorId", context.elevatorId);
+        if (context.requestId) scope.setTag("requestId", context.requestId);
+        if (context.userType) scope.setTag("userType", context.userType);
+        if (context.action) scope.setTag("action", context.action);
+        for (const [key, value] of Object.entries(context)) {
+          if (!["projectId", "elevatorId", "requestId", "userType", "action"].includes(key)) {
+            scope.setExtra(key, value);
+          }
+        }
+        SentryLib.captureMessage(message, "warning");
+      });
+    } catch {
+      // Sentry capture failure is non-critical
+    }
+  }
+}
+
 export function captureError(error: unknown, context: ElevioErrorContext = {}) {
   initSentry();
   structuredLog("Error", context.action ?? "unknown_error", {

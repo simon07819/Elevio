@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Ban, DoorOpen, Loader2, Pause, TriangleAlert, UserCheck } from "lucide-react";
-import { advanceRequestStatus, skipRequestForCurrentPassage } from "@/lib/actions";
+import { advanceRequestStatus, applyCombinedOperatorAction, skipRequestForCurrentPassage } from "@/lib/actions";
 import { trackRequestPickedUp, trackRequestDroppedOff } from "@/lib/analyticsEvents";
 import { captureError } from "@/lib/errorTracking";
 import { startPickupToDbTimer } from "@/lib/analyticsEvents";
@@ -198,12 +198,29 @@ export function RecommendedNextStop({
   const pickupAtDropFloor = effectiveShowDropoff && pickupCandidateAtDropFloor !== null;
   const showPickup = !effectiveShowDropoff && actionRequest !== null;
   const showCombined = effectiveShowDropoff && pickupAtDropFloor;
+
+  // Reverse-order combined: brain primary action is a PICKUP at floor X, AND
+  // there are already-boarded passengers whose drop floor is also X. This is
+  // the "Ramasser + Déposer" variant (pickup first, then dropoff). Order
+  // matters because operators may want to load incoming passengers before
+  // letting the existing ones out (priority case, mixed direction with shared
+  // floor, etc.). Both buttons go through the SAME atomic server action so
+  // the resulting state is always consistent.
+  const dropoffIdsAtPickupFloor = useMemo(() => {
+    if (!showPickup || !actionRequest) return [];
+    return onboardRequests
+      .filter((r) => r.to_floor_id === actionRequest.from_floor_id)
+      .map((r) => r.id);
+  }, [showPickup, actionRequest, onboardRequests]);
+  const showPickupThenDropoff = showPickup && dropoffIdsAtPickupFloor.length > 0;
+
   const showPrimaryAction = effectiveShowDropoff || showPickup;
 
   // ── Debug: log when recommendation recalculates after key actions ──
   const prevActionTypeRef = useRef<string>("");
   useEffect(() => {
     const actionType = showCombined ? "combined"
+      : showPickupThenDropoff ? "combined_pickup_first"
       : effectiveShowDropoff ? "dropoff"
       : showPickup ? "pickup"
       : "pause";
@@ -217,7 +234,7 @@ export function RecommendedNextStop({
       });
     }
     prevActionTypeRef.current = actionType;
-  }, [showCombined, effectiveShowDropoff, showPickup, onboardRequests.length, skippedIds.size, recommendation.primaryPickupRequestId]);
+  }, [showCombined, showPickupThenDropoff, effectiveShowDropoff, showPickup, onboardRequests.length, skippedIds.size, recommendation.primaryPickupRequestId]);
 
   // Skip button only for opportunistic pickup (operator already has onboard passengers)
   const isOpportunistic = isOpportunisticPickup(actionRequest, onboardRequests);
@@ -277,6 +294,33 @@ export function RecommendedNextStop({
       <span className="relative flex w-full items-center justify-center gap-4 text-4xl font-black uppercase tracking-wide">
         {isActionPending ? <Loader2 size={38} className="anim-spinner" /> : <DoorOpen size={38} strokeWidth={2.8} />}
         {isActionPending ? t("operator.actionInProgress") : t("operator.dropoff")}
+      </span>
+    </button>
+  ) : showPickupThenDropoff ? (
+    <button
+      type="button"
+      onClick={pickupAndDropoff}
+      disabled={isActionPending}
+      className="touch-target group relative flex min-h-36 w-full overflow-hidden rounded-3xl bg-gradient-to-r from-sky-400 via-cyan-300 to-emerald-400 px-6 py-7 text-slate-950 shadow-[0_20px_52px_rgba(56,189,248,0.42)] ring-4 ring-sky-100/40 transition active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait"
+    >
+      {isActionPending && <span className="absolute inset-0 bg-slate-950/20" />}
+      <span className="absolute inset-0 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.55),transparent)] opacity-70 motion-safe:animate-[action-shine_1.45s_ease-in-out_infinite]" />
+      <span className="relative flex w-full flex-col items-center justify-center gap-1">
+        {isActionPending ? (
+          <span className="flex items-center gap-3 text-3xl font-black uppercase tracking-wide">
+            <Loader2 size={36} className="anim-spinner" />
+            <span className="text-lg font-black uppercase tracking-wide">{t("operator.actionInProgress")}</span>
+          </span>
+        ) : (
+          <>
+            <span className="flex w-full items-center justify-center gap-4 text-4xl font-black uppercase tracking-wide">
+              <UserCheck size={36} strokeWidth={2.8} />
+              <span>+</span>
+              <DoorOpen size={36} strokeWidth={2.8} />
+            </span>
+            <span className="text-lg font-black uppercase tracking-wide">{t("operator.pickupAndDropoff")}</span>
+          </>
+        )}
       </span>
     </button>
   ) : showPickup ? (
@@ -523,19 +567,37 @@ export function RecommendedNextStop({
       });
   }
 
-  function dropoffAndPickup() {
-    // Anti-spam: prevent double-tap during combined action
+  /**
+   * Atomic combined action: dropoff + pickup (or pickup + dropoff) at the same
+   * floor. All optimistic UI happens immediately; a SINGLE server call applies
+   * both transitions in the correct order, then revalidates ONCE.
+   *
+   * Replaces the previous parallel `Promise.all([advanceRequestStatus(...),
+   * advanceRequestStatus(...)])` which suffered from race conditions on
+   * `syncElevatorWithRequestStatus` and double `revalidatePath("/operator")`,
+   * causing 10–15s lag, "old request reappearing" and wrong next move.
+   */
+  function runCombined(
+    actionOrder: "dropoff_then_pickup" | "pickup_then_dropoff",
+    args?: { dropoffIds?: string[]; pickupRequest?: EnrichedRequest | null; dropFloorId?: string },
+  ) {
     if (pickupRunningRef.current) return;
 
-    // Combined action: first dropoff, then pickup — one click for same-floor actions.
-    // Order: Déposer (dropoff) first, then Ramasser (pickup).
-    // Dropoff completes the boarded passengers; pickup boards the waiting ones.
-
-    // 1. Dropoff
-    const ids = dropoffIds;
-    if (ids.length === 0 || !effectiveDropFloorId) return;
+    const ids = args?.dropoffIds ?? dropoffIds;
+    const targetRequest = args?.pickupRequest ?? pickupCandidateAtDropFloor;
+    const sharedFloorId = args?.dropFloorId ?? effectiveDropFloorId;
+    if (ids.length === 0 || !sharedFloorId || !targetRequest) {
+      return;
+    }
 
     setActionError(null);
+
+    // ── INSTANT OPTIMISTIC UI ───────────────────────────────────────────
+    // Both transitions are reflected locally before the server responds, so
+    // the operator sees the next correct action without waiting on realtime.
+    pickupClickTimeRef.current = performance.now();
+    pickupRunningRef.current = true;
+
     setPendingDropoffIds((current) => {
       const next = new Set(current);
       for (const id of ids) next.add(id);
@@ -546,79 +608,96 @@ export function RecommendedNextStop({
       for (const id of ids) next.add(id);
       return next;
     });
-    onDropoffSuccess?.({ requestIds: ids, dropFloorId: effectiveDropFloorId });
 
-    // 2. Pickup — optimistically update immediately (use pickupCandidateAtDropFloor for combined)
-    const targetRequest = pickupCandidateAtDropFloor;
-    if (targetRequest) {
-      // Instant optimistic pickup — no spinner, no delay
-      pickupClickTimeRef.current = performance.now();
-      pickupRunningRef.current = true;
+    // Fire optimistic callbacks in the requested order so OperatorDashboard's
+    // optimistic state reflects what the cabin will look like next.
+    if (actionOrder === "pickup_then_dropoff") {
       onPickupSuccess?.(targetRequest);
-      const uiUpdateMs = Math.round(performance.now() - pickupClickTimeRef.current);
-      structuredLog("Performance", "pickup_click_to_ui", {
-        requestId: targetRequest.id,
-        durationMs: uiUpdateMs,
-        context: "combined",
-        target: "<200ms",
-      });
+      onDropoffSuccess?.({ requestIds: ids, dropFloorId: sharedFloorId });
+    } else {
+      onDropoffSuccess?.({ requestIds: ids, dropFloorId: sharedFloorId });
+      onPickupSuccess?.(targetRequest);
     }
 
-    // 3. Fire server actions — pickup FIRST for instant passenger QR return
-    if (targetRequest) {
-      void advanceRequestStatus(targetRequest.id, "boarded", { assignElevatorId: operatorElevatorId })
-        .then((pickupResult) => {
-          if (pickupResult.ok) {
-            trackRequestPickedUp(targetRequest.id, projectId ?? "", operatorElevatorId);
-            structuredLog("Performance", "pickup_server_confirmed", { requestId: targetRequest.id, context: "combined" });
-            onPickupConfirmed?.(targetRequest);
-            pickupRunningRef.current = false;
-          } else {
-            // Real server rejection — rollback
-            setActionError(pickupResult.message);
-            structuredLog("Error", "pickup_server_error", { requestId: targetRequest.id, context: "combined", message: pickupResult.message });
-            captureError(new Error("combined_pickup_failed: " + pickupResult.message), { projectId, elevatorId: operatorElevatorId, requestId: targetRequest.id, userType: "operator", action: "combined_pickup" });
-            onPickupFailure?.(targetRequest);
-            pickupRunningRef.current = false;
+    const uiUpdateMs = Math.round(performance.now() - pickupClickTimeRef.current);
+    structuredLog("Performance", "pickup_click_to_ui", {
+      requestId: targetRequest.id,
+      durationMs: uiUpdateMs,
+      context: `combined:${actionOrder}`,
+      target: "<200ms",
+    });
+
+    void applyCombinedOperatorAction({
+      elevatorId: operatorElevatorId,
+      projectId: projectId ?? "",
+      dropoffRequestIds: ids,
+      pickupRequestId: targetRequest.id,
+      actionOrder,
+    })
+      .then((result) => {
+        if (result.ok) {
+          trackRequestPickedUp(targetRequest.id, projectId ?? "", operatorElevatorId);
+          for (const requestId of ids) {
+            trackRequestDroppedOff(requestId, projectId ?? "", operatorElevatorId);
           }
-        })
-        .catch((err) => {
-          // Real exception — rollback
-          setActionError("Action impossible. Verifiez la connexion et reessayez.");
-          structuredLog("Error", "pickup_exception", { requestId: targetRequest.id, context: "combined", error: String(err) });
-          captureError(err, { projectId, elevatorId: operatorElevatorId, requestId: targetRequest.id, userType: "operator", action: "combined_pickup" });
-          onPickupFailure?.(targetRequest);
+          structuredLog("Performance", "combined_server_confirmed", {
+            requestId: targetRequest.id,
+            dropoffIds: ids,
+            actionOrder,
+          });
+          onPickupConfirmed?.(targetRequest);
           pickupRunningRef.current = false;
-        });
-    }
-    // Fire dropoff separately (don't block pickup confirmation)
-    void Promise.all(ids.map((requestId) => advanceRequestStatus(requestId, "completed")))
-      .then((results) => {
-        const dropoffFailed = results.find((result) => !result.ok);
-        if (dropoffFailed) {
-          setActionError(dropoffFailed.message);
-          captureError(new Error("combined_dropoff_failed: " + dropoffFailed.message), { projectId, elevatorId: operatorElevatorId, requestIds: ids, userType: "operator", action: "combined_dropoff" });
+        } else {
+          // Server rejected the combined action — roll back BOTH sides.
+          setActionError(result.message);
+          structuredLog("Error", "combined_server_error", {
+            requestId: targetRequest.id,
+            dropoffIds: ids,
+            actionOrder,
+            message: result.message,
+          });
+          captureError(new Error("combined_action_failed: " + result.message), {
+            projectId,
+            elevatorId: operatorElevatorId,
+            requestId: targetRequest.id,
+            requestIds: ids,
+            userType: "operator",
+            action: `combined_${actionOrder}`,
+          });
           setCompletedDropoffIds((current) => {
             const next = new Set(current);
             for (const id of ids) next.delete(id);
             return next;
           });
           onDropoffFailure?.({ requestIds: ids });
-        } else {
-          for (const requestId of ids) {
-            trackRequestDroppedOff(requestId, projectId ?? "", operatorElevatorId);
-          }
+          onPickupFailure?.(targetRequest);
+          pickupRunningRef.current = false;
         }
       })
       .catch((err) => {
-        captureError(err, { projectId, elevatorId: operatorElevatorId, requestIds: ids, userType: "operator", action: "combined_dropoff" });
         setActionError("Action impossible. Verifiez la connexion et reessayez.");
+        structuredLog("Error", "combined_exception", {
+          requestId: targetRequest.id,
+          dropoffIds: ids,
+          actionOrder,
+          error: String(err),
+        });
+        captureError(err, {
+          projectId,
+          elevatorId: operatorElevatorId,
+          requestId: targetRequest.id,
+          requestIds: ids,
+          userType: "operator",
+          action: `combined_${actionOrder}`,
+        });
         setCompletedDropoffIds((current) => {
           const next = new Set(current);
           for (const id of ids) next.delete(id);
           return next;
         });
         onDropoffFailure?.({ requestIds: ids });
+        onPickupFailure?.(targetRequest);
+        pickupRunningRef.current = false;
       })
       .finally(() => {
         setPendingDropoffIds((current) => {
@@ -627,6 +706,19 @@ export function RecommendedNextStop({
           return next;
         });
       });
+  }
+
+  function dropoffAndPickup() {
+    runCombined("dropoff_then_pickup");
+  }
+
+  function pickupAndDropoff() {
+    if (!actionRequest) return;
+    runCombined("pickup_then_dropoff", {
+      dropoffIds: dropoffIdsAtPickupFloor,
+      pickupRequest: actionRequest,
+      dropFloorId: actionRequest.from_floor_id,
+    });
   }
 
   return (

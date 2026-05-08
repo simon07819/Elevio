@@ -2104,6 +2104,253 @@ export async function advanceRequestStatus(
   return updateRequestStatus(requestId, status, messages[status], options);
 }
 
+/**
+ * Atomic combined operator action: dropoff + pickup at the same floor.
+ *
+ * Bug fixed by this action:
+ * The previous client code fired two parallel `advanceRequestStatus` calls
+ * (one for completed, one for boarded). Each call internally ran
+ * `syncElevatorWithRequestStatus` which writes `direction` / `current_floor_id`
+ * with conflicting values (idle for completed, request.direction for boarded).
+ * Whichever finished last won, plus each call triggered its own
+ * `revalidatePath("/operator")` so the SSR snapshot could re-inject an
+ * intermediate state. Result: 10–15s lag, "old request reappearing", wrong
+ * next move, especially during crossings (up + down + shared floor).
+ *
+ * This server action applies BOTH transitions sequentially in the requested
+ * order, then computes the elevator state ONCE from the final post-transition
+ * snapshot, then revalidates ONCE. The client gets a single, consistent
+ * confirmation.
+ */
+export async function applyCombinedOperatorAction(input: {
+  elevatorId: string;
+  projectId: string;
+  dropoffRequestIds: string[];
+  pickupRequestId: string | null;
+  /** Order to apply the transitions. Defaults to dropoff_then_pickup. */
+  actionOrder?: "dropoff_then_pickup" | "pickup_then_dropoff";
+}): Promise<{ ok: boolean; message: string }> {
+  const { elevatorId, projectId, dropoffRequestIds, pickupRequestId } = input;
+  const actionOrder = input.actionOrder ?? "dropoff_then_pickup";
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { ok: true, message: "Mode demo: action combinee simulee." };
+  }
+
+  if (!isUuid(elevatorId) || !isUuid(projectId)) {
+    return staleIdsAction();
+  }
+  for (const id of dropoffRequestIds) {
+    if (!isUuid(id)) return staleIdsAction();
+  }
+  if (pickupRequestId !== null && !isUuid(pickupRequestId)) {
+    return staleIdsAction();
+  }
+  if (dropoffRequestIds.length === 0 && pickupRequestId === null) {
+    return { ok: false, message: "Aucune action a appliquer." };
+  }
+
+  // ── AUTH ──
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) {
+    return { ok: false, message: "Connexion operateur requise." };
+  }
+
+  logAction("applyCombinedOperatorAction:start", {
+    elevatorId,
+    projectId,
+    dropoffCount: dropoffRequestIds.length,
+    hasPickup: pickupRequestId !== null,
+    actionOrder,
+  });
+
+  const now = new Date().toISOString();
+
+  // Helper: complete one dropoff request (boarded → completed). Idempotent: if
+  // the row is already completed/cancelled, skip silently. Returns the updated
+  // request snapshot or null on benign skip / non-fatal mismatch.
+  async function completeDropoff(requestId: string): Promise<{ ok: true } | { ok: false; message: string }> {
+    if (!supabase) return { ok: false, message: "Service indisponible." };
+    const { data: row } = await supabase
+      .from("requests")
+      .select("id, status")
+      .eq("id", requestId)
+      .maybeSingle();
+    if (!row) return { ok: false, message: "Demande introuvable." };
+    const status = row.status as RequestStatus;
+    if (status === "completed" || status === "cancelled") {
+      return { ok: true };
+    }
+    if (!isLegalTransition(status, "completed")) {
+      return { ok: false, message: `Transition ${status}->completed refusee.` };
+    }
+    const { error } = await supabase
+      .from("requests")
+      .update({
+        status: "completed",
+        updated_at: now,
+        completed_at: now,
+        passenger_device_key: null,
+      })
+      .eq("id", requestId);
+    if (error) return { ok: false, message: error.message };
+    return { ok: true };
+  }
+
+  // Helper: board pickup (pending/assigned/arriving → boarded). Assigns elevator
+  // if not yet assigned. Rejects double-pickup on a different elevator.
+  async function boardPickup(requestId: string): Promise<{ ok: true } | { ok: false; message: string }> {
+    if (!supabase) return { ok: false, message: "Service indisponible." };
+    const { data: row } = await supabase
+      .from("requests")
+      .select("id, status, elevator_id, project_id")
+      .eq("id", requestId)
+      .maybeSingle();
+    if (!row) return { ok: false, message: "Demande introuvable." };
+    const status = row.status as RequestStatus;
+    if (status === "boarded") {
+      return { ok: true };
+    }
+    if (status === "completed" || status === "cancelled") {
+      return { ok: false, message: "Cette demande n'est plus disponible." };
+    }
+    if (!isLegalTransition(status, "boarded")) {
+      return { ok: false, message: `Transition ${status}->boarded refusee.` };
+    }
+    if (row.elevator_id && row.elevator_id !== elevatorId) {
+      return { ok: false, message: "Cette demande est deja prise par un autre operateur." };
+    }
+    const updates: Record<string, unknown> = {
+      status: "boarded",
+      updated_at: now,
+    };
+    if (!row.elevator_id) {
+      updates.elevator_id = elevatorId;
+    }
+    const { error } = await supabase
+      .from("requests")
+      .update(updates)
+      .eq("id", requestId);
+    if (error) return { ok: false, message: error.message };
+    return { ok: true };
+  }
+
+  // Apply transitions in the requested order. Stop on the FIRST hard error so
+  // we don't end up half-applied. The client already showed an optimistic
+  // result; the post-action poll will reconcile if anything is off.
+  if (actionOrder === "pickup_then_dropoff") {
+    if (pickupRequestId) {
+      const res = await boardPickup(pickupRequestId);
+      if (!res.ok) {
+        return res;
+      }
+    }
+    for (const id of dropoffRequestIds) {
+      const res = await completeDropoff(id);
+      if (!res.ok) {
+        return res;
+      }
+    }
+  } else {
+    for (const id of dropoffRequestIds) {
+      const res = await completeDropoff(id);
+      if (!res.ok) {
+        return res;
+      }
+    }
+    if (pickupRequestId) {
+      const res = await boardPickup(pickupRequestId);
+      if (!res.ok) {
+        return res;
+      }
+    }
+  }
+
+  // Compute the final elevator state ONCE from the post-transition snapshot.
+  // This avoids the race between the two `syncElevatorWithRequestStatus` calls
+  // that the previous parallel implementation suffered from.
+  const finalCurrentLoad = await sumBoardedPassengersForElevator(supabase, elevatorId);
+
+  // Resolve the new elevator floor + direction. Strategy:
+  //  - If a pickup happened, the cabin is now at that pickup's from_floor and
+  //    must move in the pickup's direction.
+  //  - Otherwise (dropoff-only would not normally hit this action) the cabin
+  //    sits at the dropoff floor with idle direction until the next pickup.
+  let newFloorId: string | null = null;
+  let newDirection: Direction = "idle";
+
+  if (pickupRequestId) {
+    const { data: pickup } = await supabase
+      .from("requests")
+      .select("from_floor_id, direction")
+      .eq("id", pickupRequestId)
+      .maybeSingle();
+    if (pickup?.from_floor_id) {
+      newFloorId = pickup.from_floor_id as string;
+      newDirection = (pickup.direction as Direction) ?? "idle";
+    }
+  } else if (dropoffRequestIds.length > 0) {
+    const { data: drop } = await supabase
+      .from("requests")
+      .select("to_floor_id")
+      .eq("id", dropoffRequestIds[0])
+      .maybeSingle();
+    if (drop?.to_floor_id) {
+      newFloorId = drop.to_floor_id as string;
+    }
+    newDirection = finalCurrentLoad > 0 ? newDirection : "idle";
+  }
+
+  const elevatorPatch: Record<string, unknown> = {
+    current_load: finalCurrentLoad,
+    direction: newDirection,
+  };
+  if (newFloorId) {
+    elevatorPatch.current_floor_id = newFloorId;
+  }
+  const { error: elevError } = await supabase
+    .from("elevators")
+    .update(elevatorPatch)
+    .eq("id", elevatorId)
+    .eq("project_id", projectId);
+  if (elevError) {
+    // Non-fatal: the next poll will reconcile. Don't fail the whole action.
+    console.warn("[applyCombinedOperatorAction] elevator update warning", elevError.message);
+  }
+
+  // Background: insert events + revalidate ONCE — don't block the response.
+  void (async () => {
+    try {
+      const eventRows: { request_id: string; event_type: RequestEventType; message: string }[] = [];
+      for (const id of dropoffRequestIds) {
+        eventRows.push({ request_id: id, event_type: "completed", message: "Passagers deposes (action combinee)." });
+      }
+      if (pickupRequestId) {
+        eventRows.push({ request_id: pickupRequestId, event_type: "boarded", message: "Passagers embarques (action combinee)." });
+      }
+      if (eventRows.length > 0) {
+        await supabase.from("request_events").insert(eventRows);
+      }
+    } catch (err) {
+      console.error("[applyCombinedOperatorAction] background insertEvents error", String(err));
+    }
+    revalidatePath("/operator");
+    revalidatePath("/admin");
+    revalidatePath("/request");
+  })();
+
+  logAction("applyCombinedOperatorAction:done", {
+    elevatorId,
+    finalCurrentLoad,
+    direction: newDirection,
+  });
+
+  return { ok: true, message: "Action combinee appliquee." };
+}
+
 /** Skip a pickup request for the current passage cycle. The request stays active
  *  (pending/assigned/arriving) but is temporarily ignored by the dispatch engine
  *  for this elevator. Auto-expires after 5 minutes or on direction change/dropoff.

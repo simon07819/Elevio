@@ -248,12 +248,24 @@ test("capacitor: AppDelegate does NOT navigate to /welcome (removed to fix loop)
   assert.doesNotMatch(APP_DELEGATE, /CAPBridgeViewController/, "no bridge access for navigation");
 });
 
-test("capacitor: out/index.html has debug boot log, no redirect to /welcome", () => {
-  assert.doesNotMatch(OUT_INDEX, /window\.location\.replace/, "no redirect to /welcome (would cause loop)");
+test("capacitor: out/index.html has debug boot log + server bootstrap redirect (not /welcome)", () => {
+  // The fallback HTML may redirect to the CAPACITOR_SERVER_URL (boot loader)
+  // but must NEVER redirect to /welcome (infinite loop).
+  assert.doesNotMatch(OUT_INDEX, /window\.location\.replace\("\/welcome"\)/, "no redirect to /welcome (would cause loop)");
+  assert.doesNotMatch(OUT_INDEX, /window\.location\.replace\('\/welcome'\)/, "no redirect to /welcome variant");
   assert.match(OUT_INDEX, /iOS Boot/, "has debug boot log");
+  // Must have either a server redirect (boot loader) or a clear error
+  // when no server URL is configured — never a dead-end "Chargement" screen.
+  const hasServerRedirect = OUT_INDEX.includes("window.location.replace") && !OUT_INDEX.includes("/welcome");
+  const hasMissingUrlError = OUT_INDEX.includes("CAPACITOR_SERVER_URL non configuré");
+  assert.ok(hasServerRedirect || hasMissingUrlError, "fallback must either redirect to server or show missing-URL error");
 });
 
-test("capacitor: ios/App/App/public/index.html has debug boot log, no redirect", () => {
-  assert.doesNotMatch(IOS_PUBLIC_INDEX, /window\.location\.replace/, "no redirect to /welcome (would cause loop)");
+test("capacitor: ios/App/App/public/index.html has debug boot log + server bootstrap redirect (not /welcome)", () => {
+  assert.doesNotMatch(IOS_PUBLIC_INDEX, /window\.location\.replace\("\/welcome"\)/, "no redirect to /welcome (would cause loop)");
+  assert.doesNotMatch(IOS_PUBLIC_INDEX, /window\.location\.replace\('\/welcome'\)/, "no redirect to /welcome variant");
   assert.match(IOS_PUBLIC_INDEX, /iOS Boot/, "has debug boot log");
+  const hasServerRedirect = IOS_PUBLIC_INDEX.includes("window.location.replace") && !IOS_PUBLIC_INDEX.includes("/welcome");
+  const hasMissingUrlError = IOS_PUBLIC_INDEX.includes("CAPACITOR_SERVER_URL non configuré");
+  assert.ok(hasServerRedirect || hasMissingUrlError, "fallback must either redirect to server or show missing-URL error");
 });

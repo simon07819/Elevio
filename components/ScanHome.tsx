@@ -198,6 +198,18 @@ export function ScanHome() {
     };
   }, [router, scanning, t]);
 
+  // Log boot step: route resolved — the app has successfully passed the
+  // hydration barrier and is about to render interactive UI.
+  useEffect(() => {
+    try {
+      const bootSteps = (window as unknown as Record<string, Record<string, number>>).__ELEVIO_BOOT_STEPS__;
+      if (bootSteps && !bootSteps.route_resolved) {
+        bootSteps.route_resolved = Date.now();
+        console.log("[iOS Boot]", { step: "route_resolved", pathname: window.location.pathname, ms: Date.now() - (bootSteps.react_hydrated ?? 0) });
+      }
+    } catch { /* non-critical boot logging */ }
+  }, []);
+
   // Visible fallback while React hydrates — prevents black screen on Capacitor iOS
   if (!mounted) {
     return (
