@@ -4,6 +4,73 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSuperAdmin } from "@/lib/auth/superadmin";
 import { PLANS, effectivePlanId, type PlanId } from "@/lib/billing/plans";
 import { logAppError } from "@/lib/appErrors";
+import type { AccountRole } from "@/lib/profile";
+
+/** Update a client's profile fields — superadmin only. */
+export async function updateClientProfile(params: {
+  userId: string;
+  first_name: string | null;
+  last_name: string | null;
+  company: string | null;
+  phone: string | null;
+  account_role: AccountRole;
+}): Promise<{ ok: boolean; message: string }> {
+  const { userId, first_name, last_name, company, phone, account_role } = params;
+  const { user: adminUser } = await requireSuperAdmin();
+
+  if (!userId) return { ok: false, message: "Membre introuvable." };
+
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, message: "Service indisponible." };
+
+  // Prevent removing the last superadmin
+  if (account_role !== "superadmin") {
+    const { data: currentProfile } = await supabase
+      .from("profiles")
+      .select("account_role")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (currentProfile?.account_role === "superadmin") {
+      const { count } = await supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("account_role", "superadmin");
+
+      if (count != null && count <= 1) {
+        return { ok: false, message: "Impossible de rétrograder le dernier superadmin." };
+      }
+    }
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      first_name,
+      last_name,
+      company,
+      phone,
+      account_role,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId);
+
+  if (error) return { ok: false, message: error.message };
+
+  // Audit log
+  await logAppError({
+    message: `Profil membre modifié par superadmin`,
+    category: "general",
+    level: "info",
+    userId: adminUser.id,
+    metadata: {
+      targetUserId: userId,
+      fields: { first_name, last_name, company, phone, account_role },
+    },
+  });
+
+  return { ok: true, message: "Profil mis à jour." };
+}
 
 /** Change a user's plan — superadmin only. Handles downgrade to free. */
 export async function changeUserPlan(userId: string, newPlan: PlanId) {

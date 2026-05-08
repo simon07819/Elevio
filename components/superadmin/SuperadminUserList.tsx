@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { changeUserPlan, setUserSuspended } from "@/lib/superadminActions";
+import { changeUserPlan, setUserSuspended, updateClientProfile } from "@/lib/superadminActions";
 import { Badge } from "@/components/superadmin/Badge";
 import { ManualPlanModal } from "@/components/superadmin/ManualPlanModal";
 import type { PlanId } from "@/lib/billing/plans";
 import { ADMIN_PLAN_IDS, PLANS } from "@/lib/billing/plans";
+import type { AccountRole } from "@/lib/profile";
+import { Pencil, CreditCard, X, Check, Loader2 } from "lucide-react";
 
 type UserRow = {
   id: string;
@@ -23,16 +25,17 @@ type UserRow = {
   subscriptionStatus: string | null;
 };
 
-function paymentBadge(via: string) {
+function sourceBadge(via: string) {
   switch (via) {
-    case "default": return null; // No badge for free users — clean display
+    case "default": return <Badge variant="default">Gratuit</Badge>;
     case "manual": return <Badge variant="yellow">Manuel</Badge>;
+    case "manual_code": return <Badge variant="green">Code</Badge>;
     case "iap": return <Badge variant="default">App Store</Badge>;
     case "revenuecat": return <Badge variant="default">App Store</Badge>;
     case "stripe": return <Badge variant="default">Stripe</Badge>;
     case "admin": return <Badge variant="yellow">Admin</Badge>;
     case "activation_code": return <Badge variant="green">Code</Badge>;
-    default: return via ? <Badge variant="default">{via}</Badge> : null;
+    default: return via ? <Badge variant="default">{via}</Badge> : <Badge variant="default">—</Badge>;
   }
 }
 
@@ -45,26 +48,141 @@ function planBadge(planId: string) {
   return <Badge variant="default">{plan.label}</Badge>;
 }
 
-function SubscriptionStatusBadge({ status }: { status: string | null }) {
-  if (!status) return <span className="text-xs text-slate-600">—</span>;
-  switch (status) {
-    case "active": return <Badge variant="green">Actif</Badge>;
-    case "trialing": return <Badge variant="green">Essai</Badge>;
-    case "past_due": return <Badge variant="red">En retard</Badge>;
-    case "canceled": return <Badge variant="red">Annulé</Badge>;
-    case "expired": return <Badge variant="default">Expiré</Badge>;
-    default: return <Badge variant="default">{status}</Badge>;
+/** Single forfait display: badge + inline quick-change + expires hint */
+function ForfaitCell({ plan, userId, loading, onChange }: { plan: string; userId: string; loading: string | null; onChange: (userId: string, newPlan: PlanId) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      {planBadge(plan)}
+      <select
+        className="rounded-lg border border-white/10 bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-400"
+        value={plan}
+        disabled={loading === userId}
+        onChange={(e) => onChange(userId, e.target.value as PlanId)}
+      >
+        {ADMIN_PLAN_IDS.map((p) => (
+          <option key={p} value={p}>{PLANS[p].label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function ProfileEditModal({ user, onClose, onSaved }: { user: UserRow; onClose: () => void; onSaved: () => void }) {
+  const [first_name, setFirstName] = useState(user.first_name ?? "");
+  const [last_name, setLastName] = useState(user.last_name ?? "");
+  const [company, setCompany] = useState(user.company ?? "");
+  const [phone, setPhone] = useState(user.phone ?? "");
+  const [account_role, setAccountRole] = useState<AccountRole>(user.account_role as AccountRole);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setMessage(null);
+    const result = await updateClientProfile({
+      userId: user.id,
+      first_name: first_name.trim() || null,
+      last_name: last_name.trim() || null,
+      company: company.trim() || null,
+      phone: phone.trim() || null,
+      account_role: account_role as AccountRole,
+    });
+    setMessage({ text: result.message, ok: result.ok });
+    setSaving(false);
+    if (result.ok) {
+      setTimeout(() => { onSaved(); }, 1200);
+    }
   }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900 p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl font-black text-white">Modifier le profil</h2>
+          <button className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Email — read-only (auth constraint) */}
+        <div className="mb-4 rounded-xl bg-white/5 p-3">
+          <p className="text-xs font-black uppercase text-slate-500">Courriel</p>
+          <p className="text-sm font-bold text-slate-300">{user.email}</p>
+          <p className="text-[10px] text-slate-600 mt-0.5">Le courriel ne peut pas être modifié ici (lié à l&apos;authentification).</p>
+        </div>
+
+        {message && (
+          <div className={`mb-4 rounded-xl border p-3 text-sm font-bold ${message.ok ? "bg-emerald-400/10 border-emerald-400/20 text-emerald-300" : "bg-red-400/10 border-red-400/20 text-red-300"}`}>
+            {message.text}
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-black uppercase text-slate-500">Prénom</label>
+              <input type="text" value={first_name} onChange={(e) => setFirstName(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white outline-none focus:border-yellow-400/50" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-black uppercase text-slate-500">Nom</label>
+              <input type="text" value={last_name} onChange={(e) => setLastName(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white outline-none focus:border-yellow-400/50" />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">Compagnie</label>
+            <input type="text" value={company} onChange={(e) => setCompany(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white outline-none focus:border-yellow-400/50" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">Téléphone</label>
+            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white outline-none focus:border-yellow-400/50" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-black uppercase text-slate-500">Rôle</label>
+            <select value={account_role} onChange={(e) => setAccountRole(e.target.value as AccountRole)}
+              className="w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm font-bold text-white outline-none focus:border-yellow-400/50">
+              <option value="operator">Opérateur</option>
+              <option value="admin">Admin</option>
+              <option value="superadmin">Superadmin</option>
+              <option value="passenger">Passager</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center gap-3">
+          <button
+            className="flex-1 rounded-xl bg-yellow-400/15 px-4 py-2.5 text-sm font-black text-yellow-300 hover:bg-yellow-400/25 disabled:opacity-50"
+            disabled={saving}
+            onClick={handleSave}
+          >
+            {saving ? <Loader2 size={16} className="anim-spinner inline" /> : <><Check size={16} className="inline" /> Enregistrer</>}
+          </button>
+          <button
+            className="rounded-xl bg-white/10 px-4 py-2.5 text-sm font-bold text-slate-300 hover:bg-white/15"
+            onClick={onClose}
+          >
+            Fermer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function SuperadminUserList({ users }: { users: UserRow[] }) {
   const [loading, setLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [modalUser, setModalUser] = useState<UserRow | null>(null);
-  const [confirmFree, setConfirmFree] = useState<string | null>(null); // userId pending free downgrade
+  const [editUser, setEditUser] = useState<UserRow | null>(null);
+  const [confirmFree, setConfirmFree] = useState<string | null>(null);
 
   async function handleChangePlan(userId: string, newPlan: PlanId) {
-    // Confirm before downgrade to free
     if (newPlan === "free" && confirmFree !== userId) {
       setConfirmFree(userId);
       return;
@@ -123,8 +241,7 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
               <th className="pb-3 pr-4">Courriel</th>
               <th className="pb-3 pr-4">Compagnie</th>
               <th className="pb-3 pr-4">Forfait</th>
-              <th className="pb-3 pr-4">Abonnement</th>
-              <th className="pb-3 pr-4">Paiement</th>
+              <th className="pb-3 pr-4">Source</th>
               <th className="pb-3 pr-4">Rôle</th>
               <th className="pb-3 pr-4">Créé</th>
               <th className="pb-3 pr-4">Statut</th>
@@ -140,31 +257,16 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
                 <td className="py-3 pr-4 text-slate-300">{u.email}</td>
                 <td className="py-3 pr-4 text-slate-400">{u.company ?? "—"}</td>
                 <td className="py-3 pr-4">
-                  <div className="flex items-center gap-2">
-                    {planBadge(u.plan)}
-                    <select
-                      className="rounded-lg border border-white/10 bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-400"
-                      value={u.plan}
-                      disabled={loading === u.id}
-                      onChange={(e) => handleChangePlan(u.id, e.target.value as PlanId)}
-                    >
-                      {ADMIN_PLAN_IDS.map((p) => (
-                        <option key={p} value={p}>{PLANS[p].label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </td>
-                <td className="py-3 pr-4">
-                  <SubscriptionStatusBadge status={u.subscriptionStatus} />
+                  <ForfaitCell plan={u.plan} userId={u.id} loading={loading} onChange={handleChangePlan} />
+                  {u.expiresAt && (
+                    <span className="text-[10px] text-slate-500">
+                      {new Date(u.expiresAt) > new Date() ? "expire" : "exp."} {new Date(u.expiresAt).toLocaleDateString("fr-CA")}
+                    </span>
+                  )}
                 </td>
                 <td className="py-3 pr-4">
                   <div className="flex items-center gap-1">
-                    {paymentBadge(u.activatedVia)}
-                    {u.expiresAt && (
-                      <span className="text-xs text-slate-500">
-                        {new Date(u.expiresAt) > new Date() ? "→" : "exp."} {new Date(u.expiresAt).toLocaleDateString("fr-CA")}
-                      </span>
-                    )}
+                    {sourceBadge(u.activatedVia)}
                   </div>
                 </td>
                 <td className="py-3 pr-4">
@@ -185,11 +287,18 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
                 <td className="py-3">
                   <div className="flex gap-2">
                     <button
+                      className="rounded-lg bg-sky-400/15 px-3 py-1 text-xs font-bold text-sky-400 hover:bg-sky-400/25"
+                      disabled={loading === u.id}
+                      onClick={() => setEditUser(u)}
+                    >
+                      <Pencil size={12} className="inline mr-1" />Profil
+                    </button>
+                    <button
                       className="rounded-lg bg-yellow-400/15 px-3 py-1 text-xs font-bold text-yellow-400 hover:bg-yellow-400/25"
                       disabled={loading === u.id}
                       onClick={() => setModalUser(u)}
                     >
-                      Attribuer forfait
+                      <CreditCard size={12} className="inline mr-1" />Forfait
                     </button>
                     {u.suspended ? (
                       <button
@@ -230,6 +339,14 @@ export function SuperadminUserList({ users }: { users: UserRow[] }) {
           expiresAt={modalUser.expiresAt}
           onClose={() => setModalUser(null)}
           onSaved={() => { setModalUser(null); window.location.reload(); }}
+        />
+      )}
+
+      {editUser && (
+        <ProfileEditModal
+          user={editUser}
+          onClose={() => setEditUser(null)}
+          onSaved={() => { setEditUser(null); window.location.reload(); }}
         />
       )}
     </div>

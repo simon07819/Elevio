@@ -113,14 +113,16 @@ test("paywall: has continue-with-free button", () => {
 // 6. Superadmin user list: Plan + Paiement (not Source Gratuit)
 // ═══════════════════════════════════════════════════════════════════
 
-test("superadmin: user list has Forfait and Paiement columns (not Source)", () => {
+test("superadmin: user list has Forfait and Source columns (distinct)", () => {
   assert.match(SUPERADMIN_USERS, /Forfait/, "Forfait column header");
-  assert.match(SUPERADMIN_USERS, /Paiement/, "Paiement column header");
-  assert.doesNotMatch(SUPERADMIN_USERS, /Source/, "no Source column");
+  assert.match(SUPERADMIN_USERS, /Source/, "Source column header");
+  assert.doesNotMatch(SUPERADMIN_USERS, /Paiement/, "no Paiement column (renamed to Source)");
 });
 
-test("superadmin: paymentBadge returns null for default/free (no Gratuit badge)", () => {
-  assert.match(SUPERADMIN_USERS, /case "default": return null/, "default shows no badge");
+test("superadmin: sourceBadge shows Gratuit for default/free (distinct from forfait)", () => {
+  assert.match(SUPERADMIN_USERS, /case "default".*Gratuit/, "default shows Gratuit badge in Source column");
+  assert.match(SUPERADMIN_USERS, /sourceBadge/, "sourceBadge function exists");
+  assert.doesNotMatch(SUPERADMIN_USERS, /paymentBadge/, "paymentBadge removed (replaced by sourceBadge)");
 });
 
 test("superadmin: planBadge shows plan labels with color coding", () => {
