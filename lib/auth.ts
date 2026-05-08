@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ensureProfileForUser, type AccountRole, type Profile } from "@/lib/profile";
-import { enforcePaymentStatus, getSubscriptionStatus } from "@/lib/billing/planGuards";
+import { getSubscriptionStatus } from "@/lib/billing/planGuards";
 import type { PlanId } from "@/lib/billing/plans";
 
 const OPERATOR_ROLES: AccountRole[] = ["operator", "admin", "superadmin"];
@@ -31,7 +31,12 @@ export async function requireUser() {
   return user;
 }
 
-/** Operator guard: requires auth + operator/admin/superadmin role + active subscription. */
+/** Operator guard: requires auth + operator/admin/superadmin role.
+ * Paid-feature server actions (activate elevator, etc.) already enforce
+ * subscription status internally, so we let the operator through even
+ * on a free plan — the UI shows an upgrade prompt for blocked features.
+ * Superadmins always pass through (no subscription check needed).
+ */
 export async function requireOperator() {
   const user = await requireUser();
   const profile = await getCurrentProfile();
@@ -40,34 +45,22 @@ export async function requireOperator() {
     redirect("/admin/login");
   }
 
-  // Enforce active subscription — redirect to paywall if no active subscription.
-  // Superadmins bypass this check (admin-granted access).
-  if (profile.account_role !== "superadmin") {
-    const paymentGuard = await enforcePaymentStatus(user.id);
-    if (!paymentGuard.ok) {
-      redirect("/paywall");
-    }
-  }
-
   return { user, profile };
 }
 
-/** Admin guard: requires auth + admin/superadmin role + active subscription. */
+/** Admin guard: requires auth + admin/superadmin role.
+ * Free-plan users are allowed through — the admin dashboard shows
+ * an UpgradePrompt instead of blocking entirely. This ensures web
+ * users can sign up, log in, and see limited access before hitting
+ * the paywall on specific paid features.
+ * Superadmins always pass through (no subscription check needed).
+ */
 export async function requireAdmin() {
   const user = await requireUser();
   const profile = await getCurrentProfile();
 
   if (!profile || !ADMIN_ROLES.includes(profile.account_role)) {
     redirect("/admin/login");
-  }
-
-  // Enforce active subscription — redirect to paywall if no active subscription.
-  // Superadmins bypass this check (admin-granted access).
-  if (profile.account_role !== "superadmin") {
-    const paymentGuard = await enforcePaymentStatus(user.id);
-    if (!paymentGuard.ok) {
-      redirect("/paywall");
-    }
   }
 
   return { user, profile };

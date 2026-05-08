@@ -47,11 +47,11 @@ export async function getSubscriptionStatus(userId: string): Promise<{
     return { hasActiveSubscription: false, status: "free", provider: null, planId: "free" };
   }
 
-  // Admin/activation_code/manual users don't need a subscription check
+  // Admin/activation_code/manual/manual_code users don't need a subscription check
   // (manual plans use expires_at for expiration, checked below)
-  if (activatedVia === "admin" || activatedVia === "activation_code" || activatedVia === "manual") {
-    // For manual plans, check expiration
-    if (activatedVia === "manual" && entitlement?.expires_at) {
+  if (activatedVia === "admin" || activatedVia === "activation_code" || activatedVia === "manual" || activatedVia === "manual_code") {
+    // For manual/manual_code plans, check expiration
+    if ((activatedVia === "manual" || activatedVia === "manual_code") && entitlement?.expires_at) {
       const expiresAt = new Date(entitlement.expires_at);
       if (expiresAt < new Date()) {
         // Manual plan expired — treat as no subscription
@@ -79,7 +79,7 @@ export async function getSubscriptionStatus(userId: string): Promise<{
 
   if (!subs || subs.length === 0) {
     // No subscription row — user is on free plan unless manually activated
-    if (activatedVia === "admin" || activatedVia === "activation_code" || activatedVia === "manual") {
+    if (activatedVia === "admin" || activatedVia === "activation_code" || activatedVia === "manual" || activatedVia === "manual_code") {
       // Manually activated — already handled above, but safety check
       return { hasActiveSubscription: true, status: "active", provider: activatedVia, planId };
     }
@@ -193,7 +193,7 @@ export async function enforcePaymentStatus(userId: string): Promise<GuardResult>
   }
 
   const statusMessages: Record<string, string> = {
-    free: "Aucun forfait actif. Souscrivez à un forfait pour continuer.",
+    free: "Forfait gratuit — fonctionnalités limitées. Passez à un forfait payant pour débloquer le dispatch et la création de projets.",
     past_due: "Paiement en retard. Mettez à jour votre méthode de paiement pour continuer.",
     expired: "Abonnement expiré. Renouvelez votre forfait pour continuer.",
     canceled: "Abonnement annulé. Réactivez votre forfait pour continuer.",

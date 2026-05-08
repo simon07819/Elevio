@@ -12,18 +12,22 @@ export default async function AdminLoginPage() {
 
   if (user) {
     const profile = await getCurrentProfile();
-    // If user has no active subscription, send to paywall (not to admin/operator which would loop).
-    // Superadmins always pass through.
-    if (profile && profile.account_role !== "superadmin") {
-      const { hasActiveSubscription } = await getSubscriptionStatus(user.id);
-      if (!hasActiveSubscription) {
-        redirect("/paywall");
-      }
+    // Superadmins always go to their workspace.
+    if (profile?.account_role === "superadmin") {
+      redirect("/superadmin");
     }
-    // Redirect to the right workspace based on role
+    // Operators with an active subscription go to the operator terminal.
     if (profile?.account_role === "operator") {
-      redirect("/operator");
+      const { hasActiveSubscription } = await getSubscriptionStatus(user.id);
+      if (hasActiveSubscription) {
+        redirect("/operator");
+      }
+      // Free operator: redirect to admin dashboard which shows upgrade prompt.
+      // Never force the paywall immediately after login.
     }
+    // All other logged-in users (admin, free operator, etc.) go to the
+    // admin dashboard. The dashboard uses requireAdminWithPlan which shows
+    // an UpgradePrompt for free-plan users instead of blocking entirely.
     redirect("/admin");
   }
 
