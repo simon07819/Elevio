@@ -77,7 +77,7 @@ test("mobile: welcome links to onboarding and pricing", () => {
 test("mobile: welcome has operator/passager/admin shortcuts", () => {
   assert.match(WELCOME_SCREEN, /\/operator/, "operator shortcut");
   assert.match(WELCOME_SCREEN, /\/scan/, "passenger shortcut");
-  assert.match(WELCOME_SCREEN, /\/admin\/login/, "admin shortcut");
+  assert.match(WELCOME_SCREEN, /\/admin/, "admin shortcut");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

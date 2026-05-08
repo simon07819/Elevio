@@ -145,7 +145,7 @@ export function WelcomeScreen() {
           Passager
         </Link>
         <span className="text-slate-800">|</span>
-        <Link href="/admin/login" className="text-xs font-bold text-slate-600 hover:text-slate-400">
+        <Link href="/admin" className="text-xs font-bold text-slate-600 hover:text-slate-400">
           Admin
         </Link>
       </div>

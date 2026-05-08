@@ -5,30 +5,28 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { T } from "@/components/i18n/LanguageProvider";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { getCurrentUser, getCurrentProfile } from "@/lib/auth";
-import { getSubscriptionStatus } from "@/lib/billing/planGuards";
 
 export default async function AdminLoginPage() {
   const user = await getCurrentUser();
 
   if (user) {
     const profile = await getCurrentProfile();
-    // Superadmins always go to their workspace.
+    // Superadmins go to their workspace.
     if (profile?.account_role === "superadmin") {
       redirect("/superadmin");
     }
-    // Operators with an active subscription go to the operator terminal.
-    if (profile?.account_role === "operator") {
-      const { hasActiveSubscription } = await getSubscriptionStatus(user.id);
-      if (hasActiveSubscription) {
-        redirect("/operator");
-      }
-      // Free operator: redirect to admin dashboard which shows upgrade prompt.
-      // Never force the paywall immediately after login.
+    // Admins go to the admin dashboard.
+    if (profile?.account_role === "admin") {
+      redirect("/admin");
     }
-    // All other logged-in users (admin, free operator, etc.) go to the
-    // admin dashboard. The dashboard uses requireAdminWithPlan which shows
-    // an UpgradePrompt for free-plan users instead of blocking entirely.
-    redirect("/admin");
+    // Operators go to the operator terminal (regardless of plan).
+    // Free operators see an upgrade prompt there; no redirect loop.
+    if (profile?.account_role === "operator") {
+      redirect("/operator");
+    }
+    // Passengers and other roles: redirect to home scan page.
+    // They don't have access to admin/operator areas.
+    redirect("/");
   }
 
   return (

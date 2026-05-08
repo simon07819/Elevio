@@ -50,7 +50,7 @@ export default function DemoPage() {
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
-              href="/admin/login"
+              href="/admin"
               className="touch-target flex items-center justify-center gap-2 rounded-2xl bg-yellow-400 px-6 py-4 text-sm font-black text-slate-950 transition hover:bg-yellow-300 active:scale-[0.98]"
             >
               <Play size={18} />

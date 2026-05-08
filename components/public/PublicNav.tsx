@@ -9,7 +9,7 @@ const NAV_LINKS = [
   { href: "/pricing", label: "Tarifs" },
   { href: "/scan", label: "Passager" },
   { href: "/operator", label: "Opérateur" },
-  { href: "/admin/login", label: "Admin" },
+  { href: "/admin", label: "Admin" },
 ];
 
 export function PublicNav() {

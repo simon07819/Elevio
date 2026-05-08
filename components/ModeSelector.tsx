@@ -15,7 +15,7 @@ const modes = [
     accent: "text-emerald-200",
   },
   {
-    href: "/admin/login",
+    href: "/admin",
     title: "mode.admin",
     description: "mode.adminBody",
     icon: LockKeyhole,

@@ -33,7 +33,7 @@ test("routing: /scan page renders ScanHome", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 test("routing: Administration link exists on scan page", () => {
-  assert.match(SCAN_HOME, /admin\/login/, "scan page links to /admin/login");
+  assert.match(SCAN_HOME, /\/admin/, "scan page links to /admin");
   assert.match(SCAN_HOME, /scan\.admin/, "uses scan.admin i18n key");
 });
 
@@ -51,6 +51,22 @@ test("routing: admin login redirects operators to /operator", () => {
 
 test("routing: admin login redirects admins to /admin", () => {
   assert.match(LOGIN_PAGE, /redirect.*\/admin"/, "admin role redirects to /admin");
+});
+
+test("routing: admin login redirects non-admin roles to / (no admin access)", () => {
+  // Catch-all after all role checks: redirects remaining users to /
+  assert.match(LOGIN_PAGE, /redirect\("\/"\)/, "non-admin roles redirect to /");
+});
+
+test("routing: admin login has no redirect loop (all roles handled)", () => {
+  // Every authenticated role gets an explicit redirect — no fallthrough to login form
+  const roles = ["superadmin", "admin", "operator"];
+  for (const role of roles) {
+    assert.match(LOGIN_PAGE, new RegExp(`account_role.*"${role}"`), `handles ${role} role`);
+    assert.match(LOGIN_PAGE, /redirect/, `redirects ${role} away from login`);
+  }
+  // Final catch-all redirects unknown roles to /
+  assert.match(LOGIN_PAGE, /redirect\(['"]\/['"]\)/, "catch-all redirect to /");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

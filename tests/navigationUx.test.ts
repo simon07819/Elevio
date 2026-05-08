@@ -170,8 +170,8 @@ test("nav: / (home) renders ScanHome", () => {
   assert.match(HOME_PAGE, /ScanHome/, "home page is ScanHome");
 });
 
-test("nav: WelcomeScreen links to /scan, /operator, /admin/login", () => {
+test("nav: WelcomeScreen links to /scan, /operator, /admin", () => {
   assert.match(WELCOME_SCREEN, /\/scan/, "scan link");
   assert.match(WELCOME_SCREEN, /\/operator/, "operator link");
-  assert.match(WELCOME_SCREEN, /\/admin\/login/, "admin login link");
+  assert.match(WELCOME_SCREEN, /\/admin/, "admin link");
 });
