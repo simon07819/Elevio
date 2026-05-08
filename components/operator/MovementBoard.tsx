@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Inbox, Trash2, Users } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Inbox, Trash2, Users } from "lucide-react";
 import { formatFloorLabel, formatWaitTime } from "@/lib/utils";
 import { type EnrichedRequest, isOperatorMovementQueueStatus } from "@/types/hoist";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
@@ -58,66 +58,101 @@ function MovementTable({
               {t("common.none")}
             </div>
           ) : (
-            visibleRequests.map((request) => (
-              <div
-                key={request.id}
-                className={
-                  request.status === "boarded"
-                    ? recommendedIds.has(request.id)
-                      ? "anim-slide-in grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-sky-100/90 px-3 py-2 text-sm font-bold ring-2 ring-inset ring-sky-300/70"
-                      : "anim-slide-in grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-sky-50 px-3 py-2 text-sm font-bold ring-1 ring-inset ring-sky-200/80"
-                    : recommendedIds.has(request.id)
-                      ? "anim-slide-in grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-yellow-50 px-3 py-2 text-sm font-bold ring-2 ring-inset ring-yellow-300/55"
-                      : "anim-slide-in grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-bold"
-                }
-              >
-                <div className="min-w-0">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
-                      {request.status === "boarded" ? "Déposer" : "Ramasser"}
-                    </span>
-                    <span className="truncate text-xl font-black tabular-nums text-slate-950">
-                      {formatFloorLabel(request.from_floor)}
-                    </span>
-                    <Icon className={`shrink-0 ${arrowTone}`} size={19} strokeWidth={2.8} />
-                    <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
-                      vers
-                    </span>
-                    <span className="truncate text-xl font-black tabular-nums text-slate-950">
-                      {formatFloorLabel(request.to_floor)}
-                    </span>
-                  </div>
+            visibleRequests.map((request) => {
+              const isPriority = request.priority === true;
 
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <span className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-800">
-                      <Users size={16} /> {request.passenger_count} {t("common.passengers").toLowerCase()}
-                    </span>
-                    <span className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-800">
-                      {t("common.wait")} {formatWaitTime(request.wait_started_at)}
-                    </span>
-                    {request.status === "boarded" ? (
-                      <span className="rounded-xl bg-sky-600/20 px-3 py-2 text-sm font-black text-sky-950">
-                        {t("operator.onBoard")}
+              // Priority rows: red/orange background with pulsing border
+              const priorityRowClass = isPriority
+                ? "anim-pulse-priority grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border-2 border-red-400/60 bg-gradient-to-r from-red-50 via-orange-50 to-red-50 px-3 py-3 text-sm font-bold shadow-lg shadow-red-200/30"
+                : request.status === "boarded"
+                  ? recommendedIds.has(request.id)
+                    ? "anim-slide-in grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-sky-100/90 px-3 py-2 text-sm font-bold ring-2 ring-inset ring-sky-300/70"
+                    : "anim-slide-in grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-sky-50 px-3 py-2 text-sm font-bold ring-1 ring-inset ring-sky-200/80"
+                  : recommendedIds.has(request.id)
+                    ? "anim-slide-in grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-yellow-50 px-3 py-2 text-sm font-bold ring-2 ring-inset ring-yellow-300/55"
+                    : "anim-slide-in grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-bold";
+
+              return (
+                <div key={request.id} className={priorityRowClass}>
+                  <div className="min-w-0">
+                    {/* Priority banner — first thing visible */}
+                    {isPriority && (
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-base font-black text-white anim-pulse-priority-badge">
+                          <AlertTriangle size={18} className="shrink-0" />
+                          PRIORITÉ
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Floor info row */}
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className={`text-xs font-black uppercase tracking-[0.14em] ${isPriority ? "text-red-700" : "text-slate-500"}`}>
+                        {request.status === "boarded" ? "Déposer" : "Ramasser"}
                       </span>
-                    ) : null}
-                  </div>
-                </div>
+                      <span className={`truncate text-xl font-black tabular-nums ${isPriority ? "text-red-900" : "text-slate-950"}`}>
+                        {formatFloorLabel(request.from_floor)}
+                      </span>
+                      <Icon className={`shrink-0 ${isPriority ? "text-red-500" : arrowTone}`} size={19} strokeWidth={2.8} />
+                      <span className={`text-xs font-black uppercase tracking-[0.14em] ${isPriority ? "text-red-700" : "text-slate-500"}`}>
+                        vers
+                      </span>
+                      <span className={`truncate text-xl font-black tabular-nums ${isPriority ? "text-red-900" : "text-slate-950"}`}>
+                        {formatFloorLabel(request.to_floor)}
+                      </span>
+                    </div>
 
-                {request.status === "boarded" || !onCancelRequest ? null : (
-                  <button
-                    type="button"
-                    aria-label={t("requests.cancel")}
-                    title={t("requests.cancel")}
-                    disabled={cancelingIds.has(request.id)}
-                    onClick={() => onCancelRequest(request)}
-                    className="touch-target inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-2xl border-2 border-red-200 bg-red-50 px-3 py-2 text-sm font-black text-red-800 shadow-sm transition active:scale-[0.98] disabled:opacity-45"
-                  >
-                    <Trash2 size={18} />
-                    {t("requests.cancel")}
-                  </button>
-                )}
-              </div>
-            ))
+                    {/* Priority reason — large, impossible to miss */}
+                    {isPriority && request.priority_reason && (
+                      <div className="mt-2 rounded-xl border border-red-300/50 bg-red-100/70 px-4 py-2.5">
+                        <p className="text-base font-black text-red-900 leading-snug">
+                          {request.priority_reason}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Passenger note (for both priority and normal) */}
+                    {request.note && (
+                      <div className={`mt-2 rounded-xl px-3 py-2 ${isPriority ? "bg-orange-100/60 border border-orange-300/40 text-orange-900" : "bg-slate-100 text-slate-600"}`}>
+                        <p className={`text-sm font-bold leading-snug ${isPriority ? "text-orange-900" : "text-slate-500"}`}>
+                          {isPriority ? <span className="font-black text-orange-700">Note : </span> : null}
+                          {request.note}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Info badges row */}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-800">
+                        <Users size={16} /> {request.passenger_count} {t("common.passengers").toLowerCase()}
+                      </span>
+                      <span className={`rounded-xl px-3 py-2 text-sm font-black ${isPriority ? "bg-red-100 text-red-800" : "bg-slate-100 text-slate-800"}`}>
+                        {t("common.wait")} {formatWaitTime(request.wait_started_at)}
+                      </span>
+                      {request.status === "boarded" ? (
+                        <span className="rounded-xl bg-sky-600/20 px-3 py-2 text-sm font-black text-sky-950">
+                          {t("operator.onBoard")}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {request.status === "boarded" || !onCancelRequest ? null : (
+                    <button
+                      type="button"
+                      aria-label={t("requests.cancel")}
+                      title={t("requests.cancel")}
+                      disabled={cancelingIds.has(request.id)}
+                      onClick={() => onCancelRequest(request)}
+                      className={`touch-target inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-2xl border-2 shadow-sm transition active:scale-[0.98] disabled:opacity-45 ${isPriority ? "border-red-300 bg-red-100 px-4 py-2.5 text-sm font-black text-red-900 hover:bg-red-200" : "border-red-200 bg-red-50 px-3 py-2 text-sm font-black text-red-800"}`}
+                    >
+                      <Trash2 size={18} />
+                      {t("requests.cancel")}
+                    </button>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </div>

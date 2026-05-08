@@ -38,6 +38,7 @@ import {
 import { CapacityPanel } from "@/components/operator/CapacityPanel";
 import { T, useLanguage } from "@/components/i18n/LanguageProvider";
 import { MovementBoard } from "@/components/operator/MovementBoard";
+import { PriorityAlertBanner } from "@/components/operator/PriorityAlertBanner";
 import { RecommendedNextStop } from "@/components/operator/RecommendedNextStop";
 import { useNetworkStatus } from "@/lib/useNetworkStatus";
 
@@ -48,6 +49,19 @@ const directionKeys = {
 } satisfies Record<Direction, TranslationKey>;
 const OPERATOR_VISIBLE_REQUEST_STATUSES = ["pending", "assigned", "arriving", "boarded"] as const;
 const OPTIMISTIC_REQUEST_TTL_MS = 30_000;
+
+/** Trigger haptic feedback on iOS when a priority request arrives */
+function tryHapticForPriority() {
+  try {
+    if (typeof window !== "undefined" && "Capacitor" in window) {
+      // Use Capacitor bridge directly — no npm package needed
+      (window as unknown as { Capacitor: { nativeCallback?: (method: string, opts: Record<string, string>) => void } }).Capacitor?.nativeCallback?.("haptic", { style: "heavy" });
+    }
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate([200, 100, 200]);
+    }
+  } catch { /* non-critical */ }
+}
 
 export function OperatorDashboard({
   floors = demoFloors,
@@ -187,6 +201,10 @@ export function OperatorDashboard({
               ? payload
               : ({ ...payload, new: applyOptimisticRequest(payload.new) } satisfies RequestRealtimePayload);
           setLiveRequests((current) => mergeRealtimeRequest(current, nextPayload));
+          // Haptic + sound alert for priority requests
+          if (payload.eventType !== "DELETE" && payload.new.priority === true && payload.new.status === "pending") {
+            tryHapticForPriority();
+          }
         },
       }),
     );
@@ -1099,12 +1117,18 @@ export function OperatorDashboard({
             <p className="text-sm font-bold text-slate-500"><T k="operator.emptyQueueHint" /></p>
           </div>
         ) : (
-          <MovementBoard
+          <>
+            {/* Priority alert banner — impossible to miss at the top */}
+            {prioritiesEnabled && priorityCount > 0 && (
+              <PriorityAlertBanner priorityRequests={activeQueue.filter((r) => r.priority)} />
+            )}
+            <MovementBoard
             requests={activeQueue}
             recommendedIds={visibleRecommendedIds}
             onCancelRequest={cancelMovementRequest}
-            cancelingIds={cancelingRequestIds}
-          />
+              cancelingIds={cancelingRequestIds}
+            />
+          </>
         )}
       </section>
     </div>
