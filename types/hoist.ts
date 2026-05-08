@@ -10,6 +10,32 @@ export type RequestStatus =
   | "completed"
   | "cancelled";
 
+/**
+ * Statuts où le passager attend un ramassage — bloque une nouvelle demande.
+ * "boarded" n'est PAS inclus : le passager est en transit et peut refaire
+ * une demande après avoir été déposé. La RPC passenger_has_open_request
+ * utilise cette même liste.
+ */
+export const ACTIVE_PASSENGER_REQUEST_STATUSES: readonly RequestStatus[] = [
+  "pending",
+  "assigned",
+  "arriving",
+] as const;
+
+/** Terminal statuses — passenger can always create a new request. */
+export const TERMINAL_PASSENGER_REQUEST_STATUSES: readonly RequestStatus[] = [
+  "completed",
+  "cancelled",
+] as const;
+
+export function isActivePassengerRequestStatus(status: RequestStatus): boolean {
+  return (ACTIVE_PASSENGER_REQUEST_STATUSES as readonly string[]).includes(status);
+}
+
+export function isTerminalPassengerRequestStatus(status: RequestStatus): boolean {
+  return (TERMINAL_PASSENGER_REQUEST_STATUSES as readonly string[]).includes(status);
+}
+
 /** Snapshot RPC `resume_passenger_request` (QR + id de demande). */
 export type PassengerResumeSnapshot = {
   requestId: string;

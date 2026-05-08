@@ -11,7 +11,7 @@ import {
 } from "@/lib/demoData";
 import { createClient } from "@/lib/supabase/client";
 import { clearSkippedRequestsForElevator } from "@/lib/actions";
-import { broadcastPassengerQueueCleared, broadcastPassengerRequestBoarded, broadcastPassengerRequestCancelled, passengerProjectBroadcastChannel } from "@/lib/passengerNotifyBroadcast";
+import { broadcastPassengerQueueCleared, broadcastPassengerRequestBoarded, broadcastPassengerRequestCancelled, broadcastPassengerRequestCompleted, passengerProjectBroadcastChannel } from "@/lib/passengerNotifyBroadcast";
 import {
   bindRealtimeWithAuthSession,
   mergeOperatorPollRequest,
@@ -997,6 +997,12 @@ export function OperatorDashboard({
         onDropoffSuccess={({ requestIds, dropFloorId }) => {
           const now = new Date().toISOString();
           logAction("dropoffSuccess", { requestIds, dropFloorId, count: requestIds.length });
+
+          // Broadcast passenger dropoff completion — passenger can now re-request
+          const client = createClient();
+          if (client) {
+            broadcastPassengerRequestCompleted(client, projectId, requestIds);
+          }
           // Clear direction override after dropoff — cycle changes
           setDirectionOverride(null);
           // Clear skip markers after dropoff — cycle changes, skipped requests become eligible again

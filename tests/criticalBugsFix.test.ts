@@ -21,15 +21,22 @@ const OPERATOR_PAGE = readFileSync(join(root, "app/operator/page.tsx"), "utf8");
 // BUG 1: Passenger blocked after completed request
 // ═══════════════════════════════════════════════════════════════════════════
 
-test("passenger: RPC blocks only active statuses (pending, assigned, arriving, boarded)", () => {
-  // Statuses are on a single line with commas
-  assert.match(RPC_GUARD, /'pending'.*'assigned'.*'arriving'.*'boarded'/s, "RPC includes all 4 active statuses");
+test("passenger: RPC blocks only active statuses (pending, assigned, arriving) — NOT boarded", () => {
+  // "boarded" does NOT block — passenger is in transit and may re-request after dropoff.
+  // The completed/cancelled status arrives asynchronously, and passenger_device_key
+  // is cleared on completed/cancelled as defense-in-depth.
+  assert.match(RPC_GUARD, /'pending'.*'assigned'.*'arriving'/s, "RPC includes pending/assigned/arriving");
+  assert.doesNotMatch(RPC_GUARD, /'boarded'/, "RPC does NOT block boarded — passenger can re-request after dropoff");
   assert.doesNotMatch(RPC_GUARD, /'completed'/, "RPC does NOT block completed");
   assert.doesNotMatch(RPC_GUARD, /'cancelled'/, "RPC does NOT block cancelled");
 });
 
 test("passenger: schema.sql matches RPC guard statuses", () => {
-  assert.match(SCHEMA, /'pending'.*'assigned'.*'arriving'.*'boarded'/s, "schema.sql includes all 4 active statuses");
+  // Extract just the passenger_has_open_request function body
+  const rpcFn = SCHEMA.match(/passenger_has_open_request[\s\S]*?\$\$;/);
+  assert.ok(rpcFn, "found passenger_has_open_request function in schema.sql");
+  assert.match(rpcFn[0], /'pending'.*'assigned'.*'arriving'/s, "includes pending/assigned/arriving");
+  assert.doesNotMatch(rpcFn[0], /'boarded'/, "does NOT include boarded");
 });
 
 test("passenger: completed/cancelled clears passenger_device_key in DB", () => {

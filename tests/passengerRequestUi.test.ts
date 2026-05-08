@@ -36,14 +36,16 @@ test("ramasser notifie instantanement le passager de retourner au scan", () => {
   assert.match(form, /router\.replace\("\/"\)/);
 });
 
-test("la protection anti-double-demande bloque pending/assigned/arriving/boarded mais pas completed/cancelled", () => {
+test("la protection anti-double-demande bloque pending/assigned/arriving mais PAS boarded/completed/cancelled", () => {
   const guard = readFileSync(join(root, "supabase/passenger-device-open-request-guard.sql"), "utf8");
   const schema = readFileSync(join(root, "supabase/schema.sql"), "utf8");
 
-  // boarded IS included — a boarded passenger is still active and cannot create a second request
-  // completed/cancelled are NOT included — they are terminal statuses, passenger_device_key is cleared
-  assert.match(guard, /'pending'.*'assigned'.*'arriving'.*'boarded'/s);
-  assert.match(schema, /'pending'.*'assigned'.*'arriving'.*'boarded'/s);
+  // boarded is NOT included — a boarded passenger is in transit and may
+  // re-request after being dropped off. The completed status arrives
+  // asynchronously, and passenger_device_key is cleared as defense-in-depth.
+  assert.match(guard, /'pending'.*'assigned'.*'arriving'/s);
+  assert.match(schema, /'pending'.*'assigned'.*'arriving'/s);
+  assert.doesNotMatch(guard, /'boarded'/);
   assert.doesNotMatch(guard, /'completed'/);
   assert.doesNotMatch(guard, /'cancelled'/);
 });

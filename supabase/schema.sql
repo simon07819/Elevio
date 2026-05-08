@@ -675,10 +675,12 @@ as $$
     from requests r
     where r.project_id = p_project_id
       and r.passenger_device_key = p_device_key
-      -- Bloque seulement les demandes qui attendent encore un ramassage.
-      -- Une demande "boarded" ne doit pas empecher un nouveau scan apres que le
-      -- passager a quitte l'ascenseur, meme si la sync de depose arrive en retard.
-      and r.status in ('pending', 'assigned', 'arriving', 'boarded')
+      -- Only block if the passenger is WAITING for pickup.
+      -- "boarded" does NOT block — the passenger is in transit and may
+      -- re-request after being dropped off. The completed/cancelled status
+      -- arrives asynchronously, and passenger_device_key is cleared on
+      -- completed/cancelled as defense-in-depth.
+      and r.status in ('pending', 'assigned', 'arriving')
   );
 $$;
 

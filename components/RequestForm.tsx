@@ -14,6 +14,7 @@ import {
   PASSENGER_BROADCAST_QUEUE_CLEARED,
   PASSENGER_BROADCAST_REQUEST_BOARDED,
   PASSENGER_BROADCAST_REQUEST_CANCELLED,
+  PASSENGER_BROADCAST_REQUEST_COMPLETED,
   passengerProjectBroadcastChannel,
 } from "@/lib/passengerNotifyBroadcast";
 import { subscribeToTable, unsubscribe, type ElevatorRealtimePayload } from "@/lib/realtime";
@@ -21,6 +22,7 @@ import { logSync, logAction } from "@/lib/stateResolution";
 import { formatFloorLabel } from "@/lib/utils";
 import { demoProject } from "@/lib/demoData";
 import type { Elevator, Floor, Project, RequestStatus } from "@/types/hoist";
+import { isActivePassengerRequestStatus, isTerminalPassengerRequestStatus as isTerminalPassengerStatus } from "@/types/hoist";
 import {
   analyzePassengerDispatch,
   passengerDispatchOperatorSummaries,
@@ -62,13 +64,14 @@ const PASSENGER_ELEVATORS_SELECT =
   "id,project_id,name,current_floor_id,direction,capacity,current_load,active,operator_session_id,operator_display_name,operator_session_heartbeat_at,service_start_time,service_end_time,manual_full";
 const PASSENGER_ACTIVE_REQUEST_POLL_MS = 250;
 
+/** Terminal statuses — passenger can always create a new request. */
 function isTerminalPassengerRequestStatus(status: RequestStatus): boolean {
-  return status === "completed" || status === "cancelled";
+  return isTerminalPassengerStatus(status);
 }
 
-/** Après ramassage opérateur : plus de suivi passager — retour scan QR requis. */
+/** After operator pickup: no more passenger tracking — QR scan return. */
 function clearsPassengerPendingStorage(status: RequestStatus): boolean {
-  return status === "boarded" || status === "completed";
+  return status === "boarded" || isTerminalPassengerRequestStatus(status);
 }
 
 /** Quand le passager annule lui-même : on reste dans le flow de sélection. */
@@ -188,6 +191,23 @@ export function RequestForm({
           clearPassengerPendingRequest(project.id, rid);
           setSubmittedRequest(null);
           setMessage(t("request.cancelledByOperator"));
+        },
+      )
+      .on(
+        "broadcast",
+        { event: PASSENGER_BROADCAST_REQUEST_COMPLETED },
+        (msg: { payload?: { requestIds?: string[] } | string[] }) => {
+          const rid = requestIdRef.current;
+          const raw = msg.payload;
+          const ids = Array.isArray(raw) ? raw : raw?.requestIds;
+          logSync("passengerBroadcast", { event: "request_completed", rid: rid?.slice(0,8), match: ids?.includes(rid ?? "") });
+          if (!rid) return;
+          if (!ids?.includes(rid)) return;
+          logAction("passengerRequestCompleted", { requestId: rid.slice(0,8), source: "broadcast_pre_subbed" });
+          clearPassengerPendingRequest(project.id, rid);
+          setSubmittedRequest(null);
+          // Don't set message — passenger is already on QR screen after boarding
+          // This just ensures localStorage is clean and they can re-request
         },
       );
 
@@ -478,6 +498,18 @@ export function RequestForm({
           clearPassengerPendingRequest(project.id, rid);
           setSubmittedRequest(null);
           setMessage(t("request.cancelledByOperator"));
+        },
+      )
+      .on(
+        "broadcast",
+        { event: PASSENGER_BROADCAST_REQUEST_COMPLETED },
+        (msg: { payload?: { requestIds?: string[] } | string[] }) => {
+          const raw = msg.payload;
+          const ids = Array.isArray(raw) ? raw : raw?.requestIds;
+          if (!ids?.includes(rid)) return;
+          logAction("passengerRequestCompleted", { requestId: rid.slice(0,8), source: "broadcast_fallback" });
+          clearPassengerPendingRequest(project.id, rid);
+          setSubmittedRequest(null);
         },
       )
       .subscribe();

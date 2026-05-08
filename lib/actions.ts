@@ -336,6 +336,9 @@ function revalidateAdminProject(projectId: string) {
 }
 
 const REQUESTS_OPEN_DURING_SERVICE: RequestStatus[] = ["pending", "assigned", "arriving", "boarded"];
+// NOTE: passenger_has_open_request RPC uses a SUBSET of these:
+// ('pending', 'assigned', 'arriving') — "boarded" does NOT block the passenger
+// from creating a new request. See ACTIVE_PASSENGER_REQUEST_STATUSES in types/hoist.ts.
 const WAITING_STATUSES = new Set<RequestStatus>(["pending", "assigned", "arriving"]);
 
 /** Legal forward-only status transitions. Terminal statuses (completed, cancelled) have no outgoing edges. */

@@ -1,10 +1,16 @@
--- Evite plusieurs demandes ouvertes depuis le meme telephone (cle localStorage envoyee avec le formulaire).
--- Les lignes fractionnees partagent la meme passenger_device_key.
+-- Prevents multiple open requests from the same device (localStorage key sent with form).
+-- Split rows share the same passenger_device_key.
 --
--- ACTIVE_STATUSES: bloque la creation si une demande est en cours de traitement.
--- TERMINAL_STATUSES: completed/cancelled ne bloquent jamais.
--- boarded: le passager est dans l'ascenseur — on ne bloque PAS car il pourrait
--- vouloir re-demander apres avoir ete depose (le statut completed arrive ensuite).
+-- BLOCKING STATUSES: only statuses where the passenger is WAITING for pickup.
+-- Once the passenger is boarded (inside elevator), they should be able to create
+-- a new request immediately — the operator will drop them off and the completed
+-- status arrives asynchronously. Blocking on "boarded" causes the bug where a
+-- passenger cannot re-request after being dropped off.
+--
+-- TERMINAL STATUSES (completed, cancelled, expired, no_show) never block.
+-- "boarded" does NOT block — passenger is in transit and may re-request after dropoff.
+-- The passenger_device_key is cleared on completed/cancelled in updateRequestStatus()
+-- as a defense-in-depth measure.
 
 alter table requests add column if not exists passenger_device_key uuid;
 
@@ -23,7 +29,7 @@ as $$
     from requests r
     where r.project_id = p_project_id
       and r.passenger_device_key = p_device_key
-      and r.status in ('pending', 'assigned', 'arriving', 'boarded')
+      and r.status in ('pending', 'assigned', 'arriving')
   );
 $$;
 

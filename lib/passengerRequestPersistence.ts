@@ -1,4 +1,5 @@
 import type { Floor, RequestStatus } from "@/types/hoist";
+import { ACTIVE_PASSENGER_REQUEST_STATUSES, TERMINAL_PASSENGER_REQUEST_STATUSES } from "@/types/hoist";
 
 const STORAGE_PREFIX = "elevio-passenger-pending";
 
@@ -46,11 +47,14 @@ export type PassengerPendingRequestSnapshot = {
   status?: RequestStatus;
 };
 
-/** True tant que le snapshot local correspond au suivi passager (masquer « Scanner un code QR »). */
+/** True as long as the local snapshot corresponds to passenger tracking (hide "Scanner un code QR"). */
 export function passengerPendingSnapshotIndicatesTracking(snap: PassengerPendingRequestSnapshot | null): boolean {
   if (!snap) return false;
   const st = snap.status ?? "pending";
-  return st !== "completed" && st !== "cancelled" && st !== "boarded";
+  // Active statuses indicate tracking. "boarded" is NOT active for tracking
+  // purposes — the passenger is in the elevator and has been redirected to QR.
+  // Terminal statuses (completed, cancelled) also don't block.
+  return (ACTIVE_PASSENGER_REQUEST_STATUSES as readonly string[]).includes(st);
 }
 
 export function parsePassengerPendingSnapshot(raw: string): PassengerPendingRequestSnapshot | null {

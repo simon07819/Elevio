@@ -9,6 +9,8 @@ export const PASSENGER_BROADCAST_QUEUE_CLEARED = "queue_cleared";
 export const PASSENGER_BROADCAST_REQUEST_BOARDED = "request_boarded";
 /** Emis par l'operateur quand il annule une demande individuelle ; payload : ID de la demande. */
 export const PASSENGER_BROADCAST_REQUEST_CANCELLED = "request_cancelled";
+/** Emis par l'operateur apres "Deposer" ; payload : IDs des demandes completees. */
+export const PASSENGER_BROADCAST_REQUEST_COMPLETED = "request_completed";
 
 export function passengerProjectBroadcastChannel(projectId: string) {
   return `proj:${projectId}:passengers`;
@@ -28,6 +30,10 @@ export function broadcastPassengerRequestBoarded(client: SupabaseClient, project
 
 export function broadcastPassengerRequestCancelled(client: SupabaseClient, projectId: string, requestId: string): void {
   broadcastPassengerRequestIds(client, projectId, PASSENGER_BROADCAST_REQUEST_CANCELLED, [requestId]);
+}
+
+export function broadcastPassengerRequestCompleted(client: SupabaseClient, projectId: string, requestIds: string[]): void {
+  broadcastPassengerRequestIds(client, projectId, PASSENGER_BROADCAST_REQUEST_COMPLETED, requestIds);
 }
 
 function broadcastPassengerRequestIds(
