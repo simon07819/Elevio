@@ -1,20 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Check, Crown, Loader2, Rocket, Sparkles, Zap, ArrowLeft } from "lucide-react";
 import { PLANS, IAP_PLANS, type PlanId } from "@/lib/billing/plans";
 import { activateEnterpriseCode, type ActivationResult } from "@/lib/billing/activation";
-import { purchaseProduct } from "@/lib/billing/revenuecat";
+import { purchaseProduct, getOfferings, type Offering } from "@/lib/billing/revenuecat";
+import { getProductId } from "@/lib/billing/productIds";
 import { startStripeCheckout } from "@/lib/billing/stripeCheckoutAction";
 import { isIOS } from "@/lib/platform";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-function PlanCard({ planId, period, onSubscribe, isIOSPlatform, loading }: { planId: PlanId; period: "monthly" | "annual"; onSubscribe: (planId: PlanId, period: "monthly" | "annual") => void; isIOSPlatform: boolean; loading: boolean }) {
+function PlanCard({ planId, period, onSubscribe, isIOSPlatform, loading, offeringPrice }: { planId: PlanId; period: "monthly" | "annual"; onSubscribe: (planId: PlanId, period: "monthly" | "annual") => void; isIOSPlatform: boolean; loading: boolean; offeringPrice?: string }) {
   const plan = PLANS[planId];
   const isAnnual = period === "annual";
-  const displayPrice = isAnnual && plan.priceAnnual !== null ? plan.priceAnnual : plan.priceMonthly;
-  const priceLabel = isAnnual ? "$CA/an" : "$CA/mois";
+
+  // Use real RevenueCat price on iOS, static price on web
+  const displayPrice = isIOSPlatform && offeringPrice
+    ? offeringPrice
+    : (isAnnual && plan.priceAnnual !== null ? `${plan.priceAnnual}` : `${plan.priceMonthly}`);
+  const priceLabel = isAnnual ? (isIOSPlatform ? "/an" : "$CA/an") : (isIOSPlatform ? "/mois" : "$CA/mois");
   const altPrice = isAnnual && plan.priceMonthly !== null ? `${plan.priceMonthly} $CA/mois` : plan.priceAnnual !== null ? `${plan.priceAnnual} $CA/an` : null;
 
   return (
@@ -37,7 +42,7 @@ function PlanCard({ planId, period, onSubscribe, isIOSPlatform, loading }: { pla
               <span className="text-3xl font-black text-white">{displayPrice}</span>
               <span className="text-sm font-bold text-slate-400">{priceLabel}</span>
             </div>
-            {altPrice && (
+            {altPrice && !isIOSPlatform && (
               <p className="text-sm font-bold text-slate-500">{altPrice}</p>
             )}
             {isAnnual && (
@@ -66,7 +71,7 @@ function PlanCard({ planId, period, onSubscribe, isIOSPlatform, loading }: { pla
           disabled={loading}
           className={`touch-target w-full rounded-2xl px-4 py-3 text-sm font-black uppercase tracking-wide transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-wait ${plan.popular ? "bg-sky-400 text-slate-950 hover:bg-sky-300" : "bg-white/10 text-white hover:bg-white/15"}`}
         >
-          {loading ? "…" : "Choisir ce forfait"}
+          {loading ? <Loader2 size={16} className="anim-spinner inline" /> : "Choisir ce forfait"}
         </button>
       ) : null}
     </div>
@@ -100,7 +105,7 @@ function EnterpriseContactCard({ isIOSPlatform }: { isIOSPlatform: boolean }) {
         <Feature text="Activation par code" />
       </ul>
       <div className="grid gap-3 sm:grid-cols-2">
-        {/* On iOS: only activation code (no external email link — App Store rule) */}
+        {/* On iOS: only activation code (no external email link -- App Store rule 3.1.1) */}
         {!isIOSPlatform && (
           <a
             href="mailto:simon@dsdconstruction.ca?subject=Demande%20devis%20Elevio%20Business"
@@ -179,42 +184,64 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
   const [subscribingPlanId, setSubscribingPlanId] = useState<PlanId | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [period, setPeriod] = useState<"monthly" | "annual">("annual");
+  const [offerings, setOfferings] = useState<Offering[]>([]);
+  const [loadingOfferings, setLoadingOfferings] = useState(false);
   const iosPlatform = isIOS();
+
+  // Load RevenueCat offerings on iOS for real-time App Store prices
+  useEffect(() => {
+    if (!iosPlatform) return;
+    let cancelled = false;
+    setLoadingOfferings(true);
+    getOfferings()
+      .then((off) => {
+        if (!cancelled) setOfferings(off);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoadingOfferings(false);
+      });
+    return () => { cancelled = true; };
+  }, [iosPlatform]);
+
+  // Get the real price for a plan+period from loaded offerings
+  function getOfferingPrice(planId: "starter" | "pro", billingPeriod: "monthly" | "annual"): string | undefined {
+    const match = offerings.find((o) => o.planId === planId && o.period === billingPeriod);
+    return match?.price;
+  }
 
   async function handleSubscribe(planId: PlanId, selectedPeriod: "monthly" | "annual") {
     // Anti-spam: prevent double-click / rage-tap
     if (subscribingPlanId) return;
     setSubscribingPlanId(planId);
     try {
-    if (iosPlatform) {
-      // iOS: RevenueCat IAP ONLY — never Stripe
-      const productId = selectedPeriod === "annual"
-        ? (planId === "starter" ? "com.elevio.starter.annual" : "com.elevio.pro.annual")
-        : (planId === "starter" ? "com.elevio.starter.monthly" : "com.elevio.pro.monthly");
-      const result = await purchaseProduct(productId);
-      if (result.ok) {
-        router.push("/operator");
+      if (iosPlatform) {
+        // iOS: RevenueCat IAP ONLY -- never Stripe
+        const productId = getProductId(planId as "starter" | "pro", selectedPeriod);
+        const result = await purchaseProduct(productId);
+        if (result.ok) {
+          router.push("/operator");
+          return;
+        }
+        setIapMessage(result.error ?? "Erreur d'achat.");
+        setTimeout(() => setIapMessage(null), 5000);
         return;
       }
-      setIapMessage(result.error ?? "Erreur d'achat.");
-      setTimeout(() => setIapMessage(null), 5000);
-      return;
-    }
 
-    // Web: Stripe Checkout via server action (iOS already handled above)
-    const result = await startStripeCheckout({
-      planId,
-      period: selectedPeriod,
-      userId,
-      email,
-    });
+      // Web: Stripe Checkout via server action (iOS already handled above)
+      const result = await startStripeCheckout({
+        planId,
+        period: selectedPeriod,
+        userId,
+        email,
+      });
 
-    if (result.url) {
-      window.location.href = result.url;
-    } else {
-      setIapMessage(result.error ?? "Paiement non disponible pour le moment.");
-      setTimeout(() => setIapMessage(null), 5000);
-    }
+      if (result.url) {
+        window.location.href = result.url;
+      } else {
+        setIapMessage(result.error ?? "Paiement non disponible pour le moment.");
+        setTimeout(() => setIapMessage(null), 5000);
+      }
     } finally {
       setSubscribingPlanId(null);
     }
@@ -262,10 +289,26 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
         </div>
       </div>
 
+      {/* Loading indicator for iOS offerings */}
+      {iosPlatform && loadingOfferings && (
+        <div className="text-center mb-4">
+          <Loader2 size={20} className="anim-spinner inline text-slate-400" />
+          <span className="ml-2 text-sm font-bold text-slate-400">Chargement des prix App Store...</span>
+        </div>
+      )}
+
       {/* IAP plans: Starter + Pro */}
       <div className="grid gap-6 mb-8 sm:grid-cols-2">
         {IAP_PLANS.map((planId) => (
-          <PlanCard key={planId} planId={planId} period={period} onSubscribe={handleSubscribe} isIOSPlatform={iosPlatform} loading={subscribingPlanId === planId} />
+          <PlanCard
+            key={planId}
+            planId={planId}
+            period={period}
+            onSubscribe={handleSubscribe}
+            isIOSPlatform={iosPlatform}
+            loading={subscribingPlanId === planId}
+            offeringPrice={getOfferingPrice(planId as "starter" | "pro", period)}
+          />
         ))}
       </div>
 
@@ -291,14 +334,14 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
         </p>
       </div>
 
-      {/* No "pay on website" text on iOS — App Store rule 3.1.1 */}
+      {/* No "pay on website" text on iOS -- App Store rule 3.1.1 */}
       {!iosPlatform && (
         <p className="mt-6 text-center text-xs font-bold text-slate-500">
           Tous les forfaits incluent l&apos;accès au dispatch en temps réel et au suivi par QR.
         </p>
       )}
 
-      {/* Restore Purchases — required by App Store for IAP apps */}
+      {/* Restore Purchases -- required by App Store for IAP apps */}
       {iosPlatform && (
         <div className="mt-6 text-center">
           <button
@@ -308,21 +351,21 @@ export function PaywallClient({ userId, email }: { userId: string; email: string
               if (restoring) return;
               setRestoring(true);
               try {
-              const { restorePurchases } = await import("@/lib/billing/revenuecat");
-              const entitlement = await restorePurchases();
-              if (entitlement?.isActive) {
-                router.push("/operator");
-              } else {
-                setIapMessage("Aucun achat antérieur trouvé.");
-                setTimeout(() => setIapMessage(null), 5000);
-              }
+                const { restorePurchases } = await import("@/lib/billing/revenuecat");
+                const entitlement = await restorePurchases();
+                if (entitlement?.isActive) {
+                  router.push("/operator");
+                } else {
+                  setIapMessage("Aucun achat antérieur trouvé.");
+                  setTimeout(() => setIapMessage(null), 5000);
+                }
               } finally {
                 setRestoring(false);
               }
             }}
             className="text-xs font-bold text-slate-500 hover:text-slate-300 underline disabled:opacity-50 disabled:cursor-wait"
           >
-            {restoring ? "Restauration en cours…" : "Restaurer les achats"}
+            {restoring ? "Restauration en cours..." : "Restaurer les achats"}
           </button>
         </div>
       )}

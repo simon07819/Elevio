@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { isCapacitorNative } from "@/lib/platform";
 import { configureRevenueCat, getCustomerEntitlement, logOutRevenueCat } from "@/lib/billing/revenuecat";
+import { getProductId } from "@/lib/billing/productIds";
 import { createClient } from "@/lib/supabase/client";
 import { captureError } from "@/lib/errorTracking";
 
@@ -141,7 +142,7 @@ async function syncEntitlementFromRC(userId: string): Promise<void> {
         billing_period: "monthly",
         status: "active",
         current_period_end: rcEntitlement.expiresAt ?? null,
-        price_id: rcEntitlement.planId === "pro" ? "com.elevio.pro.monthly" : "com.elevio.starter.monthly",
+        price_id: getProductId(rcEntitlement.planId as "starter" | "pro", "monthly"),
       }, { onConflict: "user_id,provider,provider_subscription_id" });
 
       if (subError) {

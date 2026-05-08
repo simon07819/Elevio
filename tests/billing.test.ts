@@ -87,10 +87,10 @@ test("billing: Enterprise plan — unlimited, activation code, custom contract",
 // 6. Product IDs exist
 // ═══════════════════════════════════════════════════════════════════
 test("billing: 4 Apple product IDs defined", () => {
-  assert.match(PRODUCT_IDS, /com\.elevio\.starter\.monthly/, "starter monthly");
-  assert.match(PRODUCT_IDS, /com\.elevio\.starter\.annual/, "starter annual");
-  assert.match(PRODUCT_IDS, /com\.elevio\.pro\.monthly/, "pro monthly");
-  assert.match(PRODUCT_IDS, /com\.elevio\.pro\.annual/, "pro annual");
+  assert.match(PRODUCT_IDS, /elevio_starter_monthly/, "starter monthly");
+  assert.match(PRODUCT_IDS, /elevio_starter_yearly/, "starter yearly");
+  assert.match(PRODUCT_IDS, /elevio_pro_monthly/, "pro monthly");
+  assert.match(PRODUCT_IDS, /elevio_pro_yearly/, "pro yearly");
 });
 
 // ═══════════════════════════════════════════════════════════════════

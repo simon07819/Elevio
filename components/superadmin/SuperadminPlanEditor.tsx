@@ -139,7 +139,7 @@ export function SuperadminPlanEditor() {
                 <BoolReadonly label="Efficiency Score" checked={plan.efficiency_score} />
                 <BoolReadonly label="Multi-Operator" checked={plan.multi_operator} />
                 <BoolReadonly label="IAP" checked={plan.iap_available} />
-                <Readonly label="RevenueCat Product ID" value={plan.id === "starter" ? "com.elevio.starter.monthly / .annual" : plan.id === "pro" ? "com.elevio.pro.monthly / .annual" : "—"} />
+                <Readonly label="RevenueCat Product ID" value={plan.id === "starter" ? "elevio_starter_monthly / _yearly" : plan.id === "pro" ? "elevio_pro_monthly / _yearly" : "—"} />
                 <Readonly label="Stripe Price ID" value={plan.iap_available ? "stripe_price_" + plan.id : "—"} />
               </div>
             )}

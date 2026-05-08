@@ -5,6 +5,7 @@ import { Check, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { isIOS } from "@/lib/platform";
 import { purchaseProduct } from "@/lib/billing/revenuecat";
+import { PRODUCT_IDS, type ProductId } from "@/lib/billing/productIds";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -26,7 +27,7 @@ const PLANS = [
     ],
     cta: "Choisir ce forfait",
     ctaHref: "/onboarding?plan=starter",
-    productId: "com.elevio.starter.monthly" as const,
+    productId: PRODUCT_IDS.starterMonthly as ProductId,
   },
   {
     id: "pro",
@@ -46,7 +47,7 @@ const PLANS = [
     ],
     cta: "Choisir ce forfait",
     ctaHref: "/onboarding?plan=pro",
-    productId: "com.elevio.pro.monthly" as const,
+    productId: PRODUCT_IDS.proMonthly as ProductId,
     popular: true,
   },
   {
@@ -80,7 +81,7 @@ export function AppPricingScreen() {
     setLoading(planId);
     setMessage(null);
     try {
-      const result = await purchaseProduct(productId as "com.elevio.starter.monthly" | "com.elevio.pro.monthly");
+      const result = await purchaseProduct(productId as ProductId);
       if (result.ok) {
         // Use router.push instead of window.location.reload to avoid infinite reload loops
         router.push("/operator");
