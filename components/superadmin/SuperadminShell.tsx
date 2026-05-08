@@ -16,6 +16,7 @@ import {
   Scale,
   DollarSign,
   Ticket,
+  Layout,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
@@ -98,7 +99,14 @@ export function SuperadminShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <div className="mt-4 border-t border-white/10 pt-4">
+        <div className="mt-4 border-t border-white/10 pt-4 space-y-1">
+          <Link
+            href="/admin"
+            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-sky-400 transition hover:bg-sky-400/10 hover:text-sky-300"
+          >
+            <Layout size={18} />
+            {t("superadmin.switchToAdmin")}
+          </Link>
           <Link
             href="/"
             className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-400 transition hover:bg-white/5 hover:text-white"
