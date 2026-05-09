@@ -297,10 +297,16 @@ export function ScanHome() {
           {message && <p className="mt-3 rounded-2xl bg-white/10 p-3 text-sm font-bold text-slate-200">{message}</p>}
         </div>
 
-        <Link href="/admin" className="touch-target flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/8 px-5 py-3 text-sm font-black text-yellow-200 transition active:scale-[0.98]">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
-          {t("scan.admin")}
-        </Link>
+        <div className="flex w-full items-center justify-center gap-3">
+          <Link href="/admin" className="touch-target flex items-center justify-center gap-1.5 rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-bold text-slate-400 transition hover:text-slate-200 active:scale-[0.98]">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+            <span className="hidden sm:inline">{t("scan.admin")}</span>
+          </Link>
+          <Link href="/support" className="touch-target flex items-center justify-center gap-1.5 rounded-2xl border border-white/15 bg-white/8 px-4 py-2.5 text-xs font-bold text-slate-200 transition hover:text-white active:scale-[0.98]">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+            {t("nav.support")}
+          </Link>
+        </div>
       </section>
     </main>
   );

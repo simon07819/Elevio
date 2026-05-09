@@ -120,9 +120,9 @@ test("legal: terms page has logo + back button", () => {
 // 5. Support visibility rules
 // ═══════════════════════════════════════════════════════════════════
 
-test("support: NOT in MobileBottomNav (passenger-safe)", () => {
+test("support: IN MobileBottomNav (always accessible)", () => {
   const MOBILE_NAV = readFileSync(join(root, "components/MobileBottomNav.tsx"), "utf8");
-  assert.doesNotMatch(MOBILE_NAV, /\/support/, "support NOT in mobile bottom nav");
+  assert.match(MOBILE_NAV, /\/support/, "support in mobile bottom nav");
 });
 
 test("support: visible in AppNavigation when showSupport=true", () => {

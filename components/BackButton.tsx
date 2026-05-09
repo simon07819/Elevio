@@ -7,6 +7,8 @@ import { ArrowLeft } from "lucide-react";
  * Back navigation button.
  * - Uses router.back() if there's browser history
  * - Falls back to "/" (QR home) if on root entry
+ * - Hidden on mobile: iOS has native swipe-back, Capacitor has hardware back
+ * - Only shown on sm+ screens where no native back exists
  */
 export function BackButton({ fallback = "/" }: { fallback?: string } = {}) {
   const router = useRouter();
@@ -26,11 +28,11 @@ export function BackButton({ fallback = "/" }: { fallback?: string } = {}) {
           router.push(fallback);
         }
       }}
-      className="touch-target flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:border-white/20 hover:bg-white/10 hover:text-white active:scale-[0.97]"
+      className="hidden sm:flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:border-white/20 hover:bg-white/10 hover:text-white active:scale-[0.97] touch-target"
       aria-label="Retour"
     >
       <ArrowLeft size={14} />
-      <span className="hidden sm:inline">Retour</span>
+      <span>Retour</span>
     </button>
   );
 }
