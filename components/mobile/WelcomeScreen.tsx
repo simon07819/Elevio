@@ -3,9 +3,10 @@
 import { BrandLogo } from "@/components/BrandLogo";
 import { signInMobile } from "@/lib/mobileAuth";
 import { useAppleSignIn } from "@/hooks/useAppleSignIn";
+import { isCapacitorNative } from "@/lib/platform";
 import { Apple, ChevronRight, Mail } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export function WelcomeScreen() {
   const [showEmail, setShowEmail] = useState(false);
@@ -14,6 +15,8 @@ export function WelcomeScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { signIn: handleApple, appleLoading, appleError } = useAppleSignIn();
+  const [isNative, setIsNative] = useState(false);
+  useEffect(() => { setIsNative(isCapacitorNative()); }, []);
 
   async function handleEmailLogin(formData: FormData) {
     setLoading(true);
@@ -49,16 +52,18 @@ export function WelcomeScreen() {
 
       {/* CTA area */}
       <div className="mt-12 space-y-3">
-        {/* Apple Sign-In */}
-        <button
-          type="button"
-          onClick={handleApple}
-          disabled={loading || appleLoading}
-          className="touch-target flex w-full items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-base font-black text-slate-950 transition hover:bg-slate-100 active:scale-[0.98] disabled:opacity-50"
-        >
-          <Apple size={20} />
-          {appleLoading ? "Connexion…" : "Continuer avec Apple"}
-        </button>
+        {/* Apple Sign-In — native iOS only */}
+        {isNative && (
+          <button
+            type="button"
+            onClick={handleApple}
+            disabled={loading || appleLoading}
+            className="touch-target flex w-full items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-base font-black text-slate-950 transition hover:bg-slate-100 active:scale-[0.98] disabled:opacity-50"
+          >
+            <Apple size={20} />
+            {appleLoading ? "Connexion…" : "Continuer avec Apple"}
+          </button>
+        )}
 
         {/* Email toggle */}
         <button

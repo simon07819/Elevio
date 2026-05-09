@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { LockKeyhole, LogIn, UserPlus, Apple } from "lucide-react";
 import { signInAdmin, signUpAdmin } from "@/lib/authActions";
 import { useAppleSignIn } from "@/hooks/useAppleSignIn";
+import { isCapacitorNative } from "@/lib/platform";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
 export function AdminLoginForm() {
@@ -12,6 +13,8 @@ export function AdminLoginForm() {
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { signIn: handleApple, appleLoading, appleError } = useAppleSignIn();
+  const [isNative, setIsNative] = useState(false);
+  useEffect(() => { setIsNative(isCapacitorNative()); }, []);
   const { t } = useLanguage();
 
   const action = mode === "signin" ? signInAdmin : signUpAdmin;
@@ -95,25 +98,27 @@ export function AdminLoginForm() {
         </button>
       </form>
 
-      {/* Apple Sign-In */}
-      <div className="mt-4">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="h-px flex-1 bg-white/15" />
-          <span className="text-xs font-black uppercase text-slate-500">ou</span>
-          <div className="h-px flex-1 bg-white/15" />
+      {/* Apple Sign-In — native iOS only */}
+      {isNative && (
+        <div className="mt-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="h-px flex-1 bg-white/15" />
+            <span className="text-xs font-black uppercase text-slate-500">ou</span>
+            <div className="h-px flex-1 bg-white/15" />
+          </div>
+          <button
+            type="button"
+            onClick={handleApple}
+            disabled={appleLoading || isPending}
+            className="touch-target flex w-full items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-base font-black text-slate-950 transition hover:bg-slate-100 active:scale-[0.98] disabled:opacity-50"
+          >
+            <Apple size={20} />
+            {appleLoading ? "Connexion…" : "Continuer avec Apple"}
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={handleApple}
-          disabled={appleLoading || isPending}
-          className="touch-target flex w-full items-center justify-center gap-3 rounded-2xl bg-white px-6 py-4 text-base font-black text-slate-950 transition hover:bg-slate-100 active:scale-[0.98] disabled:opacity-50"
-        >
-          <Apple size={20} />
-          {appleLoading ? "Connexion…" : "Continuer avec Apple"}
-        </button>
-      </div>
+      )}
 
-      {appleError && (
+      {isNative && appleError && (
         <div className="mt-4 rounded-2xl bg-red-500/15 p-3 text-sm font-bold text-red-100">
           {appleError}
         </div>

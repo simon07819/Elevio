@@ -274,3 +274,18 @@ test("security: error boundaries exist for app, operator, request", () => {
     assert.match(content, /Link/, `${name} error uses Next Link for navigation`);
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// 12. Apple Sign-In button only on native iOS
+// ═══════════════════════════════════════════════════════════════════
+
+test("appstore: Apple Sign-In button gated by isCapacitorNative", () => {
+  const WELCOME = readFileSync(join(root, "components/mobile/WelcomeScreen.tsx"), "utf8");
+  const LOGIN = readFileSync(join(root, "components/admin/AdminLoginForm.tsx"), "utf8");
+  // Both must import isCapacitorNative
+  assert.match(WELCOME, /isCapacitorNative/, "WelcomeScreen imports isCapacitorNative");
+  assert.match(LOGIN, /isCapacitorNative/, "AdminLoginForm imports isCapacitorNative");
+  // Apple button wrapped in isNative condition
+  assert.match(WELCOME, /isNative/, "WelcomeScreen checks isNative before Apple button");
+  assert.match(LOGIN, /isNative/, "AdminLoginForm checks isNative before Apple button");
+});
