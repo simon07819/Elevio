@@ -36,6 +36,18 @@ test("bug1: operator page shows config-required when not configured", () => {
   assert.match(page, /project\.configRequired/, "shows config-required message");
 });
 
+test("bug1: operator page checks subscription BEFORE project config", () => {
+  const page = readFileSync(join(root, "app/operator/page.tsx"), "utf8");
+  assert.match(page, /getSubscriptionStatus/, "checks subscription status");
+  assert.match(page, /hasActiveSubscription/, "checks hasActiveSubscription");
+  assert.match(page, /UpgradePrompt/, "shows upgrade prompt for free users");
+  // In the function body, subscription check must come before isProjectConfigured
+  const funcBody = page.substring(page.indexOf("export default async function"));
+  const subIndex = funcBody.indexOf("getSubscriptionStatus");
+  const configIndex = funcBody.indexOf("isProjectConfigured");
+  assert.ok(subIndex < configIndex, "subscription check before config check in function body");
+});
+
 test("bug1: i18n keys for project config blocking exist", () => {
   const i18n = readFileSync(join(root, "lib/i18n.ts"), "utf8");
   assert.match(i18n, /project\.notConfigured/, "notConfigured key");

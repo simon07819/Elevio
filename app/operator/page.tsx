@@ -4,11 +4,13 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { T } from "@/components/i18n/LanguageProvider";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { OperatorWorkspace } from "@/components/operator/OperatorWorkspace";
+import { UpgradePrompt } from "@/components/UpgradePrompt";
 import { requireOperator } from "@/lib/auth";
 import { getAdminProjectData } from "@/lib/adminProject";
 import { getProjects } from "@/lib/projects";
 import { isProjectConfigured } from "@/lib/projectConfig";
 import { isSuperAdmin } from "@/lib/auth/superadmin";
+import { getSubscriptionStatus } from "@/lib/billing/planGuards";
 import { ShieldAlert } from "lucide-react";
 import type { Project } from "@/types/hoist";
 
@@ -28,6 +30,37 @@ export default async function OperatorPage() {
   const showSuperadmin = isSuperAdmin(profile, user.email);
   const operatorDisplayName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() || profile?.email || user.email || "";
+
+  // Free users must subscribe before reaching project configuration.
+  // Superadmins bypass the subscription check.
+  const isSuperadmin = profile?.account_role === "superadmin";
+  if (!isSuperadmin) {
+    const { hasActiveSubscription } = await getSubscriptionStatus(user.id);
+    if (!hasActiveSubscription) {
+      return (
+        <main className="relative z-10 flex min-h-dvh flex-col bg-slate-950 px-4 pt-2 pb-4 text-white sm:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-7xl flex-1 pb-3">
+            <div className="flex flex-col items-center justify-center gap-4 py-20">
+              <UpgradePrompt feature="Le terminal opérateur et le dispatch en temps réel" />
+            </div>
+          </div>
+          <footer className="mx-auto mt-auto flex w-full max-w-7xl shrink-0 items-center justify-between gap-4 rounded-3xl border border-white/10 bg-white/8 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div>
+              <BrandLogo size="sm" priority clickable />
+            </div>
+            <div className="hidden flex-wrap items-center justify-end gap-2 sm:flex">
+              <AppNavigation compact showSuperadmin={showSuperadmin} showSupport />
+              <LanguageSwitcher />
+            </div>
+            <div className="flex items-center gap-2 sm:hidden">
+              <LanguageSwitcher />
+            </div>
+          </footer>
+          <MobileBottomNav />
+        </main>
+      );
+    }
+  }
 
   const { projects, loadError } = await getProjects();
   const project = pickOperatorProject(projects);
