@@ -261,6 +261,17 @@ test("capacitor: out/index.html has debug boot log + server bootstrap redirect (
   assert.ok(hasServerRedirect || hasMissingUrlError, "fallback must either redirect to server or show missing-URL error");
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// Onboarding profile → pricing redirect
+// ═══════════════════════════════════════════════════════════════════
+
+test("mobile: onboarding profile save redirects to /app-pricing on iOS", () => {
+  const PROFILE_FORM = readFileSync(join(root, "components/admin/AdminProfileForm.tsx"), "utf8");
+  assert.match(PROFILE_FORM, /isCapacitorNative/, "checks isCapacitorNative for redirect target");
+  assert.match(PROFILE_FORM, /app-pricing/, "redirects to /app-pricing on iOS");
+  assert.match(PROFILE_FORM, /paywall/, "redirects to /paywall on web");
+});
+
 test("capacitor: ios/App/App/public/index.html has debug boot log + server bootstrap redirect (not /welcome)", () => {
   assert.doesNotMatch(IOS_PUBLIC_INDEX, /window\.location\.replace\("\/welcome"\)/, "no redirect to /welcome (would cause loop)");
   assert.doesNotMatch(IOS_PUBLIC_INDEX, /window\.location\.replace\('\/welcome'\)/, "no redirect to /welcome variant");

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { LogOut, Save } from "lucide-react";
 import { BrandLogoUploader } from "@/components/admin/BrandLogoUploader";
 import { signOutAdmin, updateCurrentProfile } from "@/lib/authActions";
+import { isCapacitorNative } from "@/lib/platform";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 import type { Profile } from "@/lib/profile";
 
@@ -12,6 +14,14 @@ export function AdminProfileForm({ profile, onboarding }: { profile: Profile; on
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { t } = useLanguage();
+  const router = useRouter();
+
+  // After successful profile save during onboarding, redirect to pricing.
+  // iOS: /app-pricing (RevenueCat IAP). Web: /paywall (Stripe).
+  if (success && onboarding) {
+    const target = isCapacitorNative() ? "/app-pricing" : "/paywall";
+    router.push(target);
+  }
 
   return (
     <section className="grid gap-5">
