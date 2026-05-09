@@ -186,8 +186,22 @@ export function AppPricingScreen() {
         ))}
       </div>
 
+      {/* Skip / continue with free plan */}
+      <div className="mt-6 pb-6 text-center">
+        <button
+          type="button"
+          onClick={() => router.push("/admin/projects")}
+          className="touch-target rounded-2xl border border-white/10 bg-white/5 px-8 py-3 text-sm font-bold text-slate-300 transition hover:bg-white/10 hover:text-white active:scale-[0.98]"
+        >
+          Passer plus tard
+        </button>
+        <p className="mt-2 text-xs font-bold text-slate-500">
+          Accès limité sans forfait payant.
+        </p>
+      </div>
+
       {/* Bottom link back to welcome */}
-      <div className="mt-8 pb-6 text-center">
+      <div className="pb-6 text-center">
         {/* No "pay on website" link on iOS — App Store rule */}
         {!iosPlatform && (
           <Link href="/welcome" className="text-sm font-bold text-slate-500 hover:text-slate-300">

@@ -160,7 +160,9 @@ test("onboarding: default plan is free (not starter)", () => {
 test("components: UpgradePrompt component exists with CTA", () => {
   assert.match(UPGRADE_PROMPT, /Fonction réservée aux forfaits payants/, "restriction message");
   assert.match(UPGRADE_PROMPT, /Voir les forfaits/, "upgrade CTA");
-  assert.match(UPGRADE_PROMPT, /\/paywall/, "links to paywall");
+  assert.match(UPGRADE_PROMPT, /isCapacitorNative/, "detects platform for redirect target");
+  assert.match(UPGRADE_PROMPT, /\/paywall/, "links to paywall on web");
+  assert.match(UPGRADE_PROMPT, /\/app-pricing/, "links to app-pricing on iOS");
   assert.match(UPGRADE_PROMPT, /UpgradeBadge/, "inline badge exists");
 });
 

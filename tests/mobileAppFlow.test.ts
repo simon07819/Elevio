@@ -272,6 +272,13 @@ test("mobile: onboarding profile save redirects to /app-pricing on iOS", () => {
   assert.match(PROFILE_FORM, /paywall/, "redirects to /paywall on web");
 });
 
+test("mobile: AppPricingScreen has skip button for free users", () => {
+  const PRICING_SCREEN = readFileSync(join(root, "components/mobile/AppPricingScreen.tsx"), "utf8");
+  assert.match(PRICING_SCREEN, /Passer plus tard/, "has skip button");
+  assert.match(PRICING_SCREEN, /Accès limité/, "explains limitations after skip");
+  assert.match(PRICING_SCREEN, /admin\/projects/, "skip goes to admin projects");
+});
+
 test("capacitor: ios/App/App/public/index.html has debug boot log + server bootstrap redirect (not /welcome)", () => {
   assert.doesNotMatch(IOS_PUBLIC_INDEX, /window\.location\.replace\("\/welcome"\)/, "no redirect to /welcome (would cause loop)");
   assert.doesNotMatch(IOS_PUBLIC_INDEX, /window\.location\.replace\('\/welcome'\)/, "no redirect to /welcome variant");
