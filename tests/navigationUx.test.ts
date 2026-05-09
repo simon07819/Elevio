@@ -88,8 +88,9 @@ test("nav: AppShell includes BackButton", () => {
   assert.match(APP_SHELL, /BackButton/, "AppShell has BackButton");
 });
 
-test("nav: Support page includes BackButton", () => {
-  assert.match(SUPPORT_PAGE, /BackButton/, "support page has BackButton");
+test("nav: Support page has mobile-friendly back navigation", () => {
+  assert.match(SUPPORT_PAGE, /ArrowLeft/, "has arrow icon");
+  assert.match(SUPPORT_PAGE, /href="\/"/, "back link to / works on all screen sizes");
 });
 
 test("nav: PaywallClient has back link", () => {
@@ -110,8 +111,8 @@ test("nav: Login page has back to scan link", () => {
 });
 
 test("nav: Support page has back navigation + clickable logo", () => {
-  assert.match(SUPPORT_PAGE, /BackButton/, "has back button");
-  assert.match(SUPPORT_PAGE, /href="\/"/, "logo links to /");
+  assert.match(SUPPORT_PAGE, /ArrowLeft/, "has back arrow");
+  assert.match(SUPPORT_PAGE, /href="\/"/, "back links to / (mobile-safe)");
 });
 
 test("nav: PaywallClient has escape route", () => {

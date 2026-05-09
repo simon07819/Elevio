@@ -1,5 +1,4 @@
 import { BrandLogo } from "@/components/BrandLogo";
-import { BackButton } from "@/components/BackButton";
 import { APP_VERSION } from "@/lib/version";
 import { getSiteSettings } from "@/lib/siteSettings";
 import { getServerLocale, serverT, type Locale } from "@/lib/i18nServer";
@@ -8,6 +7,7 @@ import Link from "next/link";
 import {
   Mail, Shield, HelpCircle, AlertTriangle, Database,
   Scale, Phone, FileText, Lock, ChevronRight, Send,
+  ArrowLeft,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -135,7 +135,10 @@ export default async function SupportPage() {
             <Link href="/" className="flex items-center">
               <BrandLogo size="sm" priority />
             </Link>
-            <BackButton />
+            <Link href="/" className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:border-white/20 hover:bg-white/10 hover:text-white active:scale-[0.97] touch-target" aria-label="Retour">
+              <ArrowLeft size={14} />
+              <span>Retour</span>
+            </Link>
           </div>
           <h1 className="text-3xl font-black tracking-tight">{t("support.title")}</h1>
           <p className="mt-3 text-sm leading-7 text-slate-400">{t("support.subtitle")}</p>

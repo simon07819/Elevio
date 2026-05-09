@@ -1,7 +1,6 @@
 import { BrandLogo } from "@/components/BrandLogo";
-import { BackButton } from "@/components/BackButton";
 import Link from "next/link";
-import { FileText } from "lucide-react";
+import { FileText, ArrowLeft } from "lucide-react";
 import { getSiteSettings } from "@/lib/siteSettings";
 import { getServerLocale, serverT, type Locale } from "@/lib/i18nServer";
 
@@ -68,7 +67,10 @@ export default async function TermsPage() {
             <Link href="/" className="flex items-center">
               <BrandLogo size="sm" priority />
             </Link>
-            <BackButton fallback="/support" />
+            <Link href="/support" className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:border-white/20 hover:bg-white/10 hover:text-white active:scale-[0.97] touch-target" aria-label="Retour">
+              <ArrowLeft size={14} />
+              <span>Retour</span>
+            </Link>
           </div>
           <div className="flex items-center gap-2 mb-2">
             <FileText size={20} className="text-emerald-400" />

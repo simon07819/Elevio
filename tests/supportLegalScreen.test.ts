@@ -73,8 +73,8 @@ test("support: app version displayed from version.ts", () => {
 
 test("support: logo clickable and back button present", () => {
   assert.match(SUPPORT_PAGE, /BrandLogo/, "has logo");
-  assert.match(SUPPORT_PAGE, /href="\/"/, "logo links to /");
-  assert.match(SUPPORT_PAGE, /BackButton/, "has back button");
+  assert.match(SUPPORT_PAGE, /href="\/"/, "logo/back links to /");
+  assert.match(SUPPORT_PAGE, /ArrowLeft/, "has back arrow");
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -92,9 +92,8 @@ test("legal: /legal/privacy page exists with content", () => {
 
 test("legal: privacy page has logo + back button", () => {
   assert.match(PRIVACY_PAGE, /BrandLogo/, "has logo");
-  assert.match(PRIVACY_PAGE, /href="\/"/, "logo links to /");
-  assert.match(PRIVACY_PAGE, /BackButton/, "has back button");
-  assert.match(PRIVACY_PAGE, /fallback.*support/, "back fallback to /support");
+  assert.match(PRIVACY_PAGE, /ArrowLeft/, "has back arrow");
+  assert.match(PRIVACY_PAGE, /href="\/support"/, "back links to /support");
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -111,9 +110,8 @@ test("legal: /legal/terms page exists with content", () => {
 
 test("legal: terms page has logo + back button", () => {
   assert.match(TERMS_PAGE, /BrandLogo/, "has logo");
-  assert.match(TERMS_PAGE, /href="\/"/, "logo links to /");
-  assert.match(TERMS_PAGE, /BackButton/, "has back button");
-  assert.match(TERMS_PAGE, /fallback.*support/, "back fallback to /support");
+  assert.match(TERMS_PAGE, /ArrowLeft/, "has back arrow");
+  assert.match(TERMS_PAGE, /href="\/support"/, "back links to /support");
 });
 
 // ═══════════════════════════════════════════════════════════════════
