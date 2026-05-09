@@ -50,6 +50,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "projectId et elevatorId requis." }, { status: 400 });
   }
 
+  // Verify user belongs to the project (or is superadmin)
+  const { data: profile } = await supabase.from("profiles").select("account_role").eq("id", user.id).maybeSingle();
+  const isSuperadmin = profile?.account_role === "superadmin";
+  if (!isSuperadmin) {
+    const { data: project } = await supabase
+      .from("projects")
+      .select("owner_id")
+      .eq("id", projectId)
+      .maybeSingle();
+    if (!project || project.owner_id !== user.id) {
+      return NextResponse.json({ ok: false, message: "Accès refusé à ce projet." }, { status: 403 });
+    }
+  }
+
   let result = await supabase
     .from("elevators")
     .update({ ...TABLET_SESSION_FIELDS_CLEAR })

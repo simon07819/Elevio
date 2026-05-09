@@ -62,9 +62,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing appUserId" }, { status: 400 });
   }
 
-  // If using bearer auth, verify the appUserId matches
-  if (hasBearerAuth && body.appUserId !== effectiveUserId) {
-    // Bearer auth can sync any user (server-to-server)
+  // Security: session users can only sync their own appUserId
+  if (!hasBearerAuth && userId && body.appUserId && body.appUserId !== userId) {
+    return NextResponse.json({ error: "Forbidden: appUserId mismatch" }, { status: 403 });
   }
 
   const { entitlement, productId, source, expiresAt, billingPeriod } = body;

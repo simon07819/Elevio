@@ -226,3 +226,51 @@ test("appstore: AppPricingScreen shows correct prices", () => {
   assert.match(APP_PRICING, /199 \$|199\$/, "shows $199 for Starter");
   assert.match(APP_PRICING, /499 \$|499\$/, "shows $499 for Pro");
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// 11. Security audit — targeted fixes
+// ═══════════════════════════════════════════════════════════════════
+
+test("security: revenuecat/sync rejects appUserId mismatch (impersonation)", () => {
+  const SYNC_ROUTE = readFileSync(join(root, "app/api/revenuecat/sync/route.ts"), "utf8");
+  assert.match(SYNC_ROUTE, /appUserId mismatch/, "returns 403 on mismatch");
+  assert.match(SYNC_ROUTE, /status: 403/, "status 403 for impersonation");
+});
+
+test("security: revenuecat/webhook protects superadmins from downgrade", () => {
+  const WEBHOOK_ROUTE = readFileSync(join(root, "app/api/revenuecat/webhook/route.ts"), "utf8");
+  assert.match(WEBHOOK_ROUTE, /EXPIRATION.*CANCELLATION|CANCELLATION.*EXPIRATION/, "checks downgrade events");
+  assert.match(WEBHOOK_ROUTE, /superadmin protected/, "skips downgrade for superadmin");
+  // Must NOT call supabase.auth.getUser() in webhook — no session available
+  // Strip comments before checking to avoid false positives
+  const webhookCode = WEBHOOK_ROUTE.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.doesNotMatch(webhookCode, /auth\.getUser\(\)/, "no auth.getUser call in webhook code");
+  // Must use profiles table instead
+  assert.match(WEBHOOK_ROUTE, /from\("profiles"\)/, "uses profiles table for superadmin check");
+});
+
+test("security: auth/callback blocks open redirects", () => {
+  const AUTH_CALLBACK = readFileSync(join(root, "app/auth/callback/route.ts"), "utf8");
+  assert.match(AUTH_CALLBACK, /startsWith\("\/"\)/, "only allows paths starting with /");
+  assert.match(AUTH_CALLBACK, /startsWith\("\/\/"\)/, "blocks protocol-relative URLs");
+  assert.match(AUTH_CALLBACK, /parsed\.origin/, "validates origin matches");
+  assert.match(AUTH_CALLBACK, /safeNext|\/paywall/, "falls back to safe internal path");
+});
+
+test("security: force-release verifies project membership", () => {
+  const FORCE_RELEASE = readFileSync(join(root, "app/api/operator/force-release/route.ts"), "utf8");
+  assert.match(FORCE_RELEASE, /owner_id/, "checks project ownership");
+  assert.match(FORCE_RELEASE, /status: 403/, "returns 403 for unauthorized project");
+  assert.match(FORCE_RELEASE, /isSuperadmin/, "superadmin bypasses project check");
+});
+
+test("security: error boundaries exist for app, operator, request", () => {
+  const APP_ERROR = readFileSync(join(root, "app/error.tsx"), "utf8");
+  const OP_ERROR = readFileSync(join(root, "app/operator/error.tsx"), "utf8");
+  const REQ_ERROR = readFileSync(join(root, "app/request/error.tsx"), "utf8");
+  for (const [name, content] of [["app", APP_ERROR], ["operator", OP_ERROR], ["request", REQ_ERROR]]) {
+    assert.match(content, /use client/, `${name} error is client component`);
+    assert.match(content, /reset/, `${name} error has retry button`);
+    assert.match(content, /Link/, `${name} error uses Next Link for navigation`);
+  }
+});

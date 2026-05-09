@@ -72,23 +72,21 @@ export async function POST(req: NextRequest) {
   console.log("[RevenueCat webhook]", eventType, "user:", userId, "product:", event.product_id, "store:", event.store);
 
   // Superadmin guard: never downgrade superadmin users
+  // Use profile table directly — supabase.auth.getUser() fails in webhooks (no session)
   if (SUPERADMIN_EMAILS.size > 0) {
     const supabaseCheck = await createClient();
     if (supabaseCheck) {
-      const { data: adminUser } = await supabaseCheck
-        .from("user_entitlements")
-        .select("user_id")
-        .eq("user_id", userId)
+      const { data: profile } = await supabaseCheck
+        .from("profiles")
+        .select("email, account_role")
+        .eq("id", userId)
         .maybeSingle();
-      // If user exists and is superadmin, skip downgrade events
-      if (adminUser) {
-        const { data: authData } = await supabaseCheck.auth.getUser();
-        if (authData?.user?.email && SUPERADMIN_EMAILS.has(authData.user.email.toLowerCase())) {
-          if (["EXPIRATION", "CANCELLATION"].includes(eventType)) {
-            console.log("[RevenueCat webhook] skipping downgrade for superadmin:", userId);
-            return NextResponse.json({ received: true, note: "superadmin protected" });
-          }
-        }
+      const isSuperadmin =
+        profile?.account_role === "superadmin" ||
+        (profile?.email && SUPERADMIN_EMAILS.has(profile.email.toLowerCase()));
+      if (isSuperadmin && ["EXPIRATION", "CANCELLATION"].includes(eventType)) {
+        console.log("[RevenueCat webhook] skipping downgrade for superadmin:", userId);
+        return NextResponse.json({ received: true, note: "superadmin protected" });
       }
     }
   }
