@@ -202,6 +202,17 @@ export async function signUpMobile(formData: FormData) {
     return { ok: false, message: "Prénom et nom obligatoires." };
   }
 
+  // Check if email already has an account — Supabase signUp silently succeeds
+  // for existing emails (anti-enumeration), so we pre-check the profiles table.
+  const { data: existingProfile } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+  if (existingProfile) {
+    return { ok: false, message: "Un compte existe déjà avec ce courriel. Connectez-vous." };
+  }
+
   // Always use NEXT_PUBLIC_SITE_URL for emailRedirectTo — never capacitor://localhost
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   if (!siteUrl) {
@@ -225,6 +236,10 @@ export async function signUpMobile(formData: FormData) {
   });
 
   if (error) {
+    // Supabase may return "User already registered" for some configurations
+    if (error.message.includes("already registered") || error.message.includes("already been registered")) {
+      return { ok: false, message: "Un compte existe déjà avec ce courriel. Connectez-vous." };
+    }
     return { ok: false, message: error.message };
   }
 

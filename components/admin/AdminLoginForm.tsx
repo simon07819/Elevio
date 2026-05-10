@@ -127,6 +127,15 @@ export function AdminLoginForm() {
       {(message && !appleError) && (
         <div className={success ? "mt-4 rounded-2xl bg-emerald-400/15 p-3 text-sm font-bold text-emerald-100" : "mt-4 rounded-2xl bg-red-500/15 p-3 text-sm font-bold text-red-100"}>
           {message}
+          {!success && message?.includes("déjà avec ce courriel") && (
+            <button
+              type="button"
+              onClick={() => { setMode("signin"); setMessage(null); }}
+              className="mt-2 text-sm font-black text-yellow-300 hover:text-yellow-200 underline"
+            >
+              Se connecter
+            </button>
+          )}
           {success && mode === "signup" && (
             <p className="mt-2 text-xs text-emerald-50">
               {t("login.checkEmail")}

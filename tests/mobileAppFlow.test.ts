@@ -189,6 +189,23 @@ test("mobile: signUpMobile creates account with onboarding data", () => {
   assert.match(MOBILE_AUTH, /selected_plan/, "selected_plan in signup metadata");
 });
 
+test("mobile: signUpMobile checks for duplicate email before Supabase signUp", () => {
+  // Supabase signUp silently succeeds for existing emails (anti-enumeration).
+  // We must pre-check the profiles table to give a clear error.
+  assert.match(MOBILE_AUTH, /from\("profiles"\)/, "queries profiles table before signup");
+  assert.match(MOBILE_AUTH, /\.eq\("email"/, "checks by email");
+  assert.match(MOBILE_AUTH, /Un compte existe déjà/, "French duplicate email error message");
+  assert.match(MOBILE_AUTH, /already registered/, "also catches Supabase 'already registered' error");
+});
+
+test("admin: signUpAdmin checks for duplicate email before Supabase signUp", () => {
+  const AUTH_ACTIONS = readFileSync(join(root, "lib/authActions.ts"), "utf8");
+  assert.match(AUTH_ACTIONS, /from\("profiles"\)/, "queries profiles table before signup");
+  assert.match(AUTH_ACTIONS, /\.eq\("email"/, "checks by email");
+  assert.match(AUTH_ACTIONS, /Un compte existe déjà/, "French duplicate email error message");
+  assert.match(AUTH_ACTIONS, /already registered/, "also catches Supabase 'already registered' error");
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 5. / redirects to /scan — no landing page
 // ═══════════════════════════════════════════════════════════════════════════
