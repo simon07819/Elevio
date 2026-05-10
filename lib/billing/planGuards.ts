@@ -52,14 +52,36 @@ export async function getSubscriptionStatus(userId: string): Promise<{
     return { hasActiveSubscription: false, status: "free", provider: null, planId: "free" };
   }
 
-  // Admin/activation_code/manual/manual_code users don't need a subscription check
-  // (manual plans use expires_at for expiration, checked below)
-  if (activatedVia === "admin" || activatedVia === "activation_code" || activatedVia === "manual" || activatedVia === "manual_code") {
+  // Admin/activation_code/manual/manual_code activated users don't need an
+  // active subscription row — the activated_via itself proves access was granted.
+  // However, we must verify the activation is legitimate:
+  //   - "activation_code" = verified via activation_codes table
+  //   - "admin" = granted by superadmin, but only for non-starter plans.
+  //     Starter+admin is a legacy artifact from the onboarding bug where
+  //     self-selected plans during signup incorrectly used activated_via:"admin".
+  //     These users must have an active subscription to prove they paid.
+  //   - "manual"/"manual_code" = granted with expiration, checked below
+  if (activatedVia === "activation_code") {
+    return { hasActiveSubscription: true, status: "active", provider: activatedVia, planId };
+  }
+
+  // Legacy guard: plan:"starter"/"free" + activated_via:"admin" = likely from
+  // the old onboarding bug where self-selected plans got activated_via:"admin".
+  // These users must prove payment via an active subscription row.
+  // A genuine superadmin grant for a paid plan (pro/enterprise) is still trusted.
+  if (activatedVia === "admin") {
+    const isPaidPlan = rawPlan !== "free" && rawPlan !== "starter";
+    if (isPaidPlan) {
+      return { hasActiveSubscription: true, status: "active", provider: activatedVia, planId };
+    }
+    // starter/free + admin → fall through to subscription table check
+  }
+
+  if (activatedVia === "manual" || activatedVia === "manual_code") {
     // For manual/manual_code plans, check expiration
-    if ((activatedVia === "manual" || activatedVia === "manual_code") && entitlement?.expires_at) {
+    if (entitlement?.expires_at) {
       const expiresAt = new Date(entitlement.expires_at);
       if (expiresAt < new Date()) {
-        // Manual plan expired — treat as no subscription
         return { hasActiveSubscription: false, status: "expired", provider: "manual", planId: "starter" };
       }
     }
@@ -83,12 +105,14 @@ export async function getSubscriptionStatus(userId: string): Promise<{
     .order("created_at", { ascending: false });
 
   if (!subs || subs.length === 0) {
-    // No subscription row — user is on free plan unless manually activated
-    if (activatedVia === "admin" || activatedVia === "activation_code" || activatedVia === "manual" || activatedVia === "manual_code") {
-      // Manually activated — already handled above, but safety check
+    // No subscription row — user is on free plan unless legitimately activated
+    // activation_code/manual/manual_code are verified grant sources.
+    // "admin" for paid plans (pro/enterprise) is already handled above.
+    // "admin" for starter/free falls through here = legacy bug, no access.
+    if (activatedVia === "activation_code" || activatedVia === "manual" || activatedVia === "manual_code") {
       return { hasActiveSubscription: true, status: "active", provider: activatedVia, planId };
     }
-    // No subscription + no manual activation = free user
+    // No subscription + no verified activation = free user
     return { hasActiveSubscription: false, status: "free", provider: null, planId: "free" };
   }
 

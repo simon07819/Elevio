@@ -315,3 +315,51 @@ test("billing: stale revenuecat subscription ignored for default-activated entit
   // the subscription should NOT grant access
   assert.match(PLAN_GUARDS, /activatedVia === .default.*revenuecat|revenuecat.*default/, "stale revenuecat + default = ignored");
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// 19. Legacy onboarding bug: starter+admin without subscription = free
+// ═══════════════════════════════════════════════════════════════════
+
+test("billing: starter+admin without subscription falls through to subscription check", () => {
+  // Legacy bug: self-selected plans during onboarding got activated_via:"admin"
+  // even though the user hadn't paid. For starter/free + admin, we must NOT
+  // blindly grant access — must check the subscription table.
+  // Only paid plans (pro/enterprise) + admin are trusted as genuine superadmin grants.
+  assert.match(PLAN_GUARDS, /isPaidPlan/, "distinguishes paid vs free/starter admin plans");
+  assert.match(PLAN_GUARDS, /rawPlan !== .free. && rawPlan !== .starter./, "paid plan = not free and not starter");
+  // For admin+starter, code falls through to subscription check (no early return)
+  const adminBlock = PLAN_GUARDS.indexOf('if (activatedVia === "admin")');
+  const isPaidPlanCheck = PLAN_GUARDS.indexOf("isPaidPlan", adminBlock);
+  const nextBlockAfterAdmin = PLAN_GUARDS.indexOf('if (activatedVia === "manual"', adminBlock);
+  // isPaidPlan check must exist within the admin block and before any return
+  assert.ok(isPaidPlanCheck > adminBlock && isPaidPlanCheck < nextBlockAfterAdmin, "isPaidPlan check inside admin block");
+});
+
+test("billing: no-subscription safety check excludes admin for starter/free", () => {
+  // The safety check after "no subscription rows found" must NOT
+  // include "admin" as a bypass — only activation_code/manual/manual_code
+  const safetyCheckArea = PLAN_GUARDS.substring(
+    PLAN_GUARDS.indexOf("if (!subs || subs.length === 0)"),
+    PLAN_GUARDS.indexOf("Check if ANY subscription is active")
+  );
+  assert.doesNotMatch(safetyCheckArea, /activatedVia === .admin./, "admin NOT in no-subs safety check bypass");
+  assert.match(safetyCheckArea, /activation_code/, "activation_code IS in safety check");
+  assert.match(safetyCheckArea, /manual/, "manual IS in safety check");
+});
+
+test("billing: operator page subscription check before config check", () => {
+  const OP_PAGE = readFileSync(join(root, "app/operator/page.tsx"), "utf8");
+  assert.match(OP_PAGE, /getSubscriptionStatus/, "checks subscription status");
+  assert.match(OP_PAGE, /hasActiveSubscription/, "checks hasActiveSubscription");
+  assert.match(OP_PAGE, /UpgradePrompt/, "shows upgrade prompt for free users");
+  assert.match(OP_PAGE, /isProjectConfigured/, "also checks project config");
+  // Subscription check must come before config check
+  const funcBody = OP_PAGE.substring(OP_PAGE.indexOf("export default async function"));
+  const subIndex = funcBody.indexOf("getSubscriptionStatus");
+  const configIndex = funcBody.indexOf("isProjectConfigured");
+  assert.ok(subIndex < configIndex, "subscription check before config check");
+  // Free user sees UpgradePrompt, never configRequired
+  const upgradeIndex = funcBody.indexOf("UpgradePrompt");
+  const configReqIndex = funcBody.indexOf("configRequired");
+  assert.ok(upgradeIndex < configReqIndex, "UpgradePrompt rendered before configRequired in code");
+});
