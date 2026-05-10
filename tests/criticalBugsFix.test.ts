@@ -236,7 +236,7 @@ test("superadmin: support page editable via site_settings", () => {
 
 test("superadmin: public /support is premium structured page with legal links", () => {
   const PUBLIC_SUPPORT = readFileSync(join(root, "app/support/page.tsx"), "utf8");
-  assert.match(PUBLIC_SUPPORT, /support@elevio\.app/, "shows support email");
+  assert.match(PUBLIC_SUPPORT, /info@elevioapp\.ca/, "shows support email");
   assert.match(PUBLIC_SUPPORT, /\/legal\/privacy/, "links to privacy page");
   assert.match(PUBLIC_SUPPORT, /\/legal\/terms/, "links to terms page");
   assert.match(PUBLIC_SUPPORT, /APP_VERSION/, "shows app version");

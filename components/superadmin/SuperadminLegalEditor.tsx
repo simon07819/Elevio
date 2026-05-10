@@ -21,7 +21,7 @@ const DEFAULT_PRIVACY = JSON.stringify([
   { title: "Partage", color: "text-violet-400", items: ["Client chantier", "Services techniques"] },
   { title: "Conservation", color: "text-amber-400", text: "Les données sont conservées de façon limitée dans le temps." },
   { title: "Sécurité", color: "text-slate-400", text: "Des mesures raisonnables sont mises en place pour protéger les données." },
-  { title: "Contact", color: "text-sky-400", text: "support@elevio.app" },
+  { title: "Contact", color: "text-sky-400", text: "info@elevioapp.ca" },
 ], null, 2);
 
 const DEFAULT_TERMS = JSON.stringify([
@@ -30,7 +30,7 @@ const DEFAULT_TERMS = JSON.stringify([
   { title: "Opérateur", color: "text-emerald-400", items: ["Valider uniquement les actions réelles", "Respecter les consignes de sécurité"] },
   { title: "Limitation", color: "text-amber-400", items: ["Aucune garantie de délai", "Aucune responsabilité en cas d'incident sur le chantier"] },
   { title: "Service", color: "text-violet-400", text: "Le service peut être modifié ou interrompu sans préavis." },
-  { title: "Contact", color: "text-sky-400", text: "support@elevio.app" },
+  { title: "Contact", color: "text-sky-400", text: "info@elevioapp.ca" },
 ], null, 2);
 
 const CONTENT_SETTINGS = [

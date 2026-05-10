@@ -80,7 +80,7 @@ create policy "superadmin delete app_errors" on app_errors
 
 -- ─── Seed default site settings ──────────────────────────────────────────
 insert into site_settings (key, value, label) values
-  ('support_email', 'support@elevio.app', 'Courriel support'),
+  ('support_email', 'info@elevioapp.ca', 'Courriel support'),
   ('support_phone', '', 'Téléphone support'),
   ('footer_text', '© Elevio — Gestion intelligente d''ascenseurs de chantier', 'Texte footer'),
   ('faq_content', '[]', 'FAQ (JSON ou texte)'),

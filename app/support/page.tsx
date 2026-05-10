@@ -12,7 +12,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_EMAIL = "support@elevio.app";
+const DEFAULT_EMAIL = "info@elevioapp.ca";
 
 function defaultFAQ(locale: Locale) {
   const faqs: Record<Locale, Array<{ q: string; a: string }>> = {

@@ -16,7 +16,7 @@ function defaultSections(locale: Locale): PrivacySection[] {
       { title: "Partage", color: "text-violet-400", items: ["Client chantier", "Services techniques"] },
       { title: "Conservation", color: "text-amber-400", text: "Les données sont conservées de façon limitée dans le temps. Un nettoyage automatique est effectué selon la politique de rétention du projet." },
       { title: "Sécurité", color: "text-slate-400", text: "Des mesures raisonnables sont mises en place pour protéger les données contre tout accès non autorisé." },
-      { title: "Contact", color: "text-sky-400", text: "support@elevio.app" },
+      { title: "Contact", color: "text-sky-400", text: "info@elevioapp.ca" },
     ],
     en: [
       { title: "Data collected", color: "text-sky-400", items: ["Transport requests", "Selected floors", "Operator status", "Project data", "Technical logs"] },
@@ -24,7 +24,7 @@ function defaultSections(locale: Locale): PrivacySection[] {
       { title: "Sharing", color: "text-violet-400", items: ["Site client", "Technical services"] },
       { title: "Retention", color: "text-amber-400", text: "Data is retained for a limited time. Automatic cleanup is performed according to the project retention policy." },
       { title: "Security", color: "text-slate-400", text: "Reasonable measures are in place to protect data against unauthorized access." },
-      { title: "Contact", color: "text-sky-400", text: "support@elevio.app" },
+      { title: "Contact", color: "text-sky-400", text: "info@elevioapp.ca" },
     ],
     es: [
       { title: "Datos recopilados", color: "text-sky-400", items: ["Solicitudes de transporte", "Pisos seleccionados", "Estado de operadores", "Datos de proyecto", "Registros técnicos"] },
@@ -32,7 +32,7 @@ function defaultSections(locale: Locale): PrivacySection[] {
       { title: "Compartición", color: "text-violet-400", items: ["Cliente de obra", "Servicios técnicos"] },
       { title: "Conservación", color: "text-amber-400", text: "Los datos se conservan por tiempo limitado. Se realiza una limpieza automática según la política de retención del proyecto." },
       { title: "Seguridad", color: "text-slate-400", text: "Se implementan medidas razonables para proteger los datos contra accesos no autorizados." },
-      { title: "Contacto", color: "text-sky-400", text: "support@elevio.app" },
+      { title: "Contacto", color: "text-sky-400", text: "info@elevioapp.ca" },
     ],
   };
   return sections[locale] ?? sections.fr;

@@ -16,7 +16,7 @@ function defaultSections(locale: Locale): TermsSection[] {
       { title: "Opérateur", color: "text-emerald-400", items: ["Valider uniquement les actions réelles", "Respecter les consignes de sécurité"] },
       { title: "Limitation", color: "text-amber-400", items: ["Aucune garantie de délai", "Aucune responsabilité en cas d'incident sur le chantier"] },
       { title: "Service", color: "text-violet-400", text: "Le service peut être modifié ou interrompu sans préavis." },
-      { title: "Contact", color: "text-sky-400", text: "support@elevio.app" },
+      { title: "Contact", color: "text-sky-400", text: "info@elevioapp.ca" },
     ],
     en: [
       { title: "Nature of service", color: "text-emerald-400", text: "Elevio is a construction elevator coordination tool. It does not physically control the elevator. It does not replace the operator." },
@@ -24,7 +24,7 @@ function defaultSections(locale: Locale): TermsSection[] {
       { title: "Operator", color: "text-emerald-400", items: ["Only confirm actual actions", "Follow safety instructions"] },
       { title: "Limitation", color: "text-amber-400", items: ["No time guarantee", "No liability in case of site incident"] },
       { title: "Service", color: "text-violet-400", text: "The service may be modified or interrupted without notice." },
-      { title: "Contact", color: "text-sky-400", text: "support@elevio.app" },
+      { title: "Contact", color: "text-sky-400", text: "info@elevioapp.ca" },
     ],
     es: [
       { title: "Naturaleza del servicio", color: "text-emerald-400", text: "Elevio es una herramienta de coordinación de ascensor de obra. No controla físicamente el ascensor. No reemplaza al operador." },
@@ -32,7 +32,7 @@ function defaultSections(locale: Locale): TermsSection[] {
       { title: "Operador", color: "text-emerald-400", items: ["Solo confirmar acciones reales", "Respetar las instrucciones de seguridad"] },
       { title: "Limitación", color: "text-amber-400", items: ["Sin garantía de tiempo", "Sin responsabilidad en caso de incidente en obra"] },
       { title: "Servicio", color: "text-violet-400", text: "El servicio puede ser modificado o interrumpido sin previo aviso." },
-      { title: "Contacto", color: "text-sky-400", text: "support@elevio.app" },
+      { title: "Contacto", color: "text-sky-400", text: "info@elevioapp.ca" },
     ],
   };
   return sections[locale] ?? sections.fr;

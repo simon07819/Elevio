@@ -8,7 +8,7 @@ export type SiteSetting = {
 /** Keys that the superadmin can edit */
 export const EDITABLE_SETTINGS: Array<{ key: string; label: string; defaultValue: string }> = [
   // ── Support content ──────────────────────────────────────────────
-  { key: "support_email", label: "Courriel support", defaultValue: "support@elevio.app" },
+  { key: "support_email", label: "Courriel support", defaultValue: "info@elevioapp.ca" },
   { key: "support_phone", label: "Téléphone support", defaultValue: "" },
   { key: "support_hours", label: "Heures de support", defaultValue: "Lun-Ven 8h-18h" },
   { key: "support_passenger_text", label: "Texte section passager", defaultValue: "" },

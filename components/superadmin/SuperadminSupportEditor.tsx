@@ -6,7 +6,7 @@ import { saveSiteSetting } from "@/lib/siteSettings";
 import type { SiteSetting } from "@/lib/siteSettingsConfig";
 
 const SUPPORT_SETTING_KEYS = [
-  { key: "support_email", label: "Courriel support", type: "input" as const, default: "support@elevio.app" },
+  { key: "support_email", label: "Courriel support", type: "input" as const, default: "info@elevioapp.ca" },
   { key: "support_phone", label: "Téléphone support", type: "input" as const, default: "" },
   { key: "support_hours", label: "Heures de support", type: "input" as const, default: "Lun-Ven 8h-18h" },
   { key: "support_passenger_text", label: "Texte section passager", type: "textarea" as const, default: "" },

@@ -20,6 +20,31 @@ const VALID_TYPES: string[] = [...SUPPORT_TYPES];
 const VALID_ROLES = ["passenger", "operator", "admin", "autre"];
 const VALID_STATUSES = ["nouveau", "en_cours", "résolu"];
 
+/** Send a support notification email via SMTP. Best-effort — never blocks the response. */
+async function notifySupportEmail(ticket: { type: string; name: string; email: string; role: string; project: string | null; message: string }) {
+  const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASSWORD, SMTP_FROM, SUPPORT_EMAIL } = process.env;
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASSWORD) return; // SMTP not configured — skip
+
+  try {
+    const { createTransport } = await import("nodemailer");
+    const transport = createTransport({
+      host: SMTP_HOST,
+      port: Number(SMTP_PORT) || 587,
+      secure: SMTP_SECURE === "true",
+      auth: { user: SMTP_USER, pass: SMTP_PASSWORD },
+    });
+    await transport.sendMail({
+      from: SMTP_FROM || `Elevio <${SMTP_USER}>`,
+      to: SUPPORT_EMAIL || SMTP_USER,
+      replyTo: ticket.email,
+      subject: `[Elevio Support] ${ticket.type} — ${ticket.name}`,
+      text: `Type: ${ticket.type}\nNom: ${ticket.name}\nCourriel: ${ticket.email}\nRôle: ${ticket.role}\nProjet: ${ticket.project ?? "—"}\n\n${ticket.message}`,
+    });
+  } catch (err) {
+    console.error("[support] Email notification failed:", err);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
@@ -70,6 +95,9 @@ export async function POST(req: NextRequest) {
       console.error("support_messages insert error:", error.message);
       return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
     }
+
+    // Send email notification (best-effort, does not block response)
+    notifySupportEmail({ type, name, email, role, project, message }).catch(() => {});
 
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch (err) {

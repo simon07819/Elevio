@@ -52,7 +52,7 @@ test("support: page has liability section", () => {
 });
 
 test("support: page has contact section", () => {
-  assert.match(SUPPORT_PAGE, /support\.contactSection|support@elevio\.app/, "contact section");
+  assert.match(SUPPORT_PAGE, /support\.contactSection|info@elevioapp\.ca/, "contact section");
   assert.match(SUPPORT_PAGE, /mailto:/, "mailto link");
 });
 
@@ -87,7 +87,7 @@ test("legal: /legal/privacy page exists with content", () => {
   assert.match(PRIVACY_PAGE, /Aucune vente/, "no data sale statement");
   assert.match(PRIVACY_PAGE, /Conservation|conservation/i, "retention section");
   assert.match(PRIVACY_PAGE, /Sécurité|sécurité/i, "security section");
-  assert.match(PRIVACY_PAGE, /support@elevio\.app/, "contact email");
+  assert.match(PRIVACY_PAGE, /info@elevioapp\.ca/, "contact email");
 });
 
 test("legal: privacy page has logo + back button", () => {
@@ -105,7 +105,7 @@ test("legal: /legal/terms page exists with content", () => {
   assert.match(TERMS_PAGE, /outil de coordination/, "coordination tool description");
   assert.match(TERMS_PAGE, /Limitation|limitation/i, "limitation section");
   assert.match(TERMS_PAGE, /Aucune garantie/, "no warranty statement");
-  assert.match(TERMS_PAGE, /support@elevio\.app/, "contact email");
+  assert.match(TERMS_PAGE, /info@elevioapp\.ca/, "contact email");
 });
 
 test("legal: terms page has logo + back button", () => {
