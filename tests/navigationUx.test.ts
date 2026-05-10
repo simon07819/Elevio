@@ -124,11 +124,11 @@ test("nav: PaywallClient has escape route", () => {
 // 4. Mobile bottom nav
 // ═══════════════════════════════════════════════════════════════════
 
-test("nav: MobileBottomNav has 4 sections (scan, operator, admin, support)", () => {
+test("nav: MobileBottomNav has 4 sections (scan, operator, admin, profile)", () => {
   assert.match(MOBILE_NAV, /\/scan/, "has scan link");
   assert.match(MOBILE_NAV, /\/operator/, "has operator link");
   assert.match(MOBILE_NAV, /\/admin/, "has admin link");
-  assert.match(MOBILE_NAV, /\/support/, "has support link");
+  assert.match(MOBILE_NAV, /\/admin\/profile/, "has profile link");
 });
 
 test("nav: MobileBottomNav is hidden on desktop (sm:hidden)", () => {

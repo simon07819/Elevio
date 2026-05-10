@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { QrCode, HardHat, Settings, MessageCircle } from "lucide-react";
+import { QrCode, HardHat, Settings, User } from "lucide-react";
 import type { TranslationKey } from "@/lib/i18n";
 import { useLanguage } from "@/components/i18n/LanguageProvider";
 
@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { href: "/scan", label: "nav.scan" as TranslationKey, icon: QrCode },
   { href: "/operator", label: "nav.operator" as TranslationKey, icon: HardHat },
   { href: "/admin", label: "nav.admin" as TranslationKey, icon: Settings },
-  { href: "/support", label: "nav.support" as TranslationKey, icon: MessageCircle },
+  { href: "/admin/profile", label: "nav.profile" as TranslationKey, icon: User },
 ];
 
 /**
