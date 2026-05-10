@@ -27,7 +27,8 @@ export async function getSubscriptionStatus(userId: string): Promise<{
   const supabase = await createClient();
 
   if (!supabase) {
-    return { hasActiveSubscription: true, status: null, provider: null, planId: "starter" };
+    // Fail CLOSED: if Supabase is unreachable, deny access rather than grant it
+    return { hasActiveSubscription: false, status: "error", provider: null, planId: "free" };
   }
 
   // Get the entitlement plan + expiration
@@ -41,9 +42,10 @@ export async function getSubscriptionStatus(userId: string): Promise<{
   const planId = effectivePlanId(rawPlan);
   const activatedVia = entitlement?.activated_via ?? "default";
 
-  // Explicit "free" plan = limited access, NOT fully blocked
+  // Explicit "free" or "starter" plan with default activation = no paid subscription
+  // "starter" + "default" occurs when IAP user's entitlement expires/downgrades
   // Free users can view dashboard, support, legal, but cannot create projects/use paid features
-  if (rawPlan === "free" && activatedVia === "default") {
+  if ((rawPlan === "free" || rawPlan === "starter") && activatedVia === "default") {
     return { hasActiveSubscription: false, status: "free", provider: null, planId: "free" };
   }
 
@@ -88,7 +90,14 @@ export async function getSubscriptionStatus(userId: string): Promise<{
   }
 
   // Check if ANY subscription is active
-  const activeSub = subs.find((s) => s.status === "active" || s.status === "trialing");
+  // Cross-reference with entitlement: if activatedVia is "default" (no paid source),
+  // stale revenuecat subscription rows should NOT grant access
+  const activeSub = subs.find((s) => {
+    if (s.status !== "active" && s.status !== "trialing") return false;
+    // Stale guard: default-activated entitlement + revenuecat sub = lapsed, don't trust
+    if (activatedVia === "default" && s.provider === "revenuecat") return false;
+    return true;
+  });
   const blockingSub = subs.find((s) => BLOCKING_STATUSES.has(s.status));
 
   if (activeSub) {

@@ -286,3 +286,27 @@ test("billing: canCreateRequest function exists in entitlements", () => {
 test("billing: effectiveMaxRequestsPerDay helper exists", () => {
   assert.match(ENTITLEMENTS, /effectiveMaxRequestsPerDay/, "effectiveMaxRequestsPerDay function");
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// 18. Free/Starter + default activation = no active subscription
+// ═══════════════════════════════════════════════════════════════════
+
+test("billing: getSubscriptionStatus treats starter+default as free", () => {
+  // Downgraded IAP users get plan: "starter", activated_via: "default"
+  // They must be treated as free users, not paid
+  assert.match(PLAN_GUARDS, /starter.*default|default.*starter/, "starter + default is free");
+  assert.match(PLAN_GUARDS, /rawPlan === .free. \|\| rawPlan === .starter./, "checks both free AND starter");
+});
+
+test("billing: getSubscriptionStatus fails CLOSED when supabase unavailable", () => {
+  // If Supabase can't connect, deny access rather than grant it
+  const failClosedMatch = PLAN_GUARDS.match(/if \(!supabase\)[\s\S]*?hasActiveSubscription:\s*(true|false)/);
+  assert.ok(failClosedMatch, "has fail-closed guard for supabase unavailable");
+  assert.match(PLAN_GUARDS.replace(/\/\*[\s\S]*?\*\//g, ""), /if \(!supabase\)[\s\S]*?hasActiveSubscription:\s*false/, "returns false when supabase unavailable");
+});
+
+test("billing: stale revenuecat subscription ignored for default-activated entitlements", () => {
+  // If activated_via is "default" but a stale revenuecat subscription row exists,
+  // the subscription should NOT grant access
+  assert.match(PLAN_GUARDS, /activatedVia === .default.*revenuecat|revenuecat.*default/, "stale revenuecat + default = ignored");
+});
