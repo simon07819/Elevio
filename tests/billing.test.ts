@@ -288,14 +288,19 @@ test("billing: effectiveMaxRequestsPerDay helper exists", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// 18. Free/Starter + default activation = no active subscription
+// 18. "default" activation = no active subscription (any plan)
 // ═══════════════════════════════════════════════════════════════════
 
-test("billing: getSubscriptionStatus treats starter+default as free", () => {
-  // Downgraded IAP users get plan: "starter", activated_via: "default"
-  // They must be treated as free users, not paid
-  assert.match(PLAN_GUARDS, /starter.*default|default.*starter/, "starter + default is free");
-  assert.match(PLAN_GUARDS, /rawPlan === .free. \|\| rawPlan === .starter./, "checks both free AND starter");
+test("billing: getSubscriptionStatus treats default activation as free (any plan)", () => {
+  // activated_via: "default" means no paid source — regardless of plan value.
+  // Covers: free+default, starter+default (downgraded IAP or onboarding),
+  // pro+default (self-selected during onboarding, not yet paid)
+  assert.match(PLAN_GUARDS, /activatedVia === .default./, "checks activatedVia default");
+  // Must return hasActiveSubscription: false when activatedVia is "default"
+  // and it must do so BEFORE checking the subscriptions table
+  const defaultCheck = PLAN_GUARDS.indexOf('activatedVia === "default"');
+  const subsCheck = PLAN_GUARDS.indexOf("from(\"subscriptions\")");
+  assert.ok(defaultCheck < subsCheck, "default activation check before subscription table query");
 });
 
 test("billing: getSubscriptionStatus fails CLOSED when supabase unavailable", () => {

@@ -61,9 +61,9 @@ test("permissions: getFreePlanRestrictions lists all blocked features", () => {
 // 2. Free plan in planGuards
 // ═══════════════════════════════════════════════════════════════════
 
-test("planGuards: free plan returns hasActiveSubscription=false", () => {
-  assert.match(PLAN_GUARDS, /rawPlan === "free"/, "checks for free plan");
-  assert.match(PLAN_GUARDS, /hasActiveSubscription: false/, "returns false for free");
+test("planGuards: default activation returns hasActiveSubscription=false", () => {
+  assert.match(PLAN_GUARDS, /activatedVia === "default"/, "checks for default activation");
+  assert.match(PLAN_GUARDS, /hasActiveSubscription: false/, "returns false for default");
 });
 
 test("planGuards: no subscription row defaults to free (not starter)", () => {
@@ -93,11 +93,15 @@ test("projects: adminProject checks ownership before returning data", () => {
 // 4. Profile creates entitlement on signup
 // ═══════════════════════════════════════════════════════════════════
 
-test("profile: ensureProfileForUser creates entitlement row", () => {
+test("profile: ensureProfileForUser creates entitlement row with activated_via default", () => {
   assert.match(PROFILE, /user_entitlements/, "creates entitlement row");
   assert.match(PROFILE, /selected_plan/, "reads selected_plan from metadata");
   assert.match(PROFILE, /"free"/, "defaults to free plan");
   assert.match(PROFILE, /upsert/, "uses upsert for idempotency");
+  // Self-selected plans must use activated_via: "default", NOT "admin"
+  // "admin" would bypass subscription checks in getSubscriptionStatus
+  assert.match(PROFILE, /activated_via.*"default"/, "self-selected plans use default activation");
+  assert.doesNotMatch(PROFILE, /isManualPlan.*admin/, "no isManualPlan → admin shortcut");
 });
 
 // ═══════════════════════════════════════════════════════════════════

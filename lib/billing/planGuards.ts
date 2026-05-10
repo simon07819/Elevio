@@ -42,10 +42,13 @@ export async function getSubscriptionStatus(userId: string): Promise<{
   const planId = effectivePlanId(rawPlan);
   const activatedVia = entitlement?.activated_via ?? "default";
 
-  // Explicit "free" or "starter" plan with default activation = no paid subscription
-  // "starter" + "default" occurs when IAP user's entitlement expires/downgrades
-  // Free users can view dashboard, support, legal, but cannot create projects/use paid features
-  if ((rawPlan === "free" || rawPlan === "starter") && activatedVia === "default") {
+  // Any plan with "default" activation and no paid source = no active subscription.
+  // This covers:
+  //   - plan:"free" + default = genuinely free
+  //   - plan:"starter" + default = downgraded IAP user or self-selected during onboarding
+  //   - plan:"pro"/"enterprise" + default = self-selected during onboarding, not yet paid
+  // Only admin/activation_code/manual/manual_code bypass the subscription check.
+  if (activatedVia === "default") {
     return { hasActiveSubscription: false, status: "free", provider: null, planId: "free" };
   }
 

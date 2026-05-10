@@ -100,13 +100,15 @@ export async function ensureProfileForUser(supabase: SupabaseClient, user: User)
   const selectedPlan = (metadata.selected_plan as PlanId) || "free";
   const validPlans: PlanId[] = ["free", "starter", "pro", "business", "enterprise"];
   const plan = validPlans.includes(selectedPlan) ? selectedPlan : "free";
-  const isManualPlan = plan !== "free";
 
-  // Insert entitlement row
+  // Self-selected plans during signup are NOT paid — user hasn't purchased yet.
+  // Only "admin" activated_via means a superadmin manually granted the plan.
+  // Self-selected plans use "default" so getSubscriptionStatus correctly
+  // identifies them as free/trial until an actual subscription is created.
   await supabase.from("user_entitlements").upsert({
     user_id: user.id,
     plan,
-    activated_via: isManualPlan ? "admin" : "default",
+    activated_via: "default",
     expires_at: null,
   }, { onConflict: "user_id" });
 
