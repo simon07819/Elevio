@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -50,21 +51,23 @@ export function SuperadminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t } = useLanguage();
   const navItems = NAV_ITEMS(t);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-white">
-      {/* Sidebar — collapsible on small screens, fixed on large */}
-      {/* Mobile toggle */}
-      <input type="checkbox" id="sa-sidebar-toggle" className="peer/sa hidden" defaultChecked />
-      <label
-        htmlFor="sa-sidebar-toggle"
-        className="fixed inset-0 z-30 bg-black/50 peer-checked/sa:hidden lg:hidden"
-        aria-label="Toggle sidebar"
-      />
-      {/* Sidebar panel */}
-      <aside className="fixed inset-y-0 left-0 z-40 w-56 shrink-0 border-r border-white/10 bg-slate-950 p-4 flex flex-col -translate-x-full peer-checked/sa:translate-x-0 lg:static lg:translate-x-0 transition-transform duration-200 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)]">
+      {/* Overlay backdrop — click to close */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={closeSidebar}
+          aria-label="Close sidebar"
+        />
+      )}
+      {/* Sidebar panel — off-screen on mobile, slides in; always visible on lg+ */}
+      <aside className={`fixed inset-y-0 left-0 z-40 w-56 shrink-0 border-r border-white/10 bg-slate-950 p-4 flex flex-col transition-transform duration-200 pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:static lg:translate-x-0`}>
         <div className="mb-4">
-          <Link href="/" className="inline-flex">
+          <Link href="/" className="inline-flex" onClick={closeSidebar}>
             <BrandLogo size="sm" priority />
           </Link>
         </div>
@@ -87,6 +90,7 @@ export function SuperadminShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={closeSidebar}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
                   active
                     ? "bg-yellow-400/15 text-yellow-400"
@@ -102,6 +106,7 @@ export function SuperadminShell({ children }: { children: React.ReactNode }) {
         <div className="mt-4 border-t border-white/10 pt-4 space-y-1">
           <Link
             href="/admin"
+            onClick={closeSidebar}
             className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-sky-400 transition hover:bg-sky-400/10 hover:text-sky-300"
           >
             <Layout size={18} />
@@ -109,6 +114,7 @@ export function SuperadminShell({ children }: { children: React.ReactNode }) {
           </Link>
           <Link
             href="/"
+            onClick={closeSidebar}
             className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-400 transition hover:bg-white/5 hover:text-white"
           >
             <ArrowLeft size={18} />
@@ -121,9 +127,14 @@ export function SuperadminShell({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1 flex-col min-w-0">
         {/* Mobile top bar with sidebar toggle */}
         <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/10 bg-slate-950/90 px-4 py-3 backdrop-blur-lg lg:hidden pl-[env(safe-area-inset-left)] pt-[env(safe-area-inset-top)]">
-          <label htmlFor="sa-sidebar-toggle" className="touch-target rounded-xl bg-white/5 p-2.5 text-slate-400 hover:bg-white/10 hover:text-white" aria-label="Open sidebar">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="touch-target rounded-xl bg-white/5 p-2.5 text-slate-400 hover:bg-white/10 hover:text-white"
+            aria-label="Open sidebar"
+          >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h14M3 10h14M3 14h14" /></svg>
-          </label>
+          </button>
           <Link href="/" className="inline-flex">
             <BrandLogo size="sm" priority />
           </Link>
